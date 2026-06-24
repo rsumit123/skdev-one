@@ -311,9 +311,16 @@
       font-size: 0.78rem;
       color: var(--fg);
       transition: gap 0.2s;
+      white-space: nowrap;
     }
     .card:hover .card-link { gap: 0.55rem; }
-    .card-link svg { width: 12px; height: 12px; }
+    .card-link svg { width: 12px; height: 12px; flex-shrink: 0; }
+    @media (max-width: 480px) {
+      .card-link .label-long { display: none; }
+    }
+    @media (min-width: 481px) {
+      .card-link .label-short { display: none; }
+    }
 
     /* Footer */
     footer {
@@ -404,7 +411,7 @@
           <div class="card-foot">
             <span class="badge live">open beta</span>
             <span class="card-link">
-              View on Play
+              <span class="label-long">View on Play</span><span class="label-short">View</span>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
             </span>
           </div>
@@ -428,7 +435,7 @@
           <div class="card-foot">
             <span class="badge live">open beta</span>
             <span class="card-link">
-              View on Play
+              <span class="label-long">View on Play</span><span class="label-short">View</span>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
             </span>
           </div>
@@ -454,7 +461,7 @@
           <div class="card-foot">
             <span class="badge closed">closed beta</span>
             <span class="card-link">
-              View on Play
+              <span class="label-long">View on Play</span><span class="label-short">View</span>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
             </span>
           </div>
@@ -494,7 +501,7 @@
               <span class="badge soon">android soon</span>
             </span>
             <span class="card-link">
-              Try the preview
+              <span class="label-long">Try the preview</span><span class="label-short">Try</span>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
             </span>
           </div>
