@@ -53,6 +53,8 @@
     }
     a { color: inherit; text-decoration: none; }
     .wrap { max-width: 1080px; margin: 0 auto; padding: 0 1.5rem; }
+    @media (max-width: 480px) { .wrap { padding: 0 1rem; } }
+    html, body { overflow-x: hidden; }
 
     /* Header */
     header {
@@ -80,6 +82,11 @@
       box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.18);
       display: inline-block;
     }
+    .header-links {
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+    }
     .header-link {
       font-family: 'JetBrains Mono', ui-monospace, monospace;
       font-size: 0.8rem;
@@ -87,6 +94,9 @@
       transition: color 0.15s;
     }
     .header-link:hover { color: var(--fg); }
+    @media (max-width: 480px) {
+      .header-link.compact-hide { display: none; }
+    }
 
     /* Hero */
     .hero {
@@ -173,8 +183,9 @@
     /* App grid */
     .grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(min(280px, 100%), 1fr));
       gap: 1.25rem;
+      width: 100%;
     }
     .card {
       position: relative;
@@ -188,6 +199,18 @@
       flex-direction: column;
       gap: 1.25rem;
       overflow: hidden;
+      min-width: 0;
+    }
+    @media (max-width: 480px) {
+      .card { padding: 1.25rem; gap: 1rem; border-radius: 14px; }
+      .card-head { gap: 0.85rem; }
+      .icon { width: 42px; height: 42px; border-radius: 10px; }
+      .icon svg { width: 22px; height: 22px; }
+      .card-name { font-size: 1.25rem; }
+      .card-desc { font-size: 0.9rem; }
+      .card-foot { flex-wrap: wrap; gap: 0.65rem; }
+      .badge { font-size: 0.68rem; padding: 3px 8px; }
+      .card-link { font-size: 0.75rem; }
     }
     .card::before {
       content: "";
@@ -248,6 +271,12 @@
       justify-content: space-between;
       gap: 1rem;
       margin-top: auto;
+      flex-wrap: wrap;
+    }
+    .card-badges {
+      display: inline-flex;
+      gap: 0.4rem;
+      flex-wrap: wrap;
     }
     .badge {
       font-family: 'JetBrains Mono', ui-monospace, monospace;
@@ -321,7 +350,10 @@
 
     <header>
       <a class="wordmark" href="/">skdev.one</a>
-      <a class="header-link" href="mailto:rsumit123@gmail.com">contact &nearr;</a>
+      <div class="header-links">
+        <a class="header-link" href="https://profile.skdev.one" target="_blank" rel="noopener">about the dev &nearr;</a>
+        <a class="header-link compact-hide" href="mailto:rsumit123@gmail.com">contact &nearr;</a>
+      </div>
     </header>
 
     <!-- Hero -->
@@ -430,39 +462,50 @@
       </div>
     </section>
 
-    <!-- Coming soon -->
+    <!-- In the works -->
     <section class="section">
       <div class="section-head">
         <h2>In the works</h2>
         <span class="count">// 1 in development</span>
       </div>
       <div class="grid">
-        <div class="card coming">
+
+        <!-- Parakh -->
+        <a class="card" href="https://parakh.skdev.one" target="_blank" rel="noopener"
+           style="--accent: linear-gradient(90deg, #15803d, #ca8a04); --accent-bg: linear-gradient(135deg, #15803d, #ca8a04);">
           <div class="card-head">
-            <div class="icon" style="background: var(--bg); color: var(--fg-faint); border: 1px dashed var(--border-strong);">
+            <div class="icon">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <circle cx="12" cy="12" r="10"/>
-                <path d="M12 6v6l4 2"/>
+                <path d="M3 3v18h18"/>
+                <path d="M7 14l4-4 4 4 6-6"/>
+                <path d="M14 8h7v7"/>
               </svg>
             </div>
             <div>
-              <h3 class="card-name">Untitled</h3>
-              <div class="card-meta">in development</div>
+              <h3 class="card-name">Parakh</h3>
+              <div class="card-meta">indian food health scanner</div>
             </div>
           </div>
-          <p class="card-desc">Something new. Quietly being built — details when it's ready.</p>
+          <p class="card-desc">Scan packaged Indian food and get a clear A&ndash;E health verdict in seconds. Barcode lookup with AI label reading for unknown products. Web preview live; mobile app in development.</p>
           <div class="card-foot">
-            <span class="badge soon">coming soon</span>
-            <span class="card-link" style="opacity: 0.5;">tba</span>
+            <span class="card-badges">
+              <span class="badge live">web live</span>
+              <span class="badge soon">android soon</span>
+            </span>
+            <span class="card-link">
+              Try the preview
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+            </span>
           </div>
-        </div>
+        </a>
+
       </div>
     </section>
 
     <!-- Footer -->
     <footer>
       <div class="footer-inner">
-        <div class="footer-text">© 2026 skdev.one · built in Bengaluru</div>
+        <div class="footer-text">© 2026 skdev.one</div>
         <div class="footer-links">
           <a href="mailto:rsumit123@gmail.com">email</a>
           <a href="https://github.com/rsumit123" target="_blank" rel="noopener">github</a>
