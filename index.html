@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>skdev.one — independent apps</title>
+  <meta name="description" content="Independent apps built with care. Three live on Google Play, more on the way." />
+  <meta name="theme-color" content="#0a0a0a" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300..700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #fafaf9;
+      --bg-card: #ffffff;
+      --fg: #18181b;
+      --fg-muted: #71717a;
+      --fg-faint: #a1a1aa;
+      --border: rgba(0,0,0,0.08);
+      --border-strong: rgba(0,0,0,0.14);
+      --dot: rgba(0,0,0,0.06);
+      --shadow: 0 1px 2px rgba(0,0,0,0.04), 0 8px 24px -8px rgba(0,0,0,0.08);
+      --shadow-hover: 0 4px 8px rgba(0,0,0,0.06), 0 16px 40px -12px rgba(0,0,0,0.14);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0a0a0a;
+        --bg-card: #141414;
+        --fg: #fafafa;
+        --fg-muted: #a1a1aa;
+        --fg-faint: #71717a;
+        --border: rgba(255,255,255,0.08);
+        --border-strong: rgba(255,255,255,0.14);
+        --dot: rgba(255,255,255,0.06);
+        --shadow: 0 1px 2px rgba(0,0,0,0.4), 0 8px 24px -8px rgba(0,0,0,0.5);
+        --shadow-hover: 0 4px 8px rgba(0,0,0,0.5), 0 16px 40px -12px rgba(0,0,0,0.7);
+      }
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      font-size: 16px;
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      background-image: radial-gradient(var(--dot) 1px, transparent 1px);
+      background-size: 24px 24px;
+      background-position: 0 0;
+      min-height: 100vh;
+    }
+    a { color: inherit; text-decoration: none; }
+    .wrap { max-width: 1080px; margin: 0 auto; padding: 0 1.5rem; }
+
+    /* Header */
+    header {
+      padding: 1.5rem 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+    }
+    .wordmark {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.95rem;
+      font-weight: 500;
+      letter-spacing: -0.01em;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .wordmark::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #22c55e;
+      box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.18);
+      display: inline-block;
+    }
+    .header-link {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.8rem;
+      color: var(--fg-muted);
+      transition: color 0.15s;
+    }
+    .header-link:hover { color: var(--fg); }
+
+    /* Hero */
+    .hero {
+      padding: 4rem 0 5rem;
+    }
+    @media (min-width: 768px) { .hero { padding: 6rem 0 7rem; } }
+    .eyebrow {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.78rem;
+      color: var(--fg-muted);
+      text-transform: lowercase;
+      letter-spacing: 0.02em;
+      margin-bottom: 1.5rem;
+    }
+    .hero h1 {
+      font-family: 'Fraunces', Georgia, serif;
+      font-weight: 400;
+      font-size: clamp(2.25rem, 6vw, 4rem);
+      line-height: 1.05;
+      letter-spacing: -0.025em;
+      margin: 0 0 1.5rem;
+      max-width: 22ch;
+    }
+    .hero h1 em {
+      font-style: italic;
+      font-variation-settings: "opsz" 144;
+      color: var(--fg-muted);
+    }
+    .hero p {
+      font-size: 1.05rem;
+      color: var(--fg-muted);
+      max-width: 48ch;
+      margin: 0 0 2rem;
+    }
+    .stats {
+      display: flex;
+      gap: 2.5rem;
+      flex-wrap: wrap;
+      margin-top: 2.5rem;
+      padding-top: 2rem;
+      border-top: 1px solid var(--border);
+      max-width: 540px;
+    }
+    .stat {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+    .stat-num {
+      font-family: 'Fraunces', Georgia, serif;
+      font-size: 2rem;
+      font-weight: 400;
+      line-height: 1;
+      letter-spacing: -0.02em;
+    }
+    .stat-label {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.75rem;
+      color: var(--fg-muted);
+      text-transform: lowercase;
+    }
+
+    /* Section heading */
+    .section { padding: 3rem 0; }
+    .section-head {
+      display: flex;
+      align-items: baseline;
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    .section-head h2 {
+      font-family: 'Fraunces', Georgia, serif;
+      font-weight: 400;
+      font-size: 1.75rem;
+      letter-spacing: -0.015em;
+      margin: 0;
+    }
+    .section-head .count {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.78rem;
+      color: var(--fg-faint);
+    }
+
+    /* App grid */
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.25rem;
+    }
+    .card {
+      position: relative;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 1.5rem;
+      box-shadow: var(--shadow);
+      transition: all 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+      overflow: hidden;
+    }
+    .card::before {
+      content: "";
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: var(--accent, var(--border-strong));
+      opacity: 0.85;
+    }
+    .card:hover {
+      transform: translateY(-3px);
+      border-color: var(--border-strong);
+      box-shadow: var(--shadow-hover);
+    }
+    .card.coming { opacity: 0.65; pointer-events: none; }
+
+    .card-head {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+    .icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      background: var(--accent-bg, #f4f4f5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      flex-shrink: 0;
+    }
+    .icon svg { width: 26px; height: 26px; }
+    .card-name {
+      font-family: 'Fraunces', Georgia, serif;
+      font-size: 1.4rem;
+      font-weight: 500;
+      letter-spacing: -0.01em;
+      line-height: 1.1;
+      margin: 0;
+    }
+    .card-meta {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.72rem;
+      color: var(--fg-faint);
+      margin-top: 0.2rem;
+    }
+    .card-desc {
+      font-size: 0.95rem;
+      color: var(--fg-muted);
+      margin: 0;
+      line-height: 1.55;
+      flex: 1;
+    }
+    .card-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-top: auto;
+    }
+    .badge {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.7rem;
+      padding: 4px 9px;
+      border-radius: 999px;
+      border: 1px solid var(--border-strong);
+      color: var(--fg-muted);
+      letter-spacing: 0.02em;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .badge::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--badge-dot, var(--fg-faint));
+    }
+    .badge.live { color: #16a34a; border-color: rgba(22, 163, 74, 0.25); }
+    .badge.live::before { background: #22c55e; box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.15); }
+    .badge.closed { color: #ca8a04; border-color: rgba(202, 138, 4, 0.25); }
+    .badge.closed::before { background: #eab308; }
+    .badge.soon { color: var(--fg-muted); }
+    .card-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.78rem;
+      color: var(--fg);
+      transition: gap 0.2s;
+    }
+    .card:hover .card-link { gap: 0.55rem; }
+    .card-link svg { width: 12px; height: 12px; }
+
+    /* Footer */
+    footer {
+      margin-top: 4rem;
+      padding: 2.5rem 0 3rem;
+      border-top: 1px solid var(--border);
+    }
+    .footer-inner {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1.5rem;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .footer-text {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.78rem;
+      color: var(--fg-muted);
+    }
+    .footer-links {
+      display: flex;
+      gap: 1.25rem;
+    }
+    .footer-links a {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 0.78rem;
+      color: var(--fg-muted);
+      transition: color 0.15s;
+    }
+    .footer-links a:hover { color: var(--fg); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+
+    <header>
+      <a class="wordmark" href="/">skdev.one</a>
+      <a class="header-link" href="mailto:rsumit123@gmail.com">contact &nearr;</a>
+    </header>
+
+    <!-- Hero -->
+    <section class="hero">
+      <div class="eyebrow">// portfolio · v1</div>
+      <h1>Independent apps,<br/><em>built with care.</em></h1>
+      <p>A small studio of one. Shipping mobile apps that respect your time, your privacy, and your data. Three live on Google Play, more on the way.</p>
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-num">3</div>
+          <div class="stat-label">apps live</div>
+        </div>
+        <div class="stat">
+          <div class="stat-num">2026</div>
+          <div class="stat-label">since</div>
+        </div>
+        <div class="stat">
+          <div class="stat-num">1</div>
+          <div class="stat-label">solo dev</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Apps -->
+    <section class="section">
+      <div class="section-head">
+        <h2>Apps</h2>
+        <span class="count">// 3 live</span>
+      </div>
+      <div class="grid">
+
+        <!-- Halvio -->
+        <a class="card" href="https://play.google.com/store/apps/details?id=com.skdev.chillbill"
+           style="--accent: linear-gradient(90deg, #3b82f6, #6366f1); --accent-bg: linear-gradient(135deg, #3b82f6, #6366f1);">
+          <div class="card-head">
+            <div class="icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>
+              </svg>
+            </div>
+            <div>
+              <h3 class="card-name">Halvio</h3>
+              <div class="card-meta">expense splitting</div>
+            </div>
+          </div>
+          <p class="card-desc">Split shared bills with friends and groups. Track balances, settle up fairly, and never argue about money again.</p>
+          <div class="card-foot">
+            <span class="badge live">open beta</span>
+            <span class="card-link">
+              View on Play
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+            </span>
+          </div>
+        </a>
+
+        <!-- Mirth -->
+        <a class="card" href="https://play.google.com/store/apps/details?id=com.skdev.playroom"
+           style="--accent: linear-gradient(90deg, #10b981, #14b8a6); --accent-bg: linear-gradient(135deg, #10b981, #14b8a6);">
+          <div class="card-head">
+            <div class="icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/>
+              </svg>
+            </div>
+            <div>
+              <h3 class="card-name">Mirth</h3>
+              <div class="card-meta">party games</div>
+            </div>
+          </div>
+          <p class="card-desc">Multiplayer party games for friends and groups. Play in seconds, no setup needed, plenty of laughs along the way.</p>
+          <div class="card-foot">
+            <span class="badge live">open beta</span>
+            <span class="card-link">
+              View on Play
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+            </span>
+          </div>
+        </a>
+
+        <!-- Chakravyuh -->
+        <a class="card" href="https://play.google.com/store/apps/details?id=com.skdev.chakravyuh"
+           style="--accent: linear-gradient(90deg, #b91c1c, #ea580c); --accent-bg: linear-gradient(135deg, #b91c1c, #ea580c);">
+          <div class="card-head">
+            <div class="icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <circle cx="12" cy="12" r="6"/>
+                <circle cx="12" cy="12" r="2" fill="currentColor"/>
+              </svg>
+            </div>
+            <div>
+              <h3 class="card-name">Chakravyuh</h3>
+              <div class="card-meta">strategy puzzle</div>
+            </div>
+          </div>
+          <p class="card-desc">A puzzle game inspired by the legendary military formation. Plan, navigate, and outwit each layer to escape the labyrinth.</p>
+          <div class="card-foot">
+            <span class="badge closed">closed beta</span>
+            <span class="card-link">
+              View on Play
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 5l7 7-7 7"/></svg>
+            </span>
+          </div>
+        </a>
+
+      </div>
+    </section>
+
+    <!-- Coming soon -->
+    <section class="section">
+      <div class="section-head">
+        <h2>In the works</h2>
+        <span class="count">// 1 in development</span>
+      </div>
+      <div class="grid">
+        <div class="card coming">
+          <div class="card-head">
+            <div class="icon" style="background: var(--bg); color: var(--fg-faint); border: 1px dashed var(--border-strong);">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M12 6v6l4 2"/>
+              </svg>
+            </div>
+            <div>
+              <h3 class="card-name">Untitled</h3>
+              <div class="card-meta">in development</div>
+            </div>
+          </div>
+          <p class="card-desc">Something new. Quietly being built — details when it's ready.</p>
+          <div class="card-foot">
+            <span class="badge soon">coming soon</span>
+            <span class="card-link" style="opacity: 0.5;">tba</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+      <div class="footer-inner">
+        <div class="footer-text">© 2026 skdev.one · built in Bengaluru</div>
+        <div class="footer-links">
+          <a href="mailto:rsumit123@gmail.com">email</a>
+          <a href="https://github.com/rsumit123" target="_blank" rel="noopener">github</a>
+        </div>
+      </div>
+    </footer>
+
+  </div>
+</body>
+</html>
