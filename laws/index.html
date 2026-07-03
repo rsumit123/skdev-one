@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>Know Your Rights — Police Encounters in India</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#EAEDF1;
+    --card:#FBFCFB;
+    --ink:#1A2133;
+    --ink-soft:#4C5468;
+    --brass:#9A6E24;
+    --brass-deep:#75531A;
+    --protect:#2C6A4E;
+    --protect-bg:#E5EFE9;
+    --protect-line:#BCD8C8;
+    --caution:#9E4433;
+    --caution-bg:#F3E6E2;
+    --caution-line:#E1C4BC;
+    --line:#D6DAE0;
+    --display:'Spectral',Georgia,'Times New Roman',serif;
+    --body:'IBM Plex Sans',system-ui,-apple-system,sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:var(--body);
+    font-size:17px;
+    line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+    padding:0 18px;
+  }
+  .wrap{max-width:760px;margin:0 auto;padding:44px 0 80px}
+
+  mark.hit{background:rgba(154,110,36,.28);color:inherit;border-radius:2px;padding:0 1px}
+  .hide{display:none !important}
+
+  /* ---- citation chips ---- */
+  .cite{
+    font-family:var(--mono);font-size:.7rem;font-weight:500;letter-spacing:.02em;
+    color:var(--brass-deep);background:rgba(154,110,36,.09);
+    border:1px solid rgba(154,110,36,.22);border-radius:4px;
+    padding:1px 6px;white-space:nowrap;display:inline-block;vertical-align:baseline;line-height:1.5;
+  }
+  .cite.case{color:var(--ink-soft);background:rgba(76,84,104,.08);border-color:rgba(76,84,104,.2)}
+
+  /* ---- masthead ---- */
+  .eyebrow{
+    font-family:var(--mono);font-size:.72rem;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--brass-deep);display:flex;align-items:center;gap:12px;margin-bottom:22px;
+  }
+  .eyebrow::after{content:"";flex:1;height:1px;background:var(--brass);opacity:.4}
+  h1{font-family:var(--display);font-weight:600;font-size:clamp(2.1rem,7vw,3.3rem);line-height:1.08;letter-spacing:-.01em;margin-bottom:20px}
+  h1 em{font-style:italic;color:var(--brass-deep)}
+  .lede{font-size:1.12rem;color:var(--ink-soft);max-width:58ch}
+  .anchor{margin:30px 0 8px;padding:18px 22px;background:var(--card);border-left:3px solid var(--brass);border-radius:2px}
+  .anchor .q{font-family:var(--display);font-style:italic;font-size:1.12rem;line-height:1.5;color:var(--ink)}
+  .anchor .src{font-family:var(--mono);font-size:.72rem;color:var(--ink-soft);margin-top:8px;letter-spacing:.02em}
+
+  /* ---- search ---- */
+  .searchbar{position:sticky;top:0;z-index:20;padding:14px 0 12px;margin-top:26px;background:linear-gradient(var(--paper) 78%,rgba(234,237,241,0))}
+  .search-shell{position:relative;display:flex;align-items:center}
+  .search-shell svg{position:absolute;left:15px;width:18px;height:18px;stroke:var(--brass-deep);pointer-events:none}
+  #q{
+    width:100%;font-family:var(--body);font-size:16px;color:var(--ink);
+    background:var(--card);border:1px solid var(--line);border-radius:10px;
+    padding:13px 44px 13px 44px;outline:none;transition:border-color .15s,box-shadow .15s;
+  }
+  #q:focus{border-color:var(--brass);box-shadow:0 0 0 3px rgba(154,110,36,.13)}
+  #q::placeholder{color:#98A0AE}
+  #clear{position:absolute;right:8px;border:none;background:transparent;cursor:pointer;font-size:1.3rem;color:var(--ink-soft);width:32px;height:32px;border-radius:6px;display:none;line-height:1}
+  #clear:hover{background:rgba(0,0,0,.05)}
+  .count{font-family:var(--mono);font-size:.72rem;color:var(--ink-soft);margin-top:8px;letter-spacing:.02em;min-height:1em}
+  .noresults{display:none;padding:26px 4px;color:var(--ink-soft);font-style:italic;font-family:var(--display);font-size:1.1rem}
+
+  /* ---- sections ---- */
+  section{margin-top:52px}
+  .sec-head{display:flex;align-items:baseline;gap:14px;margin-bottom:20px}
+  .sec-num{font-family:var(--mono);font-size:.82rem;color:var(--brass);font-weight:500;padding-top:4px}
+  .sec-title{font-family:var(--display);font-weight:600;font-size:1.6rem;line-height:1.15;letter-spacing:-.01em}
+  .sec-intro{color:var(--ink-soft);margin:-6px 0 22px;max-width:60ch}
+
+  /* ---- 00 core ---- */
+  .core{background:var(--ink);color:#EDEFF3;border-radius:10px;padding:30px 26px}
+  .core .mantra{font-family:var(--display);font-size:1.35rem;font-style:italic;line-height:1.4;margin-bottom:24px;color:#fff}
+  .core ol{list-style:none;counter-reset:c;display:grid;gap:16px}
+  .core li{counter-increment:c;padding-left:40px;position:relative;font-size:1rem;line-height:1.5}
+  .core li::before{content:counter(c);position:absolute;left:0;top:-2px;font-family:var(--mono);font-size:.82rem;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--ink);background:var(--brass);font-weight:500}
+  .core .cite{color:#E4C88C;background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.18)}
+  .core .cite.case{color:#C9CEDA;background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.14)}
+
+  /* ---- ledger ---- */
+  .ledger{display:grid;grid-template-columns:1fr 1fr;gap:0;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .col{padding:22px 22px 26px}
+  .col+.col{border-left:1px solid var(--line)}
+  .col-head{font-family:var(--mono);font-size:.74rem;letter-spacing:.12em;text-transform:uppercase;font-weight:500;padding-bottom:14px;margin-bottom:16px;border-bottom:2px solid}
+  .col-can .col-head{color:var(--caution);border-color:var(--caution-line)}
+  .col-cannot .col-head{color:var(--protect);border-color:var(--protect-line)}
+  .col ul{list-style:none;display:grid;gap:14px}
+  .col li{position:relative;padding-left:24px;font-size:.96rem;line-height:1.45}
+  .col li .cite{margin-top:4px}
+  .col-can li::before{content:"\25C6";position:absolute;left:0;top:1px;color:var(--caution);font-size:.7rem}
+  .col-cannot li::before{content:"\2713";position:absolute;left:0;top:0;color:var(--protect);font-weight:700}
+
+  /* ---- cards ---- */
+  .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:22px 24px;margin-top:16px}
+  .card h3{font-family:var(--display);font-weight:600;font-size:1.18rem;margin-bottom:10px}
+  .card p{color:var(--ink-soft);margin-bottom:12px}
+  .card p:last-child{margin-bottom:0}
+  .card strong{color:var(--ink);font-weight:600}
+  .rights-list{list-style:none;display:grid;gap:16px;margin-top:4px}
+  .rights-list li{padding-left:26px;position:relative}
+  .rights-list li::before{content:"";position:absolute;left:0;top:9px;width:9px;height:9px;border-radius:50%;background:var(--protect)}
+  .rights-list b{font-weight:600}
+
+  /* ---- do/don't ---- */
+  .dd{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .dd .panel{border-radius:10px;padding:20px 22px}
+  .dd .do{background:var(--protect-bg);border:1px solid var(--protect-line)}
+  .dd .dont{background:var(--caution-bg);border:1px solid var(--caution-line)}
+  .dd h4{font-family:var(--mono);font-size:.78rem;letter-spacing:.1em;text-transform:uppercase;margin-bottom:14px}
+  .dd .do h4{color:var(--protect)}
+  .dd .dont h4{color:var(--caution)}
+  .dd ul{list-style:none;display:grid;gap:11px}
+  .dd li{padding-left:20px;position:relative;font-size:.95rem;line-height:1.4}
+  .dd .do li::before{content:"\2713";position:absolute;left:0;color:var(--protect);font-weight:700}
+  .dd .dont li::before{content:"\2715";position:absolute;left:0;color:var(--caution);font-weight:700}
+
+  /* ---- say ---- */
+  .say{margin-top:16px;display:grid;gap:12px}
+  .say .line{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--brass);border-radius:2px;padding:14px 18px;font-family:var(--display);font-style:italic;font-size:1.05rem}
+  .say .line span{display:block;font-family:var(--body);font-style:normal;font-size:.82rem;color:var(--ink-soft);margin-top:6px}
+
+  /* ---- reality (on paper vs ground) ---- */
+  .reality{display:grid;gap:14px;margin-top:4px}
+  .r-item{background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .r-title{font-family:var(--display);font-weight:600;font-size:1.12rem;padding:16px 20px 4px}
+  .r-rows{padding:6px 20px 18px;display:grid;gap:12px}
+  .r-row{display:grid;grid-template-columns:96px 1fr;gap:14px;align-items:start}
+  .r-lbl{font-family:var(--mono);font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;padding-top:3px;font-weight:500}
+  .r-row.paper .r-lbl{color:var(--ink-soft)}
+  .r-row.ground .r-lbl{color:var(--caution)}
+  .r-row.move .r-lbl{color:var(--protect)}
+  .r-row p{font-size:.95rem;line-height:1.45;color:var(--ink)}
+  .r-row.move p{font-weight:500}
+
+  /* ---- case law ---- */
+  .cases{display:grid;gap:12px;margin-top:4px}
+  .case-item{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 20px}
+  .case-name{font-family:var(--display);font-weight:600;font-size:1.06rem;line-height:1.3}
+  .case-meta{font-family:var(--mono);font-size:.7rem;letter-spacing:.03em;color:var(--brass-deep);margin:5px 0 9px;text-transform:uppercase}
+  .case-hold{font-size:.94rem;color:var(--ink-soft);line-height:1.45}
+
+  /* ---- checklist ---- */
+  .checklist{list-style:none;display:grid;gap:12px;margin-top:4px}
+  .checklist li{padding-left:32px;position:relative;line-height:1.4}
+  .checklist li::before{content:"";position:absolute;left:0;top:2px;width:18px;height:18px;border:1.5px solid var(--brass);border-radius:4px}
+
+  /* ---- helplines ---- */
+  .lines{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px}
+  .hl{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px 16px}
+  .hl .num{font-family:var(--mono);font-size:1.4rem;font-weight:500;color:var(--brass-deep);letter-spacing:.02em}
+  .hl .lbl{font-size:.86rem;color:var(--ink-soft);margin-top:2px}
+  .steps{list-style:none;counter-reset:s;display:grid;gap:14px;margin:4px 0 22px}
+  .steps li{counter-increment:s;padding-left:38px;position:relative;color:var(--ink-soft)}
+  .steps li b{color:var(--ink);font-weight:600}
+  .steps li::before{content:counter(s);position:absolute;left:0;top:0;font-family:var(--mono);font-size:.78rem;width:25px;height:25px;border:1.5px solid var(--brass);color:var(--brass-deep);border-radius:50%;display:flex;align-items:center;justify-content:center}
+
+  /* ---- footer ---- */
+  footer{margin-top:64px;padding-top:26px;border-top:1px solid var(--line)}
+  .disc{font-size:.86rem;color:var(--ink-soft);line-height:1.6}
+  .disc strong{color:var(--ink)}
+  .stamp{font-family:var(--mono);font-size:.72rem;color:var(--brass-deep);letter-spacing:.04em;margin-top:16px}
+  a{color:var(--brass-deep)}
+
+  .reveal{opacity:0;transform:translateY(14px);animation:rise .7s cubic-bezier(.2,.7,.3,1) forwards}
+  @keyframes rise{to{opacity:1;transform:none}}
+
+  @media (max-width:640px){
+    body{font-size:16px}
+    .wrap{padding:34px 0 60px}
+    .ledger{grid-template-columns:1fr}
+    .col+.col{border-left:none;border-top:1px solid var(--line)}
+    .dd{grid-template-columns:1fr}
+    .lines{grid-template-columns:1fr}
+    .sec-head{gap:10px}
+    .sec-title{font-size:1.4rem}
+    .r-row{grid-template-columns:1fr;gap:3px}
+  }
+  @media (prefers-reduced-motion:reduce){.reveal{animation:none;opacity:1;transform:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="reveal">
+    <div class="eyebrow">Read me weekly &nbsp;·&nbsp; A steadying reminder</div>
+    <h1>You have rights. And in most cases, <em>arrest is the exception,</em> not the rule.</h1>
+    <p class="lede">A calm, plain-language guide to what the police can and cannot do to you in India — on the road and off it — plus the honest gap between what the law says and what tends to happen on the ground. Every claim is anchored to a real law or judgment; use the search box to jump to anything.</p>
+    <div class="anchor">
+      <div class="q">"No person shall be deprived of his life or personal liberty except according to procedure established by law."</div>
+      <div class="src">Article 21, Constitution of India — the root every protection below grows from</div>
+    </div>
+  </header>
+
+  <div class="searchbar">
+    <div class="search-shell">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+      <input id="q" type="search" autocomplete="off" placeholder="Search — try 'keys', 'bribe', 'women', 'grounds of arrest', 'DigiLocker'…">
+      <button id="clear" aria-label="Clear search">&times;</button>
+    </div>
+    <div class="count" id="count"></div>
+  </div>
+  <div class="noresults" id="noresults">Nothing matches that. Try a simpler word — like "fine", "night", "record", or "lawyer".</div>
+
+  <!-- 00 -->
+  <section class="s-sec">
+    <div class="sec-head"><span class="sec-num">00</span><h2 class="sec-title">If you remember nothing else</h2></div>
+    <div class="core s-item">
+      <p class="mantra">Stay calm. Be polite. Keep your hands visible. You are not required to be afraid to be respectful — and being respectful does not mean giving up your rights.</p>
+      <ol>
+        <li class="s-item">An officer dealing with you should be <strong>in uniform with a visible name badge</strong>. You may politely ask for their name and rank. <span class="cite">BNSS §36</span></li>
+        <li class="s-item">For most everyday offences (punishable up to 7 years), police must normally <strong>issue a written notice to appear, not arrest you on the spot</strong>. <span class="cite">BNSS §35</span> <span class="cite case">Satender Kumar Antil · SC 2026</span></li>
+        <li class="s-item">If arrested, you have the right to <strong>know why</strong>, to <strong>call a lawyer</strong>, to have <strong>your family informed</strong>, and to be <strong>produced before a magistrate within 24 hours</strong>. <span class="cite">Art. 22</span></li>
+        <li class="s-item">You never have to <strong>offer a bribe</strong>, sign a blank paper, or confess. Silence is your right. <span class="cite">Art. 20(3)</span></li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- 01 -->
+  <section class="s-sec">
+    <div class="sec-head"><span class="sec-num">01</span><h2 class="sec-title">If you're driving and get stopped</h2></div>
+    <p class="sec-intro">The most common encounter — and the one you asked about. Here's the honest split between real powers and hard limits.</p>
+    <div class="ledger">
+      <div class="col col-can">
+        <div class="col-head">Traffic police can</div>
+        <ul>
+          <li class="s-item">Ask to see your <strong>driving licence, RC, insurance, and PUC</strong> certificate.</li>
+          <li class="s-item">Issue a spot fine (challan) if you've violated a rule — but generally only an officer of <strong>ASI rank or above</strong> collects spot fines, and they must carry a challan book or e-challan machine. <span class="cite">MV Act 1988</span></li>
+          <li class="s-item">Ask you to take a <strong>breath (alcohol) test</strong>. Refusing without a valid reason can itself lead to arrest.</li>
+          <li class="s-item">Hold your <strong>licence</strong> until a court fine is paid, if you can't pay on the spot.</li>
+          <li class="s-item">Search your vehicle <strong>if they have a genuine, stated reason</strong> to suspect an offence.</li>
+        </ul>
+      </div>
+      <div class="col col-cannot">
+        <div class="col-head">Traffic police cannot</div>
+        <ul>
+          <li class="s-item">Demand documents or fine you while <strong>out of uniform</strong> or without identifying themselves.</li>
+          <li class="s-item">Take your <strong>keys</strong> out of the vehicle, <strong>deflate your tyres</strong>, or damage the car. The Supreme Court has said this is not allowed.</li>
+          <li class="s-item">Tow your vehicle while <strong>someone is still inside</strong> it.</li>
+          <li class="s-item">Refuse a <strong>digital licence/RC</strong> shown from the DigiLocker or mParivahan app — these are legally valid. <span class="cite">Rule 139 CMVR</span></li>
+          <li class="s-item">Take a fine <strong>without giving you a receipt / valid challan</strong>.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="card s-item">
+      <h3>Small practical notes</h3>
+      <p><strong>Digital documents count — but from the app, not your gallery.</strong> A licence or RC pulled up inside DigiLocker or mParivahan is accepted nationwide. A photo in your phone's camera roll is not. It's still wise to keep physical originals in the car as backup.</p>
+      <p><strong>You can ask why you were stopped</strong>, calmly. If you believe a challan is wrong, you don't have to argue on the roadside — you can contest it later through the virtual traffic court online.</p>
+      <p><strong>Never pay a bribe.</strong> If an officer demands cash "to settle it," that is the moment to insist on a proper challan with a receipt. Let them keep your licence if needed — you'll get it back when the official fine is paid.</p>
+    </div>
+  </section>
+
+  <!-- 02 -->
+  <section class="s-sec">
+    <div class="sec-head"><span class="sec-num">02</span><h2 class="sec-title">If you're detained or arrested</h2></div>
+    <p class="sec-intro">The Supreme Court has sharpened these protections a lot in the last two years. Arrest is meant to be a last resort — and if the paperwork isn't done right, the arrest itself can be held illegal.</p>
+    <div class="card s-item">
+      <ul class="rights-list">
+        <li class="s-item"><b>You must be told the grounds of arrest</b> — clearly, in a language you understand, and preferably in writing. Telling only your family is not enough, and a later chargesheet cannot fix a missing communication. <span class="cite">Art. 22(1)</span> <span class="cite case">Vihaan Kumar · SC 2025</span> <span class="cite case">Prabir Purkayastha · SC 2024</span></li>
+        <li class="s-item"><b>Arrest must be a genuine necessity, not a reflex.</b> For offences up to 7 years, police should normally issue a notice first and record written reasons if they arrest. <span class="cite case">Arnesh Kumar · SC 2014</span> <span class="cite case">Satender Kumar Antil · SC 2026</span></li>
+        <li class="s-item"><b>You have the right to a lawyer of your choice</b>, and to consult one during interrogation. If you can't afford one, the state must provide free legal aid.</li>
+        <li class="s-item"><b>Your family or a friend must be informed</b> of the arrest and where you're held — this is not optional. <span class="cite case">D.K. Basu · SC 1997</span></li>
+        <li class="s-item"><b>An arrest memo must be made</b>, signed by a witness and by you, noting the time and place. <span class="cite">BNSS §36</span></li>
+        <li class="s-item"><b>You must be produced before a magistrate within 24 hours</b> (travel time excluded). Being held longer without this is illegal. <span class="cite">Art. 22(2)</span></li>
+        <li class="s-item"><b>You have the right to stay silent.</b> No one can force you to confess or self-incriminate. <span class="cite">Art. 20(3)</span></li>
+        <li class="s-item"><b>You cannot be routinely handcuffed or chained</b> — that's allowed only in exceptional cases with recorded reasons; doing it casually violates your dignity. <span class="cite case">Prem Shankar Shukla · SC 1980</span> <span class="cite case">Vihaan Kumar · SC 2025</span></li>
+        <li class="s-item"><b>You can ask for a medical examination</b> at the time of arrest and again at release — a protection against custodial abuse. <span class="cite">BNSS §53, §56</span></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 03 -->
+  <section class="s-sec">
+    <div class="sec-head"><span class="sec-num">03</span><h2 class="sec-title">If a woman is in your car</h2></div>
+    <p class="sec-intro">Extra safeguards apply — useful to know if you're with your family, partner, or a female friend.</p>
+    <div class="card s-item">
+      <p>The law says a woman should <strong>not be arrested between sunset and sunrise</strong>, except in exceptional circumstances — and even then, only by a <strong>woman police officer</strong> who has obtained a magistrate's written permission. <span class="cite">BNSS §43(5)</span></p>
+      <p>A <strong>male officer must not physically touch a woman</strong> to make an arrest; that requires a woman officer. Her submission to arrest is presumed on a spoken intimation.</p>
+      <p>One honest caveat: some High Courts have called the night-arrest rule "directory" rather than absolute — meaning an arrest isn't automatically void if it's broken, but the officer must justify why. It's still a strong safeguard you can point to firmly and calmly. <span class="cite case">Madras HC · 2025</span></p>
+    </div>
+  </section>
+
+  <!-- 04 -->
+  <section class="s-sec">
+    <div class="sec-head"><span class="sec-num">04</span><h2 class="sec-title">In the moment</h2></div>
+    <div class="dd">
+      <div class="panel do s-item">
+        <h4>Do</h4>
+        <ul>
+          <li>Stay calm and keep your voice even, even if theirs isn't.</li>
+          <li>Keep your hands visible; move slowly for documents.</li>
+          <li>Ask, politely: "May I know why I'm being stopped?"</li>
+          <li>Note the officer's name, rank, and badge; the time and place.</li>
+          <li>Record video if it's safe and you can do it openly.</li>
+          <li>Ask for a receipt / proper challan for any fine.</li>
+        </ul>
+      </div>
+      <div class="panel dont s-item">
+        <h4>Don't</h4>
+        <ul>
+          <li>Argue, abuse, or raise your voice — it rarely helps.</li>
+          <li>Physically resist or try to drive off.</li>
+          <li>Offer or accept a bribe to "settle" it.</li>
+          <li>Sign a blank or incomplete paper.</li>
+          <li>Boast about contacts or "who you know."</li>
+          <li>Volunteer more than you're asked.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="say">
+      <div class="line s-item">"Officer, I'd like to cooperate. May I know your name and rank, and under which rule I'm being stopped?"<span>Calm, respectful, and it signals you know the process.</span></div>
+      <div class="line s-item">"Am I being detained, or am I free to go?"<span>A fair question that clarifies where you actually stand.</span></div>
+    </div>
+  </section>
+
+  <!-- 05 : ground reality -->
+  <section class="s-sec">
+    <div class="sec-head"><span class="sec-num">05</span><h2 class="sec-title">On paper vs. on the ground</h2></div>
+    <p class="sec-intro">This is the part most guides skip. The law is one thing; a real checkpoint at night is another. None of this asks you to break a rule — it's about holding your rights in the way that actually keeps you safe in India.</p>
+    <div class="reality">
+
+      <div class="r-item s-item">
+        <div class="r-title">New law, old habits</div>
+        <div class="r-rows">
+          <div class="r-row paper"><span class="r-lbl">On paper</span><p>The BNSS and BNS replaced the CrPC and IPC on 1 July 2024, with notice-first, arrest-as-exception rules.</p></div>
+          <div class="r-row ground"><span class="r-lbl">On the ground</span><p>Many field officers still run on old muscle memory. Quoting "Section 35 BNSS" at a constable can draw a blank look — or irritation.</p></div>
+          <div class="r-row move"><span class="r-lbl">Smart move</span><p>Don't lecture the law at the roadside. Comply with lawful, routine asks, note what happened, and raise the legal points later in writing or before the magistrate — where they actually carry weight.</p></div>
+        </div>
+      </div>
+
+      <div class="r-item s-item">
+        <div class="r-title">Digital documents — valid, but often refused</div>
+        <div class="r-rows">
+          <div class="r-row paper"><span class="r-lbl">On paper</span><p>A DL or RC shown from DigiLocker or mParivahan is legally valid across India.</p></div>
+          <div class="r-row ground"><span class="r-lbl">On the ground</span><p>Some officers still insist on physical papers or say "phone won't do."</p></div>
+          <div class="r-row move"><span class="r-lbl">Smart move</span><p>Keep physical originals in the car anyway. Show the app, not a gallery screenshot. If wrongly refused, don't turn it into a standoff — note it and contest any challan online.</p></div>
+        </div>
+      </div>
+
+      <div class="r-item s-item">
+        <div class="r-title">The "settle it here" pressure</div>
+        <div class="r-rows">
+          <div class="r-row paper"><span class="r-lbl">On paper</span><p>Every fine needs a proper challan and receipt, and a wrong challan can be contested.</p></div>
+          <div class="r-row ground"><span class="r-lbl">On the ground</span><p>Charges are sometimes inflated or invented to push a cash "settlement" — more so if you're alone or in a hurry.</p></div>
+          <div class="r-row move"><span class="r-lbl">Smart move</span><p>Don't pay cash to settle. A bribe can't be contested and marks you as an easy target next time. Insist on a real challan; let them keep your licence if needed; contest online. The official fine is almost always the cheaper path.</p></div>
+        </div>
+      </div>
+
+      <div class="r-item s-item">
+        <div class="r-title">"Just come to the station"</div>
+        <div class="r-rows">
+          <div class="r-row paper"><span class="r-lbl">On paper</span><p>For offences up to 7 years you should get a written notice, not be picked up. The moment they confine you, arrest safeguards switch on.</p></div>
+          <div class="r-row ground"><span class="r-lbl">On the ground</span><p>People are often "asked" to come in for questioning with no notice — an informal detention that blurs the line.</p></div>
+          <div class="r-row move"><span class="r-lbl">Smart move</span><p>Ask calmly: "Am I under arrest? Under which section or FIR?" You're generally not obliged to go for mere questioning without a proper notice. If you do go, tell family where you are and call a lawyer first.</p></div>
+        </div>
+      </div>
+
+      <div class="r-item s-item">
+        <div class="r-title">Recording the encounter</div>
+        <div class="r-rows">
+          <div class="r-row paper"><span class="r-lbl">On paper</span><p>No law bars filming police in a public place, and courts have protected the right to record.</p></div>
+          <div class="r-row ground"><span class="r-lbl">On the ground</span><p>Officers may object, order you to stop, or try to grab the phone.</p></div>
+          <div class="r-row move"><span class="r-lbl">Smart move</span><p>Record openly but without taunting. Better: use a setting that auto-uploads to the cloud so footage survives even if the phone is taken, and let a passenger film from inside the car. Don't make the camera the fight.</p></div>
+        </div>
+      </div>
+
+      <div class="r-item s-item">
+        <div class="r-title">When the FIR won't get registered</div>
+        <div class="r-rows">
+          <div class="r-row paper"><span class="r-lbl">On paper</span><p>Anyone can report a cognizable offence, and a Zero FIR can be filed at any station regardless of jurisdiction.</p></div>
+          <div class="r-row ground"><span class="r-lbl">On the ground</span><p>Stations sometimes refuse, deflect, or delay — especially a complaint against police.</p></div>
+          <div class="r-row move"><span class="r-lbl">Smart move</span><p>Insist politely and get it in writing. If refused, complain to the SP and to the Magistrate under BNSS §175(3), and in parallel to the State Human Rights Commission.</p></div>
+        </div>
+      </div>
+
+      <div class="r-item s-item">
+        <div class="r-title">The real safety rule</div>
+        <div class="r-rows">
+          <div class="r-row paper"><span class="r-lbl">On paper</span><p>You hold many rights in the moment of the encounter.</p></div>
+          <div class="r-row ground"><span class="r-lbl">On the ground</span><p>Asserting them aggressively at a checkpoint — especially at night, alone, with no witnesses — can invite an "obstruction" charge or worse.</p></div>
+          <div class="r-row move"><span class="r-lbl">Smart move</span><p>Your only goal in the moment is to get home safely with a clear record. Be calm, be trackable (someone knows where you are), document quietly — and fight it on paper afterwards, where the law is strongest.</p></div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- 06 : mistreatment -->
+  <section class="s-sec">
+    <div class="sec-head"><span class="sec-num">06</span><h2 class="sec-title">If they mistreat you</h2></div>
+    <p class="sec-intro">Misconduct has real consequences now — custodial violence and death are defined offences under the new penal code. You have clear channels.</p>
+    <ol class="steps">
+      <li class="s-item"><b>Gather details on the spot.</b> Officer's name, rank, badge number, vehicle number, station; the date, time and location. Video and photos if safe.</li>
+      <li class="s-item"><b>Escalate above them.</b> Complain to the senior officer at the police station, then to the Superintendent of Police (SP) of the district in writing.</li>
+      <li class="s-item"><b>Tell the magistrate.</b> If arrested, raise any mistreatment the first time you're produced in court — it goes on record and the magistrate must check it.</li>
+      <li class="s-item"><b>File with a rights body.</b> The National Human Rights Commission (NHRC) or the Jharkhand State Human Rights Commission can be approached directly, including online.</li>
+      <li class="s-item"><b>Get free legal help.</b> The Jharkhand State Legal Services Authority (JHALSA) provides free legal aid and can guide the complaint.</li>
+    </ol>
+    <div class="lines">
+      <div class="hl s-item"><div class="num">112</div><div class="lbl">All-India emergency (police / any distress)</div></div>
+      <div class="hl s-item"><div class="num">15100</div><div class="lbl">Free legal aid helpline (NALSA)</div></div>
+      <div class="hl s-item"><div class="num">1091</div><div class="lbl">Women's helpline</div></div>
+      <div class="hl s-item"><div class="num">1098</div><div class="lbl">Childline (children in distress)</div></div>
+    </div>
+  </section>
+
+  <!-- 07 : case law -->
+  <section class="s-sec">
+    <div class="sec-head"><span class="sec-num">07</span><h2 class="sec-title">The judgments behind this</h2></div>
+    <p class="sec-intro">Not just "the book" — these are the actual rulings that turned each principle into something you can hold a police officer to. Look any of them up if you want the full text.</p>
+    <div class="cases">
+      <div class="case-item s-item">
+        <div class="case-name">Satender Kumar Antil v. CBI</div>
+        <div class="case-meta">Supreme Court · 15 Jan 2026</div>
+        <p class="case-hold">For offences punishable up to 7 years, a notice to appear under BNSS §35(3) is the rule and arrest is the exception. Arrest must be an objective necessity, backed by reasons recorded in writing — not a matter of convenience.</p>
+      </div>
+      <div class="case-item s-item">
+        <div class="case-name">Vihaan Kumar v. State of Haryana</div>
+        <div class="case-meta">Supreme Court · 7 Feb 2025 · 2025 INSC 162</div>
+        <p class="case-hold">An arrest is illegal if the grounds aren't actually communicated to you in a language you understand. Informing a relative isn't a substitute, and a later chargesheet or remand can't cure the defect. Handcuffing and chaining a patient to a hospital bed was held to violate the right to dignity.</p>
+      </div>
+      <div class="case-item s-item">
+        <div class="case-name">Prabir Purkayastha v. State (NCT of Delhi)</div>
+        <div class="case-meta">Supreme Court · 15 May 2024</div>
+        <p class="case-hold">Grounds of arrest must be furnished in writing. The court drew a clear line between "grounds" — the specific facts against you — and generic "reasons," and held that a person is entitled to the former so they can actually defend themselves.</p>
+      </div>
+      <div class="case-item s-item">
+        <div class="case-name">Pankaj Bansal v. Union of India</div>
+        <div class="case-meta">Supreme Court · 2023</div>
+        <p class="case-hold">The origin of the written-grounds rule (in a money-laundering context): oral communication of the grounds of arrest isn't enough to satisfy the constitutional safeguard.</p>
+      </div>
+      <div class="case-item s-item">
+        <div class="case-name">Arnesh Kumar v. State of Bihar</div>
+        <div class="case-meta">Supreme Court · 2014</div>
+        <p class="case-hold">No automatic, mechanical arrest for offences punishable up to 7 years. Police must first justify whether an arrest is even necessary, and issue a notice of appearance where it isn't.</p>
+      </div>
+      <div class="case-item s-item">
+        <div class="case-name">D.K. Basu v. State of West Bengal</div>
+        <div class="case-meta">Supreme Court · 1997</div>
+        <p class="case-hold">The custody rulebook: an arrest memo signed by a witness, informing a family member or friend, a medical examination, and clearly identifiable officers. These are still the backbone of what the police must do.</p>
+      </div>
+      <div class="case-item s-item">
+        <div class="case-name">Prem Shankar Shukla v. Delhi Administration</div>
+        <div class="case-meta">Supreme Court · 1980</div>
+        <p class="case-hold">Routine handcuffing is unconstitutional and an affront to dignity. It's permitted only in genuinely exceptional cases, with reasons — a principle the court reaffirmed in 2025.</p>
+      </div>
+      <div class="case-item s-item">
+        <div class="case-name">Supreme Court on §35 notice service</div>
+        <div class="case-meta">Supreme Court · 2025</div>
+        <p class="case-hold">A notice under BNSS §35 must be served through a proper legal mode. A WhatsApp or other electronic message alone is not valid service.</p>
+      </div>
+      <div class="case-item s-item">
+        <div class="case-name">Tavaragi Rajashekhar Shiva Prasad v. State of Karnataka</div>
+        <div class="case-meta">Karnataka High Court</div>
+        <p class="case-hold">A §35 notice must mention the crime number and offence and attach a copy of the FIR. If it doesn't, you aren't obliged to appear and no coercive action can follow for non-appearance.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 08 : keep ready -->
+  <section class="s-sec">
+    <div class="sec-head"><span class="sec-num">08</span><h2 class="sec-title">Keep this ready</h2></div>
+    <p class="sec-intro">Five minutes now saves a lot of stress later. A quick check for your car and phone.</p>
+    <div class="card s-item">
+      <ul class="checklist">
+        <li>Physical originals in the car: <strong>DL, RC, insurance, PUC</strong>.</li>
+        <li>Same documents added to <strong>DigiLocker and mParivahan</strong> on your phone.</li>
+        <li>A saved note with a <strong>lawyer's number, two family contacts, and your blood group</strong>.</li>
+        <li>Phone kept charged (or a power bank) so you can show documents and record if needed.</li>
+        <li>A recording app set to <strong>auto-upload to the cloud</strong>, so footage is safe even if the phone isn't.</li>
+        <li>This page bookmarked — a two-minute read whenever you want the ground back under your feet.</li>
+      </ul>
+    </div>
+  </section>
+
+  <footer>
+    <p class="disc"><strong>A note on this guide.</strong> This is general information to help you understand your rights, not legal advice for a specific situation. India's criminal laws changed on 1 July 2024 (the BNSS and BNS replaced the CrPC and IPC), and enforcement varies between states and officers — Jharkhand and local police rules may add their own procedures, and some points above (like the traffic-rank convention) rest on long-standing practice and advisories rather than a single statute. For anything serious, or an actual case, speak to a lawyer or reach JHALSA on 15100. If in immediate danger, call 112. Your safety in the moment matters more than winning an argument on the roadside.</p>
+    <p class="stamp">Reviewed against current law · 3 July 2026 · Jamshedpur, Jharkhand</p>
+  </footer>
+
+</div>
+
+<script>
+(function(){
+  var input=document.getElementById('q');
+  var clearBtn=document.getElementById('clear');
+  var countEl=document.getElementById('count');
+  var noResults=document.getElementById('noresults');
+  var sections=Array.prototype.slice.call(document.querySelectorAll('.s-sec'));
+
+  function clearMarks(){
+    var marks=document.querySelectorAll('mark.hit');
+    for(var i=0;i<marks.length;i++){
+      var m=marks[i];
+      m.parentNode.replaceChild(document.createTextNode(m.textContent),m);
+    }
+    var items=document.querySelectorAll('.s-item, .s-sec');
+    for(var j=0;j<items.length;j++){ items[j].normalize(); }
+  }
+
+  function highlight(el,q){
+    var walker=document.createTreeWalker(el,NodeFilter.SHOW_TEXT,{
+      acceptNode:function(n){
+        if(!n.nodeValue.trim())return NodeFilter.FILTER_REJECT;
+        var p=n.parentNode;
+        if(p&&(p.nodeName==='MARK'||p.nodeName==='SCRIPT'||p.nodeName==='STYLE'))return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    var nodes=[];
+    while(walker.nextNode())nodes.push(walker.currentNode);
+    for(var i=0;i<nodes.length;i++){
+      var node=nodes[i], text=node.nodeValue, lower=text.toLowerCase();
+      var idx=lower.indexOf(q);
+      if(idx===-1)continue;
+      var frag=document.createDocumentFragment(), last=0;
+      while(idx!==-1){
+        if(idx>last)frag.appendChild(document.createTextNode(text.slice(last,idx)));
+        var mark=document.createElement('mark');
+        mark.className='hit';
+        mark.textContent=text.slice(idx,idx+q.length);
+        frag.appendChild(mark);
+        last=idx+q.length;
+        idx=lower.indexOf(q,last);
+      }
+      if(last<text.length)frag.appendChild(document.createTextNode(text.slice(last)));
+      node.parentNode.replaceChild(frag,node);
+    }
+  }
+
+  function run(){
+    var q=input.value.trim().toLowerCase();
+    clearMarks();
+    clearBtn.style.display=q?'block':'none';
+    if(!q){
+      for(var s=0;s<sections.length;s++){
+        sections[s].classList.remove('hide');
+        var its=sections[s].querySelectorAll('.s-item');
+        for(var k=0;k<its.length;k++)its[k].classList.remove('hide');
+      }
+      countEl.textContent='';
+      noResults.style.display='none';
+      return;
+    }
+    var total=0;
+    for(var i=0;i<sections.length;i++){
+      var sec=sections[i];
+      var titleEl=sec.querySelector('.sec-title');
+      var titleMatch=titleEl?titleEl.textContent.toLowerCase().indexOf(q)!==-1:false;
+      var items=sec.querySelectorAll('.s-item');
+      var secHas=false;
+      for(var j=0;j<items.length;j++){
+        var it=items[j];
+        // avoid double-counting nested s-items: only leaf-level matching counts visually, but we still show/hide each
+        var match=it.textContent.toLowerCase().indexOf(q)!==-1;
+        if(match||titleMatch){
+          it.classList.remove('hide');
+          highlight(it,q);
+          if(!it.querySelector('.s-item')){ secHas=true; total++; }
+          else { secHas=true; }
+        } else {
+          it.classList.add('hide');
+        }
+      }
+      if(titleMatch)highlight(titleEl,q);
+      if(secHas||titleMatch){ sec.classList.remove('hide'); }
+      else { sec.classList.add('hide'); }
+    }
+    countEl.textContent=total+(total===1?' match':' matches');
+    noResults.style.display=total===0?'block':'none';
+  }
+
+  input.addEventListener('input',run);
+  clearBtn.addEventListener('click',function(){ input.value=''; run(); input.focus(); });
+  input.addEventListener('keydown',function(e){ if(e.key==='Escape'){ input.value=''; run(); } });
+})();
+</script>
+</body>
+</html>
