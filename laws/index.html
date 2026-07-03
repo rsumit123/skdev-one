@@ -52,6 +52,26 @@
     padding:1px 6px;white-space:nowrap;display:inline-block;vertical-align:baseline;line-height:1.5;
   }
   .cite.case{color:var(--ink-soft);background:rgba(76,84,104,.08);border-color:rgba(76,84,104,.2)}
+  .cite[data-law]{cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px}
+  .cite[data-law]:hover,.cite[data-law]:focus-visible{background:rgba(154,110,36,.2);border-color:var(--brass)}
+
+  /* ---- law text modal ---- */
+  body.lm-open{overflow:hidden}
+  #lawmodal{position:fixed;inset:0;z-index:50}
+  .lm-back{position:absolute;inset:0;background:rgba(12,15,22,.55)}
+  .lm-sheet{position:absolute;left:50%;transform:translateX(-50%);bottom:0;width:100%;max-width:640px;max-height:84vh;overflow-y:auto;background:var(--card);border:1px solid var(--line);border-radius:18px 18px 0 0;padding:24px 22px 30px;-webkit-overflow-scrolling:touch}
+  @media (min-width:700px){.lm-sheet{bottom:auto;top:50%;transform:translate(-50%,-50%);border-radius:14px;padding:28px 28px 30px}}
+  .lm-close{position:absolute;top:10px;right:10px;border:none;background:transparent;cursor:pointer;font-size:1.5rem;line-height:1;color:var(--ink-soft);width:36px;height:36px;border-radius:8px}
+  .lm-close:hover{background:rgba(128,128,128,.12)}
+  .lm-kicker{font-family:var(--mono);font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--brass-deep);margin-bottom:6px;padding-right:36px}
+  .lm-sheet h3{font-family:var(--display);font-weight:600;font-size:1.3rem;line-height:1.25;margin-bottom:6px;padding-right:36px}
+  .lm-block{margin-top:16px}
+  .lm-label{font-family:var(--mono);font-size:.7rem;color:var(--ink-soft);letter-spacing:.04em;margin-bottom:6px}
+  .lm-quote{font-family:var(--display);font-style:italic;font-size:1.02rem;line-height:1.55;background:var(--paper);border-left:3px solid var(--brass);border-radius:2px;padding:14px 16px}
+  .lm-quote mark{background:rgba(154,110,36,.28);color:inherit;border-radius:2px;padding:0 1px}
+  .lm-plain{font-size:.92rem;color:var(--ink-soft);margin-top:8px;line-height:1.5}
+  #lm-link{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:.76rem;color:var(--brass-deep);margin-top:18px}
+  .lm-note{font-size:.78rem;color:var(--ink-soft);opacity:.8;margin-top:14px;line-height:1.5}
 
   /* ---- masthead ---- */
   .eyebrow{
@@ -231,6 +251,8 @@
     .cite{background:rgba(217,176,113,.1);border-color:rgba(217,176,113,.28)}
     .cite.case{background:rgba(166,172,187,.1);border-color:rgba(166,172,187,.26)}
     mark.hit{background:rgba(217,176,113,.34)}
+    .lm-quote mark{background:rgba(217,176,113,.34)}
+    .lm-back{background:rgba(0,0,0,.65)}
     .core{background:#0E1015}
     #q::placeholder{color:#6A7280}
     #clear:hover{background:rgba(255,255,255,.07)}
@@ -244,7 +266,7 @@
   <header class="reveal">
     <div class="eyebrow">Read me weekly &nbsp;·&nbsp; A steadying reminder</div>
     <h1>You have rights. And in most cases, <em>arrest is the exception,</em> not the rule.</h1>
-    <p class="lede">A calm, plain-language guide to what the police can and cannot do to you in India — on the road and off it — plus the honest gap between what the law says and what tends to happen on the ground. Every claim is anchored to a real law or judgment; use the search box to jump to anything.</p>
+    <p class="lede">A calm, plain-language guide to what the police can and cannot do to you in India — on the road and off it — plus the honest gap between what the law says and what tends to happen on the ground. Every claim is anchored to a real law or judgment — tap any beige law chip to read the actual text. Use the search box to jump to anything.</p>
     <div class="anchor">
       <div class="q">"No person shall be deprived of his life or personal liberty except according to procedure established by law."</div>
       <div class="src">Article 21, Constitution of India — the root every protection below grows from</div>
@@ -616,6 +638,18 @@
 
 <a id="totop" href="#" aria-label="Back to top">&uarr; top</a>
 
+<div id="lawmodal" hidden>
+  <div class="lm-back"></div>
+  <div class="lm-sheet" role="dialog" aria-modal="true" aria-labelledby="lm-title">
+    <button class="lm-close" aria-label="Close">&times;</button>
+    <div class="lm-kicker" id="lm-kicker"></div>
+    <h3 id="lm-title"></h3>
+    <div id="lm-body"></div>
+    <a id="lm-link" target="_blank" rel="noopener">Read the full section &nearr;</a>
+    <p class="lm-note">Reproduced for quick reference. Wording can be amended; for anything serious, check the current official text or ask a lawyer.</p>
+  </div>
+</div>
+
 <script>
 (function(){
   var input=document.getElementById('q');
@@ -775,6 +809,109 @@
     totop.classList.toggle('show',window.scrollY>600);
   },{passive:true});
   totop.addEventListener('click',function(e){ e.preventDefault(); window.scrollTo({top:0,behavior:'smooth'}); });
+
+  // ---- tappable law chips: actual statutory text ----
+  var LAWS={
+    bnss35:{kicker:"Bharatiya Nagarik Suraksha Sanhita, 2023",title:"Section 35 — Notice first, arrest as exception",link:"https://www.advocatekhoj.com/library/bareacts/bharatiyanagarik2023/35.php",blocks:[
+      {label:"§35(3)",quote:"The police officer shall, in all cases where the arrest of a person is not required under sub-section (1), <mark>issue a notice</mark> directing the person against whom a reasonable complaint has been made, or credible information has been received, or a reasonable suspicion exists that he has committed a cognizable offence, to <mark>appear before him</mark> or at such other place as may be specified in the notice."},
+      {label:"§35(5)",quote:"Where such person complies and continues to comply with the notice, <mark>he shall not be arrested</mark> in respect of the offence referred to in the notice unless, for reasons to be recorded, the police officer is of the opinion that he ought to be arrested.",plain:"For offences punishable up to 7 years, a written notice to appear is the default and arrest needs recorded reasons — reaffirmed by the Supreme Court in Satender Kumar Antil (Jan 2026)."}
+    ]},
+    bnss36:{kicker:"Bharatiya Nagarik Suraksha Sanhita, 2023",title:"Section 36 — Name badge, arrest memo, right to inform",link:"https://www.advocatekhoj.com/library/bareacts/bharatiyanagarik2023/36.php",blocks:[
+      {quote:"Every police officer while making an arrest shall— (a) bear an <mark>accurate, visible and clear identification of his name</mark> which will facilitate easy identification; (b) <mark>prepare a memorandum of arrest</mark> which shall be— (i) attested by at least one witness, who is a member of the family of the person arrested or a respectable member of the locality where the arrest is made; (ii) countersigned by the person arrested; and (c) inform the person arrested, unless the memorandum is attested by a member of his family, that he has a <mark>right to have a relative or a friend</mark> named by him to be informed of his arrest.",plain:"This is the D.K. Basu rulebook written into statute: identifiable officers, a witnessed arrest memo, and someone you name gets told."}
+    ]},
+    bnss435:{kicker:"Bharatiya Nagarik Suraksha Sanhita, 2023",title:"Section 43(5) — Arrest of women at night",link:"https://www.advocatekhoj.com/library/bareacts/bharatiyanagarik2023/43.php",blocks:[
+      {quote:"<mark>Save in exceptional circumstances, no woman shall be arrested after sunset and before sunrise</mark>, and where such exceptional circumstances exist, the woman police officer shall, by making a written report, <mark>obtain the prior permission of the Magistrate</mark> of the first class within whose local jurisdiction the offence is committed or the arrest is to be made.",plain:"Two locks at once: exceptional circumstances, and a woman officer with a magistrate's prior written permission."}
+    ]},
+    bnss5356:{kicker:"Bharatiya Nagarik Suraksha Sanhita, 2023",title:"Sections 53 & 56 — Medical examination and care in custody",link:"https://www.advocatekhoj.com/library/bareacts/bharatiyanagarik2023/53.php",blocks:[
+      {label:"§53(1)",quote:"When any person is arrested, <mark>he shall be examined by a medical officer</mark> in the service of the Central Government or a State Government, and in case the medical officer is not available, by a registered medical practitioner <mark>soon after the arrest is made</mark>…",plain:"For women, the examination must be by or under the supervision of a female medical officer or practitioner."},
+      {label:"§56",quote:"It shall be the duty of the person having the custody of an accused to take <mark>reasonable care of the health and safety</mark> of the accused."}
+    ]},
+    bnss478:{kicker:"Bharatiya Nagarik Suraksha Sanhita, 2023",title:"Section 478 — Bail in bailable offences is a right",link:"https://www.advocatekhoj.com/library/bareacts/bharatiyanagarik2023/478.php",blocks:[
+      {label:"§478(1)",quote:"When any person other than a person accused of a non-bailable offence is arrested or detained without warrant by an officer in charge of a police station… and is prepared at any time while in the custody of such officer or at any stage of the proceeding before such Court to give bail, <mark>such person shall be released on bail</mark>…",plain:"'Shall', not 'may'. And if you are indigent and cannot furnish a surety, you are to be discharged on a personal bond — being unable to give bail within a week of arrest is itself ground to presume you are indigent."}
+    ]},
+    bnss480:{kicker:"Bharatiya Nagarik Suraksha Sanhita, 2023",title:"Section 480 — Bail in non-bailable offences",link:"https://www.advocatekhoj.com/library/bareacts/bharatiyanagarik2023/480.php",blocks:[
+      {label:"§480(1)",quote:"When any person accused of, or suspected of, the commission of any non-bailable offence is arrested or detained without warrant by an officer in charge of a police station or appears or is brought before a Court other than the High Court or Court of Session, <mark>he may be released on bail</mark>…",plain:"Discretionary, with restrictions for the gravest offences and repeat convicts — but with express carve-outs favouring children, women, and the sick or infirm, and the Antil principle that liberty is the rule."}
+    ]},
+    bnss482:{kicker:"Bharatiya Nagarik Suraksha Sanhita, 2023",title:"Section 482 — Anticipatory bail",link:"https://www.advocatekhoj.com/library/bareacts/bharatiyanagarik2023/482.php",blocks:[
+      {label:"§482(1)",quote:"When any person has reason to believe that he may be arrested on an accusation of having committed a non-bailable offence, he may apply to the <mark>High Court or the Court of Session</mark> for a direction under this section; and that Court may, if it thinks fit, direct that <mark>in the event of such arrest, he shall be released on bail</mark>."}
+    ]},
+    bnss1873:{kicker:"Bharatiya Nagarik Suraksha Sanhita, 2023",title:"Section 187(3) — Default bail: the police deadline",link:"https://www.advocatekhoj.com/library/bareacts/bharatiyanagarik2023/187.php",blocks:[
+      {quote:"…the Magistrate shall not authorise the detention of the accused person in custody… for a total period exceeding— (i) <mark>ninety days</mark>, where the investigation relates to an offence punishable with death, imprisonment for life or imprisonment for a term of ten years or more; (ii) <mark>sixty days</mark>, where the investigation relates to any other offence, and, on the expiry of the said period of ninety days or sixty days, as the case may be, <mark>the accused person shall be released on bail</mark> if he is prepared to and does furnish bail…",plain:"Miss the chargesheet deadline and bail becomes an indefeasible right — but you must apply before the chargesheet is eventually filed."}
+    ]},
+    art22:{kicker:"Constitution of India",title:"Article 22 — Protection against arrest and detention",link:"https://www.constitutionofindia.net/articles/article-22-protection-against-arrest-and-detention-in-certain-cases/",blocks:[
+      {label:"Art. 22(1)",quote:"No person who is arrested shall be detained in custody without being <mark>informed, as soon as may be, of the grounds for such arrest</mark> nor shall he be denied the right to <mark>consult, and to be defended by, a legal practitioner of his choice</mark>."},
+      {label:"Art. 22(2)",quote:"Every person who is arrested and detained in custody shall be <mark>produced before the nearest magistrate within a period of twenty-four hours</mark> of such arrest excluding the time necessary for the journey from the place of arrest to the court of the magistrate and <mark>no such person shall be detained in custody beyond the said period without the authority of a magistrate</mark>."}
+    ]},
+    art203:{kicker:"Constitution of India",title:"Article 20(3) — The right to silence",link:"https://www.constitutionofindia.net/articles/article-20-protection-in-respect-of-conviction-for-offences/",blocks:[
+      {quote:"No person accused of any offence shall be <mark>compelled to be a witness against himself</mark>.",plain:"The constitutional root of the right to stay silent — no forced confessions, no forced self-incrimination."}
+    ]},
+    mvact1988:{kicker:"The Motor Vehicles Act, 1988",title:"Documents, challans and who can fine you",blocks:[
+      {plain:"The MV Act and its state rules govern which documents can be demanded and how fines are levied. The convention that an officer of ASI rank or above collects spot fines comes from state police standing orders and long practice rather than a single printed section — which is why this guide calls it a convention. The safe constants: a proper challan or e-challan receipt for any fine, from an identifiable officer in uniform."}
+    ]},
+    rule139cmvr:{kicker:"Central Motor Vehicles Rules, 1989 (amended 2 Nov 2018)",title:"Rule 139 — Digital documents are valid",link:"https://morth.nic.in/sites/default/files/circulars_document/Standard_Operating_Procedure.pdf",blocks:[
+      {quote:"The driver or a conductor of a motor vehicle shall produce <mark>in physical or electronic form</mark>, the certificate of registration, insurance, fitness and permit, the driving licence, certificate for pollution under check and any other relevant documents on demand by any police officer in uniform…",plain:"Documents shown from DigiLocker or mParivahan are legally at par with originals under the IT Act. A photo in your gallery is not — it must be the app."}
+    ]},
+    bns132221:{kicker:"Bharatiya Nyaya Sanhita, 2023",title:"Sections 221 & 132 — Why losing your temper escalates",link:"https://devgan.in/bns/section/221/",blocks:[
+      {label:"§221 — obstruction",quote:"Whoever <mark>voluntarily obstructs any public servant</mark> in the discharge of his public functions, shall be punished with imprisonment of either description for a term which may extend to <mark>three months</mark>, or with fine which may extend to two thousand five hundred rupees, or with both."},
+      {label:"§132 — assault or criminal force",quote:"Whoever <mark>assaults or uses criminal force</mark> to any person being a public servant in the execution of his duty as such public servant… shall be punished with imprisonment of either description for a term which may extend to <mark>two years</mark>, or with fine, or with both.",plain:"§132 is cognizable and non-bailable — one shove at a checkpoint can out-punish the traffic violation many times over."}
+    ]},
+    pcact8:{kicker:"Prevention of Corruption Act, 1988 (amended 2018)",title:"Section 8 — Giving a bribe is a crime too",link:"https://indiankanoon.org/doc/733974/",blocks:[
+      {label:"§8(1)",quote:"Any person who <mark>gives or promises to give an undue advantage</mark> to another person or persons, with intention— (i) to induce a public servant to perform improperly a public duty; or (ii) to reward such public servant for the improper performance of public duty, shall be punishable with imprisonment for a term which may extend to <mark>seven years</mark>, or with fine, or with both…"},
+      {label:"the safe harbour",quote:"Provided that the provisions of this section shall not apply where a person is <mark>compelled</mark> to give such undue advantage: Provided further that the person so compelled shall <mark>report the matter to the law enforcement authority or investigating agency within a period of seven days</mark> from the date of giving such undue advantage…",plain:"Coerced into paying? You are protected only if you report it within seven days."}
+    ]},
+    bns196353:{kicker:"Bharatiya Nyaya Sanhita, 2023",title:"Sections 196 & 353 — Forwards and posts that become offences",link:"https://devgan.in/bns/section/353/",blocks:[
+      {label:"§196(1)(a)",quote:"Whoever— (a) by words, either spoken or written, or by signs or by visible representations or <mark>through electronic communication</mark> or otherwise, <mark>promotes or attempts to promote</mark>, on grounds of religion, race, place of birth, residence, language, caste or community or any other ground whatsoever, <mark>disharmony or feelings of enmity, hatred or ill-will</mark> between different religious, racial, language or regional groups or castes or communities… shall be punished with imprisonment which may extend to three years, or with fine, or with both."},
+      {label:"§353(2)",quote:"Whoever makes, publishes or circulates any statement or report containing <mark>false information, rumour or alarming news, including through electronic means</mark>, with intent to create or promote… feelings of enmity, hatred or ill will between different religious, racial, language or regional groups or castes or communities…",plain:"Good-faith belief that a statement is true, with reasonable grounds, is the statutory exception — 'I just forwarded it' is not."}
+    ]},
+    mvact134a:{kicker:"The Motor Vehicles Act, 1988 (inserted 2019)",title:"Section 134A — Good Samaritans are protected",link:"https://www.indiacode.nic.in/show-data?actid=AC_CEN_30_42_00009_198859_1517807326286&sectionId=50176&sectionno=134A&orderno=145",blocks:[
+      {quote:"A Good Samaritan <mark>shall not be liable for any civil or criminal action</mark> for any injury to or death of the victim of an accident involving a motor vehicle, where such injury or death resulted from the Good Samaritan's <mark>negligence in acting or failing to act</mark> while rendering emergency medical or non-medical care or assistance.",plain:"The 2020 rules add: you cannot be compelled to disclose your identity, and hospitals must not delay treatment. Helping is legally safe."}
+    ]},
+    niact138:{kicker:"Negotiable Instruments Act, 1881",title:"Section 138 — Cheque bounce goes to court, not the thana",link:"https://www.advocatekhoj.com/library/bareacts/negotiableinstruments/138.php",blocks:[
+      {quote:"Where any cheque drawn by a person on an account maintained by him with a banker for payment of any amount of money to another person… is returned by the bank unpaid… such person shall be <mark>deemed to have committed an offence</mark>…",plain:"Punishable with up to two years and/or a fine up to twice the cheque amount — but it runs on the payee's complaint before a magistrate, with mandatory written notice and timelines. Police stations have no role in it."}
+    ]}
+  };
+  LAWS.art221=LAWS.art22;
+  LAWS.art222=LAWS.art22;
+
+  var modal=document.getElementById('lawmodal');
+  var lmK=document.getElementById('lm-kicker'),lmT=document.getElementById('lm-title'),lmB=document.getElementById('lm-body'),lmL=document.getElementById('lm-link');
+  function openLaw(key){
+    var d=LAWS[key];if(!d)return;
+    lmK.textContent=d.kicker;lmT.textContent=d.title;
+    var html='';
+    for(var i=0;i<d.blocks.length;i++){
+      var b=d.blocks[i];
+      html+='<div class="lm-block">';
+      if(b.label)html+='<div class="lm-label">'+b.label+'</div>';
+      if(b.quote)html+='<blockquote class="lm-quote">“'+b.quote+'”</blockquote>';
+      if(b.plain)html+='<p class="lm-plain">'+b.plain+'</p>';
+      html+='</div>';
+    }
+    lmB.innerHTML=html;
+    if(d.link){lmL.href=d.link;lmL.style.display='inline-flex'}else{lmL.style.display='none'}
+    modal.hidden=false;
+    document.body.classList.add('lm-open');
+  }
+  function closeLaw(){modal.hidden=true;document.body.classList.remove('lm-open')}
+  modal.querySelector('.lm-back').addEventListener('click',closeLaw);
+  modal.querySelector('.lm-close').addEventListener('click',closeLaw);
+  document.addEventListener('keydown',function(e){if(e.key==='Escape'&&!modal.hidden)closeLaw()});
+
+  function normCite(s){return s.toLowerCase().replace(/[^a-z0-9]/g,'')}
+  var cites=document.querySelectorAll('.cite');
+  for(var c=0;c<cites.length;c++){
+    (function(el){
+      if(el.classList.contains('case'))return;
+      var key=normCite(el.textContent);
+      if(!LAWS[key])return;
+      el.setAttribute('data-law',key);
+      el.setAttribute('role','button');
+      el.setAttribute('tabindex','0');
+      el.title='Tap to read the law';
+      el.addEventListener('click',function(){openLaw(key)});
+      el.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();openLaw(key)}});
+    })(cites[c]);
+  }
 })();
 </script>
 </body>
