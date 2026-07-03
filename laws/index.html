@@ -167,6 +167,9 @@
   /* ---- helplines ---- */
   .lines{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:8px}
   .hl{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px 16px}
+  a.hl{text-decoration:none;display:block;color:inherit;transition:border-color .15s}
+  a.hl:hover{border-color:var(--brass)}
+  .rights-list.traps li::before{background:var(--caution)}
   .hl .num{font-family:var(--mono);font-size:1.4rem;font-weight:500;color:var(--brass-deep);letter-spacing:.02em}
   .hl .lbl{font-size:.86rem;color:var(--ink-soft);margin-top:2px}
   .steps{list-style:none;counter-reset:s;display:grid;gap:14px;margin:4px 0 22px}
@@ -264,7 +267,7 @@
     <div class="card s-item">
       <h3>Small practical notes</h3>
       <p><strong>Digital documents count — but from the app, not your gallery.</strong> A licence or RC pulled up inside DigiLocker or mParivahan is accepted nationwide. A photo in your phone's camera roll is not. It's still wise to keep physical originals in the car as backup.</p>
-      <p><strong>You can ask why you were stopped</strong>, calmly. If you believe a challan is wrong, you don't have to argue on the roadside — you can contest it later through the virtual traffic court online.</p>
+      <p><strong>You can ask why you were stopped</strong>, calmly. If you believe a challan is wrong, you don't have to argue on the roadside — you can check and contest it later at <a href="https://echallan.parivahan.gov.in" target="_blank" rel="noopener">echallan.parivahan.gov.in</a> through the virtual traffic court.</p>
       <p><strong>Never pay a bribe.</strong> If an officer demands cash "to settle it," that is the moment to insist on a proper challan with a receipt. Let them keep your licence if needed — you'll get it back when the official fine is paid.</p>
     </div>
   </section>
@@ -361,7 +364,7 @@
         <div class="r-rows">
           <div class="r-row paper"><span class="r-lbl">On paper</span><p>Every fine needs a proper challan and receipt, and a wrong challan can be contested.</p></div>
           <div class="r-row ground"><span class="r-lbl">On the ground</span><p>Charges are sometimes inflated or invented to push a cash "settlement" — more so if you're alone or in a hurry.</p></div>
-          <div class="r-row move"><span class="r-lbl">Smart move</span><p>Don't pay cash to settle. A bribe can't be contested and marks you as an easy target next time. Insist on a real challan; let them keep your licence if needed; contest online. The official fine is almost always the cheaper path.</p></div>
+          <div class="r-row move"><span class="r-lbl">Smart move</span><p>Don't pay cash to settle. A bribe can't be contested and marks you as an easy target next time. Insist on a real challan; let them keep your licence if needed; contest at <a href="https://echallan.parivahan.gov.in" target="_blank" rel="noopener">echallan.parivahan.gov.in</a>. The official fine is almost always the cheaper path.</p></div>
         </div>
       </div>
 
@@ -404,9 +407,25 @@
     </div>
   </section>
 
-  <!-- 06 : mistreatment -->
+  <!-- 06 : common traps -->
   <section class="s-sec">
-    <div class="sec-head"><span class="sec-num">06</span><h2 class="sec-title">If they mistreat you</h2></div>
+    <div class="sec-head"><span class="sec-num">06</span><h2 class="sec-title">The traps that catch ordinary people</h2></div>
+    <p class="sec-intro">Most people don't get into trouble because they don't know their rights — they get into trouble in one of these six ways. Each is avoidable.</p>
+    <div class="card s-item">
+      <ul class="rights-list traps">
+        <li class="s-item"><b>Losing your temper.</b> The fastest way to turn a &#8377;500 challan into a criminal case. Obstructing or assaulting a public servant is a separate offence <span class="cite">BNS &sect;132, &sect;221</span> — and unlike the challan, it follows you. Stay boring; fight on paper later.</li>
+        <li class="s-item"><b>Offering the bribe yourself.</b> Since the 2018 amendment, <em>giving</em> a bribe is a crime too — up to 7 years <span class="cite">PC Act &sect;8</span>. The only safe harbour is if you were coerced and report it within 7 days. Many people think only the taker is liable; that stopped being true years ago.</li>
+        <li class="s-item"><b>Unlocking your phone because they asked.</b> There is no general power at a stop to browse your phone; its contents sit behind your right to privacy <span class="cite case">Puttaswamy &middot; SC 2017</span> and the bar on self-incrimination <span class="cite">Art. 20(3)</span>. Decline politely. If they seize the phone, that needs a proper seizure memo — don't wrestle over it, get the paper.</li>
+        <li class="s-item"><b>Handing over anything without a memo.</b> Phone, vehicle, documents — any seizure needs paperwork listing what was taken, when, and by whom. No memo means it can quietly become "never happened." Ask for it every time.</li>
+        <li class="s-item"><b>Forwarding that WhatsApp message.</b> Forwarding fake or inflammatory content can itself be an offence <span class="cite">BNS &sect;196, &sect;353</span>, and group admins get summoned first. If you didn't verify it, don't forward it — especially anything about communities, riots, or public figures.</li>
+        <li class="s-item"><b>Driving past an accident because "police will harass me."</b> The opposite of a trap — a protection people don't use. A Good Samaritan who helps an accident victim cannot be harassed, detained, or forced to disclose their identity, and hospitals must treat first <span class="cite">MV Act &sect;134A</span>. Helping is safe. The hour you save someone is the one that matters.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 07 : mistreatment -->
+  <section class="s-sec">
+    <div class="sec-head"><span class="sec-num">07</span><h2 class="sec-title">If they mistreat you</h2></div>
     <p class="sec-intro">Misconduct has real consequences now — custodial violence and death are defined offences under the new penal code. You have clear channels.</p>
     <ol class="steps">
       <li class="s-item"><b>Gather details on the spot.</b> Officer's name, rank, badge number, vehicle number, station; the date, time and location. Video and photos if safe.</li>
@@ -416,16 +435,17 @@
       <li class="s-item"><b>Get free legal help.</b> The Jharkhand State Legal Services Authority (JHALSA) provides free legal aid and can guide the complaint.</li>
     </ol>
     <div class="lines">
-      <div class="hl s-item"><div class="num">112</div><div class="lbl">All-India emergency (police / any distress)</div></div>
-      <div class="hl s-item"><div class="num">15100</div><div class="lbl">Free legal aid helpline (NALSA)</div></div>
-      <div class="hl s-item"><div class="num">1091</div><div class="lbl">Women's helpline</div></div>
-      <div class="hl s-item"><div class="num">1098</div><div class="lbl">Childline (children in distress)</div></div>
+      <a class="hl s-item" href="tel:112"><div class="num">112</div><div class="lbl">All-India emergency (police / any distress) — tap to call</div></a>
+      <a class="hl s-item" href="tel:15100"><div class="num">15100</div><div class="lbl">Free legal aid helpline (NALSA) — tap to call</div></a>
+      <a class="hl s-item" href="tel:1091"><div class="num">1091</div><div class="lbl">Women's helpline — tap to call</div></a>
+      <a class="hl s-item" href="tel:1098"><div class="num">1098</div><div class="lbl">Childline (children in distress) — tap to call</div></a>
+      <a class="hl s-item" href="tel:1930"><div class="num">1930</div><div class="lbl">Cyber fraud helpline — call fast; the first hour decides if money is recovered</div></a>
     </div>
   </section>
 
-  <!-- 07 : case law -->
+  <!-- 08 : case law -->
   <section class="s-sec">
-    <div class="sec-head"><span class="sec-num">07</span><h2 class="sec-title">The judgments behind this</h2></div>
+    <div class="sec-head"><span class="sec-num">08</span><h2 class="sec-title">The judgments behind this</h2></div>
     <p class="sec-intro">Not just "the book" — these are the actual rulings that turned each principle into something you can hold a police officer to. Look any of them up if you want the full text.</p>
     <div class="cases">
       <div class="case-item s-item">
@@ -459,6 +479,11 @@
         <p class="case-hold">The custody rulebook: an arrest memo signed by a witness, informing a family member or friend, a medical examination, and clearly identifiable officers. These are still the backbone of what the police must do.</p>
       </div>
       <div class="case-item s-item">
+        <div class="case-name">Justice K.S. Puttaswamy v. Union of India</div>
+        <div class="case-meta">Supreme Court · 2017 · Nine-judge bench</div>
+        <p class="case-hold">Privacy is a fundamental right under Article 21. This is the constitutional footing for treating the contents of your phone as protected — the state needs a lawful basis and proportionate procedure to get into it, not mere curiosity at a checkpoint.</p>
+      </div>
+      <div class="case-item s-item">
         <div class="case-name">Prem Shankar Shukla v. Delhi Administration</div>
         <div class="case-meta">Supreme Court · 1980</div>
         <p class="case-hold">Routine handcuffing is unconstitutional and an affront to dignity. It's permitted only in genuinely exceptional cases, with reasons — a principle the court reaffirmed in 2025.</p>
@@ -476,9 +501,9 @@
     </div>
   </section>
 
-  <!-- 08 : keep ready -->
+  <!-- 09 : keep ready -->
   <section class="s-sec">
-    <div class="sec-head"><span class="sec-num">08</span><h2 class="sec-title">Keep this ready</h2></div>
+    <div class="sec-head"><span class="sec-num">09</span><h2 class="sec-title">Keep this ready</h2></div>
     <p class="sec-intro">Five minutes now saves a lot of stress later. A quick check for your car and phone.</p>
     <div class="card s-item">
       <ul class="checklist">
