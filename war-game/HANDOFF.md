@@ -210,7 +210,40 @@ console.log('mirror:',a,'/',b,'| median',lens[30]+'s','| timeouts',lens.filter(l
 ```
 
 **Current verified baseline (must hold after any sim change):**
-- Scripted mirror, 60 seeds: **30 / 30**, median **182s**, **0 timeouts**
+- Scripted mirror, 60 seeds: **33 / 27**, median **160s**, **0 timeouts**, **1.93 eco upgrades per side**
+- Superseded baseline at `ECO_COST=60`: 30 / 30, median 182s, 0 timeouts, 1.01 eco per side
+
+### Why ECO_COST dropped from 60 to 40
+
+Across four real LLM matches and eight commander slots, **zero economy upgrades were ever
+completed**. Peak coins ever banked was 44 against a cost of 60, so the upgrade was not
+merely unpopular — it was unreachable. Even GPT-5.6, which demonstrably held a save across
+four consecutive decisions to afford a 45-coin tank, never attempted it, and said so in its
+own debrief.
+
+A sweep of the scripted mirror over 60 seeds:
+
+| ECO_COST | mirror | median | timeouts | eco/side | tanks | AT |
+|---|---|---|---|---|---|---|
+| 60 | 30/30 | 182s | 0 | 1.01 | 209 | 502 |
+| 45 | 34/26 | 177s | 0 | 1.94 | 410 | 830 |
+| **40** | **33/27** | **160s** | **0** | **1.93** | **312** | **661** |
+| 30 | 30/30 | 129s | 0 | 2.00 | 301 | 635 |
+| 25 | 30/30 | 116s | 0 | 2.00 | 159 | 437 |
+
+Cheaper economy makes games **shorter**, not stalemated — the opposite of the failure mode in
+bug #3 — and roughly doubles how often tanks and AT teams reach the field, which is what the
+counter cycle needs. 40 was chosen because it sits inside the observed LLM banking range
+(peaks of 40 and 44) while keeping the median above 150s. Below 35 games get short enough
+that decision count drops materially.
+
+### Known: a mild side bias to Vulcan
+
+Over 600 scripted mirror seeds the split is **334 / 266 (55.7% to side 0, z = 2.78)**. It is
+identical at `ECO_COST` 60 and 40, so it is pre-existing and not caused by tuning. At 60 seeds
+it hides inside the noise, which is why earlier checks read 30/30. This is exactly why
+**every pairing must be played on both sides** — that rule cancels it. Do not read a single
+one-sided result as a model difference.
 - Cost-equalised duels confirm the tank → gun → at → tank cycle holds
 - Round-robin of 5 fixed archetypes: the adaptive one wins ~75%, every static build 25–50%
 
