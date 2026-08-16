@@ -174,6 +174,16 @@ canvas#field{display:block;width:100%;height:100%}
 .dbv{font-size:10.5px;margin:2px 0 4px}
 .dbr{font-size:10px;color:var(--txt-2);margin-top:2px}
 .dbr b{color:var(--txt);font-weight:600}
+#summary{margin-bottom:9px}
+.sumrow{border-left:2px solid;padding:6px 9px;margin-bottom:6px;background:#101720;border-radius:0 6px 6px 0}
+.sumn{font-family:"Saira Condensed",sans-serif;font-size:12px;letter-spacing:.05em;font-weight:700}
+.sccl{display:flex;gap:5px;flex-wrap:wrap;margin:4px 0 3px}
+.sc{font-size:10px;color:#c9d0d8;background:#1a232c;border:1px solid #2f3a45;border-radius:3px;padding:1px 5px}
+.sc b{font-weight:600;margin-left:3px}
+.sc.zero{color:#4d5762;border-color:#232c35;background:#131a21}
+.sumsub{font-size:9.5px;color:var(--txt-3)}
+.sumnote{font-size:10px;color:#c9a227;line-height:1.5;border-left:2px solid #6b5716;padding-left:8px;margin-top:3px}
+.sumnote b{color:#e0b83a}
 
 /* ---------- rotate gate ---------- */
 #rotate{position:fixed;inset:0;z-index:40;display:none;flex-direction:column;align-items:center;
@@ -345,6 +355,7 @@ body.split #nudge{display:none}
     <button data-s="log">Full log</button>
   </div>
   <div class="sheetbody">
+    <div id="summary" style="display:none"></div>
     <div id="debrief" style="display:none"></div>
     <div id="feed" class="sheetpane on"></div>
     <div id="log" class="sheetpane"></div>
@@ -643,6 +654,8 @@ async function runDebrief(){
 
 function endGame(){
   RUNNING=false;
+  paintSummary();
+  openSheet(true);
   runDebrief();
   const b=document.getElementById('banner');
   b.style.display='flex';
@@ -1373,6 +1386,32 @@ function paintHUD(){
   });
 }
 
+/* What did each side ACTUALLY field? Models routinely queue units they can
+   never afford — a tank sitting behind a cheaper item, or an unaffordable
+   head that blocks the rest — and the debrief then confabulates about
+   "their tanks". Ground truth belongs on screen. */
+function paintSummary(){
+  const box=document.getElementById('summary'); if(!box) return;
+  box.style.display='block';
+  const keys=Object.keys(UNITS);
+  const never=keys.filter(t=>!BUILT[0][t]&&!BUILT[1][t]);
+  const row=s=>{
+    const built=keys.map(t=>`<span class="sc${BUILT[s][t]?'':' zero'}">${UNITS[t].g}<b>${BUILT[s][t]||0}</b></span>`).join('');
+    const st=STATS[s], lat=st.calls?Math.round(st.ms/st.calls):0;
+    return `<div class="sumrow" style="border-left-color:${SIDE[s].col}">
+      <div class="sumn" style="color:${SIDE[s].col}">${SIDE[s].name}</div>
+      <div class="sccl">${built}</div>
+      <div class="sumsub">peak ${Math.floor(PEAK[s])} coins · eco ${S.eco[s]}/${ECO_MAX}${
+        st.calls?` · ${st.calls} calls · avg ${(lat/1000).toFixed(1)}s${st.fail?` · ${st.fail} failed`:''}${st.bad?` · ${st.bad} malformed`:''}`:' · scripted'}</div>
+    </div>`;
+  };
+  box.innerHTML=`<div class="dbh">What was actually built</div>${row(0)}${row(1)}`+
+    (never.length?`<div class="sumnote">Never fielded by either side: <b>${
+      never.map(t=>UNITS[t].name).join(', ')}</b>. Expensive units only appear if a
+      commander holds coins across several decisions — the queue is replaced every
+      ${DECIDE}s, so switching to something cheap spends the savings.</div>`:'');
+}
+
 function drawLog(){
   const box=document.getElementById('log');
   if(!LOG.length){box.innerHTML='<div class="empty">Commander decisions appear here every 4 seconds of battle.</div>';return;}
@@ -1394,7 +1433,7 @@ function buildTable(){
 /* ============================================================
    5. LOOP + CONTROLS
    ============================================================ */
-let acc=0, last=0;
+let acc=0, last=0, BUILT=[{},{}], PEAK=[0,0];
 function frame(ts){
   if(!last) last=ts;
   let el=Math.min(.1,(ts-last)/1000); last=ts;
@@ -1403,7 +1442,10 @@ function frame(ts){
     let guard=0;
     while(acc>=.05&&!AWAIT&&!S.over&&guard++<400){
       if(S.t>=S.next){ runDecisions(); break; }
-      step(.05); acc-=.05;
+      const b4=S.nid; step(.05); acc-=.05;
+      if(S.nid>b4) for(const u of S.units)
+        if(u.id>=b4) BUILT[u.s][u.type]=(BUILT[u.s][u.type]||0)+1;
+      PEAK[0]=Math.max(PEAK[0],S.coins[0]); PEAK[1]=Math.max(PEAK[1],S.coins[1]);
     }
   }
   draw(ts); paintHUD(); paintThink();
@@ -1530,7 +1572,8 @@ const reset=()=>{newGame(+document.getElementById('seed').value||1);
   DEBRIEF=[null,null];
   const db=document.getElementById('debrief'); if(db){db.style.display='none';db.innerHTML='';}
   PART=[];DMGN=[];DECAL=[];SHAKE=0;PREVU.clear();ACC.clear();DEADPOS.clear();
-  PREVBASE=[BASE_HP,BASE_HP];
+  PREVBASE=[BASE_HP,BASE_HP]; BUILT=[{},{}]; PEAK=[0,0];
+  const sm=document.getElementById('summary'); if(sm){sm.style.display='none';sm.innerHTML='';}
   ['ovA','ovB'].forEach(i=>{const e=document.getElementById(i);e.classList.remove('on','flash');e.innerHTML='';});
   ['miniA','miniB'].forEach(i=>document.getElementById(i).innerHTML='');
   document.getElementById('tickline').textContent='Match reset — press play.';
@@ -1692,14 +1735,28 @@ async function testKey(){
   sel.value=i===0?'openai/gpt-oss-120b':'google/gemini-2.5-flash-lite';
   const sync=()=>{
     const custom=document.getElementById('custom'+k).value.trim();
-    CMD[i].model=custom||sel.value;
+    const next=custom||sel.value;
+    const changed=CMD[i].model&&CMD[i].model!==next;
+    CMD[i].model=next;
     refreshNames();
+    if(changed) rearmIfStarted();
   };
   sel.onchange=sync;
   document.getElementById('custom'+k).oninput=sync;
-  document.getElementById('kind'+k).onchange=e=>{CMD[i].kind=e.target.value;refreshNames();};
+  document.getElementById('kind'+k).onchange=e=>{CMD[i].kind=e.target.value;refreshNames();rearmIfStarted();};
   sync();
 });
+/* The page auto-starts a scripted demo so a visitor sees a battle at once.
+   Without this guard, seating real models mid-match leaves the opening
+   seconds played by the scripted agent — which silently corrupts the run.
+   Two saved matches had their first 3-8 decisions played by the wrong
+   commander before this existed. */
+function rearmIfStarted(){
+  if(S.t<=0) return;          // nothing has been played yet, nothing to protect
+  reset();
+  const tl=document.getElementById('tickline');
+  if(tl) tl.textContent='Commander changed — match reset so the whole game is played by the new lineup.';
+}
 ['mLo','mHi','mFail','mBad'].forEach(id=>document.getElementById(id).onchange=()=>{
   MOCK.lat=[+document.getElementById('mLo').value||500,+document.getElementById('mHi').value||3000];
   MOCK.fail=(+document.getElementById('mFail').value||0)/100;
