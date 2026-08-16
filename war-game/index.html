@@ -431,7 +431,7 @@ body.split #nudge{display:none}
       Tanks hit <b>everything</b> in range at once, so they shred swarms.<br><br>
       <b>Infantry</b> is the cheap generalist — beats AT Teams and Raiders, loses to Gunners and Tanks.<br>
       <b>Raider</b> loses most fights but moves 11 m/s. Its job is reaching an undefended base, not winning duels.<br><br>
-      <b>Economy</b> costs 60 and adds +0.5 coins/sec, up to three times. Income also escalates on its own — it roughly
+      <b>Economy</b> costs <span id="ecoCostTxt">40</span> and adds +0.5 coins/sec, up to three times. Income also escalates on its own — it roughly
       doubles by the one-minute mark and keeps climbing, so no stalemate holds.
     </div>
     <div class="setrow"><label class="inline" for="seed">Seed</label><input type="number" id="seed" value="42" style="width:88px">
@@ -458,7 +458,10 @@ const MULT=(a,t)=>{
   return 1.0;
 };
 const LANE=80, BASE_HP=600, BASE_DPS=6, BASE_RNG=7,
-      ECO_COST=60, ECO_STEP=0.5, ECO_MAX=3, DECIDE=4, TIME_CAP=300;
+      // 60 was unreachable in practice: across four real matches and eight
+      // commander slots, zero eco upgrades were ever completed — peak coins
+      // topped out at 44. 40 sits inside observed banking range.
+      ECO_COST=40, ECO_STEP=0.5, ECO_MAX=3, DECIDE=4, TIME_CAP=300;
 const RAMP=t=>1+t/55;   // war economy escalates hard — doubles by ~1min
 const SIDE=[{name:'Vulcan',col:'#c25a3a'},{name:'Cobalt',col:'#3f83ad'}];
 // prices per million tokens (in/out), read from OpenRouter Aug 2026
@@ -1429,6 +1432,7 @@ function drawLog(){
 }
 
 function buildTable(){
+  const ec=document.getElementById('ecoCostTxt'); if(ec) ec.textContent=ECO_COST;
   document.getElementById('utable').innerHTML=Object.entries(UNITS).map(([k,u])=>
     `<tr><td class="n"><span class="glyph" style="background:${TYPEACC[k]};color:#10151b">${u.g}</span>${u.name}</td>
      <td>${u.cost}</td><td>${u.hp}</td><td>${u.dps}${u.splash?'*':''}</td><td>${u.spd}</td><td>${u.rng}</td></tr>`).join('')
@@ -1594,6 +1598,11 @@ document.getElementById('labels').onchange=e=>{LABELS=e.target.checked;draw(perf
 const saveLog=()=>{
   const payload={
     game:'breach', promptVersion:2,   // v2 added affordability + feedback loop; v1 runs are not comparable
+    // balance is stamped into every log so a tuning change can never silently
+    // invalidate a comparison between two saved matches
+    balance:{ecoCost:ECO_COST,ecoStep:ECO_STEP,ecoMax:ECO_MAX,lane:LANE,baseHP:BASE_HP,
+      decideEvery:DECIDE,timeCap:TIME_CAP,
+      unitCosts:Object.fromEntries(Object.entries(UNITS).map(([k,u])=>[k,u.cost]))},
     seed:+document.getElementById('seed').value, savedAt:new Date().toISOString(),
     unitsBuilt:[0,1].map(s=>({side:SIDE[s].name,...BUILT[s]})),
     peakCoins:[0,1].map(s=>Math.floor(PEAK[s])),
