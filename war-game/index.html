@@ -1,0 +1,1527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="theme-color" content="#0b1017">
+<meta name="description" content="Breach — two language models command opposing armies in a lane battle. A benchmark harness that looks like a game.">
+<title>Breach — two AIs, one lane</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --panel:#11161c;--rule:#2a333c;
+  --txt:#c9d0d8;--txt-2:#7b8692;--txt-3:#5c6772;
+  --amber:#e0b83a;--A:#c25a3a;--B:#3f83ad;
+  --sb:env(safe-area-inset-bottom,0px);
+  --st:env(safe-area-inset-top,0px);
+  --sl:env(safe-area-inset-left,0px);
+  --sr:env(safe-area-inset-right,0px);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden;overscroll-behavior:none;background:#05070a}
+body{color:var(--txt);font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:13px;
+  -webkit-font-smoothing:antialiased;display:flex;flex-direction:column;height:100dvh}
+.disp,h3{font-family:"Saira Condensed",Impact,sans-serif;font-weight:700;letter-spacing:.05em;
+  text-transform:uppercase;margin:0}
+
+/* ---------- stage ---------- */
+#app{position:relative;flex:1 1 auto;min-height:0;overflow:hidden;background:#05070a}
+canvas#field{display:block;width:100%;height:100%}
+
+#hudTop{position:absolute;left:calc(9px + var(--sl));right:calc(9px + var(--sr));top:calc(7px + var(--st));
+  display:flex;align-items:flex-start;gap:10px;pointer-events:none}
+.hpstack{display:flex;flex-direction:column;gap:4px;flex:1;max-width:min(46%,300px)}
+.hprow{display:flex;align-items:center;gap:6px}
+.hpname{font-family:"Saira Condensed",sans-serif;font-size:12px;letter-spacing:.05em;width:88px;flex:none;
+  display:flex;align-items:center;gap:4px;overflow:hidden;white-space:nowrap;
+  text-shadow:0 1px 4px rgba(0,0,0,.95)}
+.hpbar{display:block;flex:1;height:9px;background:rgba(4,7,11,.72);border:1px solid rgba(255,255,255,.14);
+  border-radius:5px;overflow:hidden;box-shadow:0 1px 5px rgba(0,0,0,.55)}
+.hpfill{display:block;height:100%;border-radius:4px;transition:width .18s linear}
+.hpnum{font-size:10px;color:#dbe2ea;width:32px;text-align:right;flex:none;text-shadow:0 1px 4px rgba(0,0,0,.95)}
+.clockwrap{margin-left:auto;text-align:right;text-shadow:0 2px 7px rgba(0,0,0,.95)}
+.clockwrap span{font-size:20px;font-weight:600;color:#fff;font-family:"Saira Condensed",sans-serif;letter-spacing:.06em}
+.clockwrap small{display:block;font-size:9px;color:#b9c3ce;letter-spacing:.14em}
+.spin{width:8px;height:8px;border-radius:50%;background:#3a444f;flex:none}
+.spin.on{background:var(--amber);animation:pulse .85s infinite}
+@keyframes pulse{0%,100%{opacity:.35;transform:scale(.8)}50%{opacity:1;transform:scale(1.25)}}
+
+#think{position:absolute;left:50%;top:calc(58px + var(--st));transform:translateX(-50%);
+  padding:7px 13px;border-radius:20px;background:rgba(8,12,17,.84);border:1px solid rgba(255,255,255,.13);
+  font-family:"Saira Condensed",sans-serif;font-size:13px;letter-spacing:.11em;text-transform:uppercase;
+  color:#e8eef5;align-items:center;gap:7px;pointer-events:none;backdrop-filter:blur(6px);
+  box-shadow:0 6px 22px rgba(0,0,0,.55);white-space:nowrap;max-width:88%;overflow:hidden}
+
+#banner{position:absolute;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;
+  background:rgba(5,7,10,.72);font-family:"Saira Condensed",sans-serif;font-size:30px;letter-spacing:.09em;
+  text-transform:uppercase;text-align:center;padding:20px;backdrop-filter:blur(3px);z-index:6}
+
+/* decision overlays */
+.ovcard{position:absolute;bottom:52px;max-width:min(38%,300px);padding:8px 10px;border-radius:9px;
+  border:1px solid;font-family:"Saira Condensed",sans-serif;font-size:13px;line-height:1.4;
+  backdrop-filter:blur(7px);box-shadow:0 8px 26px rgba(0,0,0,.6);pointer-events:none;
+  opacity:0;transform:translateY(8px);transition:opacity .3s,transform .3s;z-index:5;text-transform:none;
+  letter-spacing:.01em}
+.ovcard.on{opacity:1;transform:translateY(0)}
+.ovcard.a{left:calc(9px + var(--sl));background:rgba(58,16,9,.8);border-color:var(--A);color:#f8e2da}
+.ovcard.b{right:calc(9px + var(--sr));background:rgba(9,32,58,.8);border-color:var(--B);color:#d9e9f8;text-align:right}
+.ovh{font-weight:700;font-size:10px;letter-spacing:.13em;text-transform:uppercase;margin-bottom:3px;
+  display:flex;align-items:center;gap:5px;opacity:.85}
+.ovcard.b .ovh{justify-content:flex-end}
+.ovq{display:flex;gap:4px;margin-top:5px;flex-wrap:wrap}
+.ovcard.b .ovq{justify-content:flex-end}
+.ovq i{font-style:normal;font-size:10px;font-family:"IBM Plex Mono",monospace;background:rgba(0,0,0,.4);
+  border:1px solid rgba(255,255,255,.18);border-radius:4px;padding:1px 5px}
+.ovlat{opacity:.6;font-size:10px;margin-left:auto}
+.ovcard.b .ovlat{margin-left:0;margin-right:auto}
+
+#ticker{position:absolute;left:0;right:0;bottom:0;padding:7px calc(10px + var(--sr)) calc(7px + var(--sb)) calc(10px + var(--sl));
+  background:linear-gradient(0deg,rgba(5,7,10,.94),rgba(5,7,10,.55),transparent);
+  display:flex;align-items:center;gap:10px;pointer-events:none;z-index:4}
+.tcoin{display:flex;align-items:center;gap:5px;font-family:"Saira Condensed",sans-serif;font-size:17px;
+  font-weight:700;text-shadow:0 1px 5px rgba(0,0,0,.9);flex:none}
+.tcoin small{font-size:9px;font-family:"IBM Plex Mono",monospace;font-weight:400;color:#96a2ae;letter-spacing:.02em}
+.tcoin .comp{display:flex;gap:3px;margin-left:4px}
+.tcoin .comp .chip{font-size:9px;font-family:"IBM Plex Mono",monospace;color:#9aa5b1;
+  background:rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.12);border-radius:3px;padding:0 4px;font-weight:400}
+#tickline{flex:1;text-align:center;font-size:10px;color:#9aa5b1;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;text-shadow:0 1px 4px rgba(0,0,0,.9)}
+
+#fabs{position:absolute;right:calc(9px + var(--sr));top:calc(74px + var(--st));display:flex;flex-direction:column;gap:7px;z-index:5}
+.fab{width:44px;height:44px;border-radius:50%;border:1px solid rgba(255,255,255,.16);
+  background:rgba(10,15,21,.8);color:#dfe6ee;font-family:"Saira Condensed",sans-serif;font-size:13px;
+  font-weight:700;letter-spacing:.04em;cursor:pointer;backdrop-filter:blur(6px);
+  box-shadow:0 5px 18px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:0}
+.fab.primary{background:rgba(224,184,58,.92);color:#20180a;border-color:rgba(255,255,255,.3)}
+.fab:active{transform:scale(.93)}
+
+/* ---------- sheet ---------- */
+#sheet{position:fixed;left:0;right:0;bottom:0;height:min(62dvh,420px);background:#0c1117;
+  border-top:1px solid var(--rule);border-radius:14px 14px 0 0;z-index:20;
+  display:flex;flex-direction:column;transform:translateY(calc(100% - 30px));
+  transition:transform .28s cubic-bezier(.3,.8,.4,1);box-shadow:0 -10px 34px rgba(0,0,0,.55);
+  padding-bottom:var(--sb)}
+#sheet.open{transform:translateY(0)}
+#grab{height:30px;display:flex;align-items:center;justify-content:center;flex:none;cursor:grab;touch-action:none}
+#grab::before{content:'';width:44px;height:4px;border-radius:2px;background:rgba(255,255,255,.32)}
+.sheettabs{display:flex;gap:6px;padding:0 12px 8px;flex:none}
+.sheettabs button{flex:1;border:1px solid var(--rule);background:#141a21;color:var(--txt-3);
+  font-family:"Saira Condensed",sans-serif;font-size:12px;letter-spacing:.11em;text-transform:uppercase;
+  padding:6px;border-radius:6px;cursor:pointer;font-weight:700}
+.sheettabs button.on{background:#1d2630;color:#eef2f6;border-color:#3b4753}
+.sheetbody{flex:1;overflow-y:auto;padding:0 12px 8px;-webkit-overflow-scrolling:touch}
+.sheetpane{display:none}.sheetpane.on{display:block}
+.sheetfoot{flex:none;padding:7px 12px;border-top:1px solid var(--rule);display:flex;align-items:center;gap:8px}
+.whobar{flex:1;font-size:9.5px;color:var(--txt-3);line-height:1.45}
+.whobar.warn{color:#c9a227}
+
+.fe{border-left:2px solid #2a333c;padding:6px 8px;margin-bottom:6px;background:#101720;border-radius:0 6px 6px 0}
+.fe.bad{background:#1c1113}
+.ft{font-size:9px;color:var(--txt-3)}
+.fn{font-family:"Saira Condensed",sans-serif;font-size:12px;letter-spacing:.05em;margin-left:5px;font-weight:700}
+.fq{font-size:9.5px;color:#93a0ac;margin-left:5px}
+.fms{font-size:9px;color:var(--txt-3);margin-left:5px}
+.ffail{font-size:9px;color:#c9765c;margin-left:5px}
+.fw{font-size:10.5px;color:var(--txt);margin-top:3px;line-height:1.45}
+.entry{display:flex;gap:8px;padding:6px 0;border-bottom:1px solid #1b232b}
+.entry .hd{font-size:9px;color:var(--txt-3);width:34px;flex:none;padding-top:2px}
+.entry .ln{font-size:10.5px;flex:1}
+.entry em{font-style:normal;font-family:"Saira Condensed",sans-serif;letter-spacing:.05em;font-weight:700}
+.rsn{color:var(--txt-2);margin-top:2px;line-height:1.45}
+.empty{color:var(--txt-3);font-size:10.5px;padding:14px 0;text-align:center}
+#debrief{margin-bottom:8px}
+.dbh{font-family:"Saira Condensed",sans-serif;font-size:13px;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--amber);margin-bottom:6px}
+.db{border-left:2px solid;padding:6px 9px;margin-bottom:6px;background:#101720;border-radius:0 6px 6px 0}
+.dbn{font-family:"Saira Condensed",sans-serif;font-size:12px;letter-spacing:.05em;font-weight:700}
+.dbv{font-size:10.5px;margin:2px 0 4px}
+.dbr{font-size:10px;color:var(--txt-2);margin-top:2px}
+.dbr b{color:var(--txt);font-weight:600}
+
+/* ---------- rotate gate ---------- */
+#rotate{position:fixed;inset:0;z-index:40;display:none;flex-direction:column;align-items:center;
+  justify-content:center;gap:18px;background:#080c12;padding:30px;text-align:center}
+#rotate svg{animation:tilt 2.4s ease-in-out infinite}
+@keyframes tilt{0%,45%{transform:rotate(0)}60%,100%{transform:rotate(-90deg)}}
+#rotate h3{font-size:22px;color:#eef2f6;letter-spacing:.09em}
+#rotate p{font-size:11.5px;color:var(--txt-2);max-width:300px;line-height:1.6;margin:0}
+
+/* ---------- modals ---------- */
+.modal{position:fixed;inset:0;z-index:50;background:#0a0e14;display:none;flex-direction:column;
+  padding-top:var(--st);padding-bottom:var(--sb)}
+.modal.on{display:flex}
+.mhead{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--rule);flex:none}
+.mhead h3{font-size:16px;color:#eef2f6;flex:1}
+.mbody{flex:1;overflow-y:auto;padding:12px 14px 24px;-webkit-overflow-scrolling:touch}
+.grp{border:1px solid var(--rule);background:var(--panel);border-radius:7px;padding:10px;margin-bottom:11px}
+.grp h3{font-size:12px;color:var(--txt-2);letter-spacing:.13em;margin-bottom:8px}
+.crow{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.cw2{font-family:"Saira Condensed",sans-serif;font-size:13px;letter-spacing:.05em;width:61px;flex:none;font-weight:700}
+select,input{background:#0b1016;border:1px solid #333d47;color:var(--txt);border-radius:5px;padding:7px 8px;
+  font-family:"IBM Plex Mono",monospace;font-size:12px;min-width:0}
+select{flex:1}
+.act{background:#1a222b;border:1px solid #39434e;color:#dfe6ee;border-radius:6px;padding:9px 13px;
+  font-family:"Saira Condensed",sans-serif;font-size:13px;letter-spacing:.07em;text-transform:uppercase;
+  cursor:pointer;font-weight:700}
+.act.primary{background:var(--amber);color:#20180a;border-color:var(--amber)}
+.act:active{transform:scale(.97)}
+.tout{font-size:10px;color:var(--txt-2);margin-top:7px;line-height:1.5;word-break:break-word}
+.warnbox{font-size:9.5px;color:var(--txt-3);margin-top:8px;line-height:1.55;border-left:2px solid #333d47;padding-left:8px}
+.inline{font-size:10px;color:var(--txt-2)}
+label.chk{display:flex;align-items:center;gap:7px;font-size:10.5px;color:var(--txt-2);margin-top:9px;cursor:pointer}
+label.chk input{width:16px;height:16px;min-width:16px;accent-color:var(--amber)}
+table.units{width:100%;border-collapse:collapse;font-size:11.5px}
+table.units th{text-align:right;color:var(--txt-3);font-weight:400;font-size:9.5px;letter-spacing:.09em;
+  text-transform:uppercase;padding:0 0 6px}
+table.units th:first-child{text-align:left}
+table.units td{padding:6px 0;border-top:1px solid #1b232b;text-align:right}
+table.units td.n{text-align:left;display:flex;align-items:center;gap:7px}
+.glyph{width:19px;height:19px;border-radius:4px;display:inline-flex;align-items:center;justify-content:center;
+  font-size:10px;font-weight:600;flex:none}
+.cw{font-size:10.5px;color:var(--txt-2);line-height:1.6;margin-top:12px}
+.setrow{display:flex;align-items:center;gap:8px;margin-top:13px;flex-wrap:wrap}
+
+/* ---------- portrait split ---------- */
+body.split #sheet{position:relative;transform:none;height:auto;flex:1 1 auto;min-height:0;
+  border-radius:0;box-shadow:none;border-top:1px solid var(--rule)}
+body.split #grab{display:none}
+body.split .sheettabs{padding-top:8px}
+body.split #app{flex:0 0 42dvh}
+body.split .ovcard{display:none}
+/* In split mode the battlefield is small, so only the transport controls stay
+   on it — setup and units move into the sheet footer where there is room. */
+body.split #fabs{top:auto;bottom:calc(40px + var(--sb));flex-direction:row;gap:6px}
+body.split .fab{width:34px;height:34px;font-size:11px}
+body.split #btnSetupOpen,body.split #btnUnitsOpen{display:none}
+body.split #ticker{padding-bottom:7px}
+.footonly{display:none;padding:9px 11px}
+body.split .footonly{display:block}
+@media (max-width:560px){
+  .tcoin small,.tcoin .comp{display:none}
+  #tickline{font-size:9.5px}
+}
+@media (max-height:430px){
+  .hpname{width:70px;font-size:11px}
+  .ovcard{bottom:46px;font-size:12px;padding:6px 8px}
+  .fab{width:38px;height:38px;font-size:12px}
+  #fabs{top:calc(66px + var(--st));gap:6px}
+}
+</style>
+</head>
+<body>
+
+<div id="app">
+  <canvas id="field"></canvas>
+
+  <div id="hudTop">
+    <div class="hpstack">
+      <div class="hprow">
+        <span class="hpname" style="color:var(--A)"><span class="spin" id="spinA"></span><span id="hpAname">Vulcan</span></span>
+        <span class="hpbar"><span class="hpfill" id="hpA" style="background:linear-gradient(180deg,#e0724d,#a83a20);width:100%"></span></span>
+        <span class="hpnum" id="hpAn">600</span>
+      </div>
+      <div class="hprow">
+        <span class="hpname" style="color:var(--B)"><span class="spin" id="spinB"></span><span id="hpBname">Cobalt</span></span>
+        <span class="hpbar"><span class="hpfill" id="hpB" style="background:linear-gradient(180deg,#5aa3ce,#2b6d95);width:100%"></span></span>
+        <span class="hpnum" id="hpBn">600</span>
+      </div>
+    </div>
+    <div class="clockwrap"><span id="clock">0:00</span><small id="spdTag">1×</small></div>
+  </div>
+
+  <div id="think" style="display:none"></div>
+  <div id="banner" style="display:none"></div>
+
+  <div class="ovcard a" id="ovA"></div>
+  <div class="ovcard b" id="ovB"></div>
+
+  <div id="ticker">
+    <span class="tcoin" style="color:#e8845e">
+      <span id="coinA">20</span><small id="subA">1.0/s · eco 0</small><span class="comp" id="compA"></span>
+    </span>
+    <span id="tickline">Scripted commanders — open Setup to seat real models.</span>
+    <span class="tcoin" style="color:#68aed6">
+      <span class="comp" id="compB"></span><small id="subB">1.0/s · eco 0</small><span id="coinB">20</span>
+    </span>
+  </div>
+
+  <div id="fabs">
+    <button class="fab primary" id="btnPlay">Start</button>
+    <button class="fab" id="btnSpeed">1×</button>
+    <button class="fab" id="btnReset2">&#8635;</button>
+    <button class="fab" id="btnSetupOpen">&#9881;</button>
+    <button class="fab" id="btnUnitsOpen">&#8505;</button>
+  </div>
+</div>
+
+<div id="sheet">
+  <div id="grab"></div>
+  <div class="sheettabs">
+    <button class="on" data-s="feed">Thinking</button>
+    <button data-s="log">Full log</button>
+  </div>
+  <div class="sheetbody">
+    <div id="debrief" style="display:none"></div>
+    <div id="feed" class="sheetpane on"></div>
+    <div id="log" class="sheetpane"></div>
+  </div>
+  <div class="sheetfoot">
+    <span class="whobar" id="whobar"></span>
+    <button class="act footonly" id="btnSetupOpen2">&#9881;</button>
+    <button class="act footonly" id="btnUnitsOpen2">&#8505;</button>
+    <button class="act" id="btnExport2">Save</button>
+  </div>
+</div>
+
+<div id="rotate">
+  <svg width="76" height="76" viewBox="0 0 76 76" fill="none">
+    <rect x="24" y="8" width="28" height="60" rx="5" stroke="#7b8692" stroke-width="2.5"/>
+    <rect x="30" y="16" width="16" height="40" rx="2" fill="#1d2630"/>
+    <circle cx="38" cy="62" r="2.4" fill="#7b8692"/>
+  </svg>
+  <h3>Rotate your phone</h3>
+  <p>Breach is a wide battlefield — landscape gives you the whole lane with units big enough to actually see.</p>
+  <button class="act primary" id="btnAnyway">Play in portrait anyway</button>
+</div>
+
+<div class="modal" id="mSetup">
+  <div class="mhead"><h3>Setup</h3><button class="act" data-close="mSetup">Done</button></div>
+  <div class="mbody">
+    <div class="grp"><h3>Commanders</h3>
+      <div class="crow"><span class="cw2" style="color:var(--A)">Vulcan</span>
+        <select id="kindA"><option value="script">Scripted</option><option value="mock">Mock LLM</option><option value="llm">OpenRouter</option></select></div>
+      <div class="crow" style="margin-top:7px"><select id="modelA"></select></div>
+      <div class="crow" style="margin-top:7px"><input type="text" id="customA" placeholder="or paste any model id" style="width:100%"></div>
+      <div class="crow" style="margin-top:12px"><span class="cw2" style="color:var(--B)">Cobalt</span>
+        <select id="kindB"><option value="script">Scripted</option><option value="mock">Mock LLM</option><option value="llm">OpenRouter</option></select></div>
+      <div class="crow" style="margin-top:7px"><select id="modelB"></select></div>
+      <div class="crow" style="margin-top:7px"><input type="text" id="customB" placeholder="or paste any model id" style="width:100%"></div>
+    </div>
+    <div class="grp"><h3>OpenRouter key</h3>
+      <input type="password" id="apikey" placeholder="sk-or-…" style="width:100%" autocomplete="off">
+      <label class="chk"><input type="checkbox" id="remember"> Remember on this device</label>
+      <div class="crow" style="margin-top:9px"><button class="act" id="btnTest">Test</button>
+        <button class="act" id="btnModels">Load live models</button></div>
+      <div id="modelsout" class="tout"></div>
+      <div id="testout" class="tout">Not tested.</div>
+      <div class="warnbox">Your key goes only to OpenRouter, direct from your browser — this page has no server.
+        Unchecked, it is held in memory and gone when you close the tab. Checked, it is stored in this
+        browser's localStorage so you don't retype it on mobile.</div>
+    </div>
+    <div class="grp"><h3>Mock LLM (free testing)</h3>
+      <div class="crow"><label class="inline">Latency ms</label><input type="number" id="mLo" value="900" style="width:76px">
+        <label class="inline">to</label><input type="number" id="mHi" value="5000" style="width:76px"></div>
+      <div class="crow" style="margin-top:7px"><label class="inline">Fail %</label><input type="number" id="mFail" value="6" style="width:64px">
+        <label class="inline">Malformed %</label><input type="number" id="mBad" value="10" style="width:64px"></div>
+      <div class="tout">Mock plays the scripted commander but with real latency, dropped calls and invalid
+        output, so you can prove the plumbing before spending anything.</div>
+    </div>
+    <div class="grp"><h3>Session</h3><div id="stats" class="tout">No calls yet.</div>
+      <div class="warnbox">A full game is about <b>90 calls</b> ≈ 83k input / 7k output tokens.
+        On GPT-OSS 120B that is roughly <b>half a cent per game</b>; on Gemini 3.7 Flash about
+        <b>4.5 cents</b>.<br><br>
+        The <b>:free</b> routes are capped at 20/min and 50/day with no credits — not enough to finish
+        one match, which is why Test returns 429. Paid routes have no daily cap.</div></div>
+  </div>
+</div>
+
+<div class="modal" id="mUnits">
+  <div class="mhead"><h3>Units</h3><button class="act" data-close="mUnits">Done</button></div>
+  <div class="mbody">
+    <table class="units"><thead><tr><th>Unit</th><th>Cost</th><th>HP</th><th>DPS</th><th>Spd</th><th>Rng</th></tr></thead>
+      <tbody id="utable"></tbody></table>
+    <div class="cw">
+      <b>Counter cycle:</b> Tank beats Gunner · Gunner beats AT Team · AT Team beats Tank.<br>
+      Gunner does double damage to light infantry. AT Team does quadruple damage to armour.
+      Tanks hit <b>everything</b> in range at once, so they shred swarms.<br><br>
+      <b>Infantry</b> is the cheap generalist — beats AT Teams and Raiders, loses to Gunners and Tanks.<br>
+      <b>Raider</b> loses most fights but moves 11 m/s. Its job is reaching an undefended base, not winning duels.<br><br>
+      <b>Economy</b> costs 60 and adds +0.5 coins/sec, up to three times. Income also escalates on its own — it roughly
+      doubles by the one-minute mark and keeps climbing, so no stalemate holds.
+    </div>
+    <div class="setrow"><label class="inline" for="seed">Seed</label><input type="number" id="seed" value="42" style="width:88px">
+      <button class="act" id="btnReset">Reset</button><button class="act" id="btnExport">Save log</button></div>
+    <label class="chk"><input type="checkbox" id="lowfx"> Reduce effects (helps older phones)</label>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   1. RULES
+   ============================================================ */
+const UNITS = {
+  inf: {name:'Infantry', cost:8,  hp:70,  dps:8,  spd:7.0,  rng:2, cls:'light',   g:'I', col:'#6b7280'},
+  gun: {name:'Gunner',   cost:18, hp:80,  dps:14, spd:5.0,  rng:6, cls:'support', g:'G', col:'#4a7c59'},
+  mob: {name:'Raider',   cost:20, hp:120, dps:10, spd:11.0, rng:2, cls:'light',   g:'R', col:'#a17c3a'},
+  tank:{name:'Tank',     cost:45, hp:400, dps:16, spd:3.5,  rng:5, cls:'armor',   g:'T', col:'#8a4b3c', splash:true},
+  at:  {name:'AT Team',  cost:30, hp:90,  dps:12, spd:5.0,  rng:8, cls:'support', g:'A', col:'#5b5a8a'},
+};
+const MULT=(a,t)=>{
+  if(a==='gun'&&UNITS[t].cls==='light') return 2.0;
+  if(a==='at' &&UNITS[t].cls==='armor') return 4.0;
+  return 1.0;
+};
+const LANE=80, BASE_HP=600, BASE_DPS=6, BASE_RNG=7,
+      ECO_COST=60, ECO_STEP=0.5, ECO_MAX=3, DECIDE=4, TIME_CAP=300;
+const RAMP=t=>1+t/55;   // war economy escalates hard — doubles by ~1min
+const SIDE=[{name:'Vulcan',col:'#c25a3a'},{name:'Cobalt',col:'#3f83ad'}];
+// prices per million tokens (in/out), read from OpenRouter Aug 2026
+const FREE_MODELS=[
+  {id:'openai/gpt-oss-120b',                    label:'GPT-OSS 120B', p:'$0.03/$0.17', tier:'paid'},
+  {id:'openai/gpt-oss-20b',                     label:'GPT-OSS 20B',  p:'$0.03/$0.13', tier:'paid'},
+  {id:'openai/gpt-5-nano',                      label:'GPT-5 Nano',   p:'$0.05/$0.40', tier:'paid'},
+  {id:'google/gemini-2.5-flash-lite',           label:'Gemini 2.5 Lite',p:'$0.10/$0.40',tier:'paid'},
+  {id:'x-ai/grok-4.3',                          label:'Grok 4.3',     p:'$1.25/$2.50', tier:'paid'},
+  {id:'openai/gpt-5.4-nano',                    label:'GPT-5.4 Nano', p:'$0.20/$1.25', tier:'paid'},
+  {id:'google/gemini-3.1-flash-lite',           label:'Gemini 3.1 Lite',p:'$0.25/$1.50',tier:'paid'},
+  {id:'openai/gpt-5-mini',                      label:'GPT-5 Mini',   p:'$0.25/$2.00', tier:'paid'},
+  {id:'google/gemini-3.5-flash-lite',           label:'Gemini 3.5 Lite',p:'$0.30/$2.50',tier:'paid'},
+  {id:'google/gemini-3.7-flash',                label:'Gemini 3.7',   p:'$0.375/$1.88',tier:'paid'},
+  {id:'poolside/laguna-xs-2.1',                 label:'Laguna XS',    p:'$0.06 in',    tier:'paid'},
+  {id:'google/gemini-3.6-flash',                label:'Gemini 3.6',   p:'$0.75/$3.75', tier:'paid'},
+  {id:'anthropic/claude-haiku-4.5',             label:'Haiku 4.5',    p:'$1/$5',       tier:'paid'},
+  {id:'google/gemma-4-26b-a4b-it:free',         label:'Gemma 4',      p:'free',        tier:'free'},
+  {id:'nvidia/nemotron-3.5-lightning:free',     label:'Nemotron 3.5', p:'free',        tier:'free'},
+  {id:'openai/gpt-oss-20b:free',                label:'GPT-OSS 20B',  p:'free',        tier:'free'},
+  {id:'nvidia/nemotron-3-super-120b-a12b:free', label:'Nemotron Super',p:'free',       tier:'free'},
+  {id:'cohere/north-mini-code:free',            label:'North Mini',   p:'free',        tier:'free'},
+  {id:'nvidia/nemotron-nano-9b-v2:free',        label:'Nemotron Nano',p:'free',        tier:'free'},
+  {id:'x-ai/grok-4-fast:free',                  label:'Grok 4 Fast',  p:'free',        tier:'free'},
+];
+function shortName(id){
+  const hit=FREE_MODELS.find(m=>m.id===id); if(hit) return hit.label;
+  let t=(id||'').split(':')[0].split('/').pop().replace(/-(instruct|it|preview|chat)$/,'');
+  t=t.split('-').slice(0,2).join(' ');
+  return t.replace(/\b\w/g,c=>c.toUpperCase()).slice(0,16)||'Model';
+}
+function commanderLabel(s){
+  const c=CMD[s];
+  return c.kind==='script'?'scripted (no model calls)':c.kind==='mock'?'mock (no model calls)':c.model;
+}
+function paintWho(){
+  const w=document.getElementById('whobar'); if(!w) return;
+  const live=CMD.filter(c=>c.kind==='llm').length;
+  w.className='whobar'+(live<2?' warn':'');
+  w.innerHTML=[0,1].map(s=>`<span style="color:${SIDE[s].col}">${SIDE[s].name}</span>: ${commanderLabel(s)}`).join('<br>')
+    + (live<2?'<br><b>Set both commanders to OpenRouter in Setup to run real models.</b>':'');
+}
+function refreshNames(){
+  [0,1].forEach(s=>{
+    const c=CMD[s];
+    SIDE[s].name = c.kind==='script' ? (s?'Scripted B':'Scripted A')
+                 : c.kind==='mock'   ? (s?'Mock B':'Mock A')
+                 : shortName(c.model);
+  });
+  const hA=document.getElementById('hpAname'), hB=document.getElementById('hpBname');
+  if(hA){hA.textContent=SIDE[0].name;hB.textContent=SIDE[1].name;}
+  paintWho();
+}
+
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);
+  t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+
+/* ============================================================
+   2. SIM
+   ============================================================ */
+let S, R, LOG, RUNNING=false, SPEED=1, TAB='battle', RAF=null, FX=[];
+
+function newGame(seed){
+  R=mulberry32(seed);
+  S={t:0,coins:[20,20],inc:[1,1],eco:[0,0],hp:[BASE_HP,BASE_HP],units:[],q:[[],[]],
+     over:false,win:null,nid:0,next:0};
+  LOG=[]; FX=[]; RUNNING=false;
+  document.getElementById('banner').style.display='none';
+  document.getElementById('btnPlay').textContent='Start';
+}
+
+function step(dt){
+  if(S.over) return;
+  const rp=RAMP(S.t);
+  S.coins[0]+=S.inc[0]*rp*dt; S.coins[1]+=S.inc[1]*rp*dt;
+
+  for(let s=0;s<2;s++){
+    while(S.q[s].length){
+      const it=S.q[s][0];
+      if(it==='eco'){
+        if(S.eco[s]>=ECO_MAX){S.q[s].shift();continue;}
+        if(S.coins[s]>=ECO_COST){S.coins[s]-=ECO_COST;S.eco[s]++;S.inc[s]+=ECO_STEP;S.q[s].shift();}
+        else break;
+      }else{
+        const u=UNITS[it]; if(!u){S.q[s].shift();continue;}
+        if(S.coins[s]>=u.cost){
+          S.coins[s]-=u.cost;
+          const jx=R()*1.6, jh=u.hp*(0.96+0.08*R());   // seeded variance so the seed actually matters
+          S.units.push({id:S.nid++,s,type:it,x:s===0?jx:LANE-jx,hp:jh,mx:jh,fl:0});
+          S.q[s].shift();
+        } else break;
+      }
+    }
+  }
+
+  for(const u of S.units){
+    const U=UNITS[u.type], dir=u.s===0?1:-1;
+    let tgt=null,best=1e9;
+    for(const e of S.units){ if(e.s===u.s||e.hp<=0)continue;
+      const d=(e.x-u.x)*dir; if(d>=0&&d<best){best=d;tgt=e;} }
+    const baseX=u.s===0?LANE:0, dBase=(baseX-u.x)*dir;
+    // Reaching the base is the win condition, so it outranks shooting units.
+    // Otherwise defenders spawning AT the base are always "in front" of an
+    // attacker standing on it, and the base never takes a single point.
+    if(dBase<=U.rng){
+      S.hp[1-u.s]-=U.dps*dt;
+      if(U.splash&&tgt&&best<=U.rng){ for(const e of S.units){ if(e.s===u.s||e.hp<=0)continue;
+        if(Math.abs(e.x-u.x)<=U.rng){e.hp-=U.dps*MULT(u.type,e.type)*dt;e.fl=.18;} } }
+    }
+    else if(tgt&&best<=U.rng){
+      if(U.splash){ for(const e of S.units){ if(e.s===u.s||e.hp<=0)continue;
+        if(Math.abs(e.x-u.x)<=U.rng){e.hp-=U.dps*MULT(u.type,e.type)*dt;e.fl=.18;} } }
+      else {tgt.hp-=U.dps*MULT(u.type,tgt.type)*dt;tgt.fl=.18;}
+    }
+    else u.x+=dir*U.spd*dt;
+    if(u.fl>0)u.fl-=dt;
+  }
+  for(let s=0;s<2;s++){
+    const bx=s===0?0:LANE; let tgt=null,best=1e9;
+    for(const e of S.units){ if(e.s===s||e.hp<=0)continue;
+      const d=Math.abs(e.x-bx); if(d<=BASE_RNG&&d<best){best=d;tgt=e;} }
+    if(tgt){tgt.hp-=BASE_DPS*dt;tgt.fl=.18;}
+  }
+  S.units.filter(u=>u.hp<=0).forEach(u=>FX.push({x:u.x,s:u.s,life:.45}));
+  S.units=S.units.filter(u=>u.hp>0);
+  FX.forEach(f=>f.life-=dt); FX=FX.filter(f=>f.life>0);
+
+  S.t+=dt;
+  if(S.hp[0]<=0||S.hp[1]<=0){S.over=true;S.win=S.hp[0]<=0?1:0;}
+  else if(S.t>=TIME_CAP){S.over=true;S.win=S.hp[0]===S.hp[1]?null:(S.hp[0]>S.hp[1]?0:1);}
+  if(S.over) endGame();
+}
+
+let DEBRIEF=[null,null];
+const DEBRIEF_RULES=`You just finished commanding one side of a lane battle. Review your own performance honestly.
+Reply ONLY with JSON, no fences:
+{"verdict":"<one line: why you won or lost>",
+ "wentWell":"<the single best decision you made and why>",
+ "wentWrong":"<your biggest mistake and what it cost>",
+ "wouldChange":"<one concrete thing you would do differently>"}`;
+
+async function askDebrief(s){
+  if(CMD[s].kind!=='llm') return null;
+  const mine=LOG.filter(e=>e.s===s);
+  const theirs=LOG.filter(e=>e.s!==s);
+  const summary={
+    you:SIDE[s].name, opponent:SIDE[1-s].name,
+    result: S.win===null?'draw':(S.win===s?'YOU WON':'YOU LOST'),
+    durationSeconds:+S.t.toFixed(0),
+    yourBaseHP:Math.max(0,Math.round(S.hp[s])), enemyBaseHP:Math.max(0,Math.round(S.hp[1-s])),
+    yourEcoUpgrades:S.eco[s], enemyEcoUpgrades:S.eco[1-s],
+    yourDecisions:mine.map(e=>`${Math.round(e.t)}s: ${e.queue.join(',')||'none'}`),
+    opponentDecisions:theirs.map(e=>`${Math.round(e.t)}s: ${e.queue.join(',')||'none'}`),
+    unitRules:Object.entries(UNITS).map(([k,u])=>`${k} cost ${u.cost}`).join(', '),
+  };
+  try{
+    const key=(document.getElementById('apikey').value||'').trim();
+    const r=await fetch('https://openrouter.ai/api/v1/chat/completions',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`,
+        'HTTP-Referer':location.origin||'https://localhost','X-Title':'Breach'},
+      body:JSON.stringify({model:CMD[s].model,messages:[{role:'system',content:DEBRIEF_RULES},
+        {role:'user',content:JSON.stringify(summary)}],temperature:0.8,max_tokens:3000})
+    });
+    const j=await r.json();
+    const msg=j.choices&&j.choices[0]&&j.choices[0].message;
+    const flat=v=>Array.isArray(v)?v.map(x=>(x&&x.text)||'').join(''):(v||'');
+    for(const c of [flat(msg&&msg.content),flat(msg&&msg.reasoning)].filter(Boolean)){
+      try{ return extractJSON(c); }catch(e){}
+    }
+    return {verdict:'(debrief unparseable)'};
+  }catch(e){ return {verdict:'debrief failed — '+String(e.message).slice(0,110)}; }
+}
+
+async function runDebrief(){
+  if(!CMD.some(c=>c.kind==='llm')) return;
+  const box=document.getElementById('debrief');
+  box.style.display='block';
+  box.innerHTML='<div class="dbh">Debrief</div><div class="empty">Asking both commanders to review the match…</div>';
+  openSheet(true);
+  const [a,b]=await Promise.all([askDebrief(0),askDebrief(1)]);
+  DEBRIEF=[a,b];
+  box.innerHTML='<div class="dbh">Debrief</div>'+[0,1].map(s=>{
+    const d=DEBRIEF[s]; if(!d) return '';
+    return `<div class="db" style="border-left-color:${SIDE[s].col}">
+      <div class="dbn" style="color:${SIDE[s].col}">${SIDE[s].name}</div>
+      <div class="dbv">${d.verdict||''}</div>
+      ${d.wentWell?`<div class="dbr"><b>Went well</b> ${d.wentWell}</div>`:''}
+      ${d.wentWrong?`<div class="dbr"><b>Went wrong</b> ${d.wentWrong}</div>`:''}
+      ${d.wouldChange?`<div class="dbr"><b>Would change</b> ${d.wouldChange}</div>`:''}
+    </div>`;}).join('');
+}
+
+function endGame(){
+  RUNNING=false;
+  runDebrief();
+  const b=document.getElementById('banner');
+  b.style.display='flex';
+  b.textContent = S.win===null?'Draw' : `${SIDE[S.win].name} breaks through`;
+  b.style.color = S.win===null?'#fff':SIDE[S.win].col;
+  document.getElementById('btnPlay').textContent='Start';
+  SHAKE=Math.max(SHAKE,9);
+}
+
+/* ============================================================
+   3. AGENT  — scripted adaptive commander
+   ============================================================ */
+const cnt=(s,f)=>S.units.filter(u=>u.s===s&&f(u)).length;
+function agent(St,s){
+  const e=1-s, coins=St.coins[s];
+  const eArm=cnt(e,u=>UNITS[u.type].cls==='armor');
+  const eLight=cnt(e,u=>UNITS[u.type].cls==='light');
+  const eSup=cnt(e,u=>UNITS[u.type].cls==='support');
+  const myFront=St.units.filter(u=>u.s===s).length;
+  const pressure=St.units.filter(u=>u.s===e&&Math.abs(u.x-(s===0?0:LANE))<25).length;
+
+  if(pressure>=3 && myFront<pressure)
+    return {queue:eArm?['at','inf','inf']:['gun','inf','inf'],
+      why:`${pressure} hostiles inside my half and I am outnumbered — emergency ${eArm?'AT':'gunners'}.`};
+  if(eArm>0)
+    return {queue:['at','inf','inf'], why:`${eArm} armour on the field. AT Teams do 4x to armour.`};
+  if(eSup>=2)
+    return {queue:['tank','inf'], why:`They massed ${eSup} support units. Tank splash answers that.`};
+  if(eLight>=3)
+    return {queue:['gun','inf'], why:`${eLight} light infantry pushing — Gunners do double to light.`};
+  if(St.eco[s]<2 && St.t<110 && myFront>=1)
+    return {queue:['eco','inf'], why:`Lane is quiet. Buying income while it is cheap to do so.`};
+  if(myFront===0 && coins<20)
+    return {queue:['inf','inf'], why:`Nothing on the field. Cheap bodies to hold the lane.`};
+  return {queue:['inf','gun','inf'], why:`No clear counter needed. Balanced pressure.`};
+}
+
+/* ------------------------------------------------------------
+   3b. COMMANDERS — lockstep: sim freezes while a model thinks,
+   so sim time and wall time are fully decoupled and a slow
+   model is never punished for being slow.
+   ------------------------------------------------------------ */
+const CMD=[{kind:'script',model:''},{kind:'script',model:''}];
+const MOCK={lat:[900,5000],fail:0.06,bad:0.10};
+let AWAIT=false, THINK=[false,false];
+const STATS=[{calls:0,fail:0,bad:0,ms:0},{calls:0,fail:0,bad:0,ms:0}];
+const STREAK=[0,0];
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const VALID=['eco',...Object.keys(UNITS)];
+const CALLS=[];                       // free tier allows 20 req/min — stay under it
+let GATED=false;
+async function rateGate(isFree){
+  if(!isFree) return;
+  for(;;){
+    const now=Date.now();
+    while(CALLS.length&&now-CALLS[0]>60000) CALLS.shift();
+    if(CALLS.length<18){ CALLS.push(Date.now()); GATED=false; return; }
+    GATED=true; paintThink();
+    await sleep(60000-(now-CALLS[0])+300);
+  }
+}
+
+function sanitize(raw){
+  let q=Array.isArray(raw&&raw.queue)?raw.queue:[];
+  const bad=q.filter(x=>!VALID.includes(x));
+  q=q.filter(x=>VALID.includes(x)).slice(0,6);
+  return {queue:q, why:String((raw&&raw.why)||'').slice(0,240), bad};
+}
+
+async function mockAgent(St,s){
+  const [lo,hi]=MOCK.lat;
+  await sleep(lo+Math.random()*(hi-lo));
+  const r=Math.random();
+  if(r<MOCK.fail) throw new Error('simulated network failure');
+  if(r<MOCK.fail+MOCK.bad) return {queue:['inf','ROCKET_LAUNCHER','eco',null],why:'malformed-output test'};
+  return agent(St,s);
+}
+
+async function decide(s){
+  const c=CMD[s];
+  if(c.kind==='script') return {...sanitize(agent(S,s)),bad:[]};
+  THINK[s]=true; paintThink(); const t0=performance.now();
+  let raw=null, err=null;
+  for(let attempt=0;attempt<2&&!raw;attempt++){
+    try{ raw = c.kind==='mock' ? await mockAgent(S,s) : await llmAgent(S,s,c.model); }
+    catch(e){ err=e; if(attempt===0) await sleep(400); }
+  }
+  const ms=performance.now()-t0;
+  THINK[s]=false;
+  STATS[s].calls++; STATS[s].ms+=ms;
+  if(!raw){ STATS[s].fail++; STREAK[s]++;
+    if(STREAK[s]>=3) haltOnFailure(s, err&&err.message);
+    return {queue:S.q[s].length?[...S.q[s]]:['inf','inf'],
+      why:`call failed — ${String(err&&err.message).slice(0,160)}`, bad:[], ms, failed:true}; }
+  STREAK[s]=0;
+  const out=sanitize(raw);
+  if(out.bad.length) STATS[s].bad++;
+  return {...out, ms};
+}
+
+async function runDecisions(){
+  const need = CMD.some(c=>c.kind!=='script');
+  if(!need){
+    for(let s=0;s<2;s++){const d=sanitize(agent(S,s));S.q[s]=d.queue;
+      const e={t:S.t,s,queue:[...d.queue],why:d.why}; LOG.push(e); pushFeed(e);}
+    S.next+=DECIDE; return;
+  }
+  AWAIT=true; paintThink();
+  const [a,b]=await Promise.all([decide(0),decide(1)]);
+  [a,b].forEach((d,s)=>{
+    S.q[s]=d.queue;
+    const e={t:S.t,s,queue:[...d.queue],why:d.why,ms:d.ms,bad:d.bad,failed:d.failed};
+    LOG.push(e); pushFeed(e);
+  });
+  S.next+=DECIDE; AWAIT=false; acc=0; last=0; paintThink();
+}
+
+function haltOnFailure(s,msg){
+  RUNNING=false;
+  const b=document.getElementById('banner');
+  b.style.display='flex'; b.style.color='#c9765c'; b.style.fontSize='19px';
+  b.innerHTML=`${SIDE[s].name} failed 3 calls in a row — match halted.<br>
+    <span style="font-size:12px;font-family:'IBM Plex Mono',monospace;text-transform:none;
+    letter-spacing:0;color:#9ba6b2">${String(msg).slice(0,200)}</span>`;
+  document.getElementById('btnPlay').textContent='Start';
+}
+
+function paintThink(){
+  [0,1].forEach(s=>{
+    const d=document.getElementById('spin'+(s?'B':'A'));
+    if(d) d.className='spin'+(THINK[s]?' on':'');
+  });
+  const el=document.getElementById('think');
+  const who=[0,1].filter(s=>THINK[s]);
+  if(!AWAIT||!who.length){el.style.display='none';return;}
+  el.style.display='flex';
+  el.innerHTML='<span class="spin on"></span>'+
+    who.map(s=>`<span style="color:${SIDE[s].col}">${SIDE[s].name}</span>`).join(' &amp; ')+
+    (GATED?' rate-limited, waiting…':' thinking…');
+}
+
+/* Decision arrives: overlay card on the battlefield (spectacle) AND a
+   permanent entry in the sheet (the record). Never only transient. */
+const OVT=[null,null];
+function showOverlay(e){
+  const el=document.getElementById(e.s===0?'ovA':'ovB');
+  if(!el) return;
+  const q=e.queue.map(x=>x==='eco'?'ECO':UNITS[x].name).join(' · ')||'—';
+  el.innerHTML=`<div class="ovh"><span style="color:${SIDE[e.s].col}">${SIDE[e.s].name}</span>
+      ${e.ms?`<span class="ovlat">${Math.round(e.ms)}ms</span>`:''}</div>
+    ${(e.why||'').replace(/</g,'&lt;')}
+    <div class="ovq">${e.queue.map(x=>`<i>${x==='eco'?'eco':x}</i>`).join('')||'<i>—</i>'}</div>`;
+  el.classList.add('on');
+  clearTimeout(OVT[e.s]);
+  OVT[e.s]=setTimeout(()=>el.classList.remove('on'),6500);
+}
+
+function pushFeed(e){
+  showOverlay(e);
+  const tl=document.getElementById('tickline');
+  if(tl) tl.textContent=`${Math.floor(e.t/60)}:${String(Math.floor(e.t%60)).padStart(2,'0')} · `+
+    `${SIDE[e.s].name} → ${e.queue.map(q=>q==='eco'?'ECO':UNITS[q].name).join(', ')||'—'}`;
+  const f=document.getElementById('feed'); if(!f) return;
+  const m=Math.floor(e.t/60), sec=String(Math.floor(e.t%60)).padStart(2,'0');
+  const d=document.createElement('div'); d.className='fe'+(e.failed?' bad':'');
+  d.style.borderLeftColor=SIDE[e.s].col;
+  d.innerHTML=`<span class="ft">${m}:${sec}</span>
+    <span class="fn" style="color:${SIDE[e.s].col}">${SIDE[e.s].name}</span>
+    <span class="fq">${e.queue.map(q=>q==='eco'?'ECO':UNITS[q].name).join(' · ')||'—'}</span>
+    ${e.ms?`<span class="fms">${Math.round(e.ms)}ms</span>`:''}
+    ${e.failed?'<span class="ffail">call failed</span>':''}
+    ${e.bad&&e.bad.length?`<span class="ffail">dropped: ${e.bad.join(', ')}</span>`:''}
+    <div class="fw">${(e.why||'').replace(/</g,'&lt;')}</div>`;
+  f.insertBefore(d,f.firstChild);
+  while(f.children.length>70) f.removeChild(f.lastChild);
+}
+
+/* ============================================================
+   4. RENDER — side-view parallax battlefield.
+   Background is baked once to an offscreen canvas and only
+   redrawn on resize, so the detail costs nothing per frame.
+   ============================================================ */
+const cv=document.getElementById('field'), cx=cv.getContext('2d');
+const HORIZON=.38, ROWS=5, PADF=.06;
+let DIM={w:0,h:0}, BG=document.createElement('canvas'), bgx=BG.getContext('2d'), VIG=null;
+let PART=[], DMGN=[], DECAL=[], SHAKE=0, LOWFX=false;
+let PREVU=new Map(), ACC=new Map(), PREVBASE=[BASE_HP,BASE_HP], LASTRT=0, SMOKET=0;
+
+/* The playable ground is a band, not the whole lower half: the top of the
+   band sits below the horizon and the bottom reserves room for the ticker,
+   so front-row units and forts are never clipped off the screen edge. */
+function band(h){
+  const top=h*HORIZON+h*.035, bot=h-Math.max(44,h*.105);
+  return {top,bot,ht:Math.max(56,bot-top)};
+}
+const rowOf=u=>u.id%ROWS;
+function groundY(h,r){ const b=band(h); return b.top+b.ht*(0.20+0.80*(r/(ROWS-1))); }
+function rowScale(h,r){
+  const b=band(h), us=Math.max(.72,Math.min(1.95,b.ht/162));
+  return us*(0.74+0.32*(r/(ROWS-1)));
+}
+const toPix=(w,x)=>w*PADF + (w*(1-PADF*2))*(x/LANE);
+/* Mild horizontal convergence for far rows — real perspective pulls distant
+   ranks toward the centre, and it costs one multiply to sell the depth. */
+function toPixRow(w,x,r){
+  const k=0.93+0.07*(r/(ROWS-1));
+  return w/2+(toPix(w,x)-w/2)*k;
+}
+
+function fit(){
+  const r=cv.getBoundingClientRect(), d=Math.min(2,window.devicePixelRatio||1);
+  const w=Math.max(1,r.width), h=Math.max(1,r.height);
+  cv.width=w*d; cv.height=h*d; cx.setTransform(d,0,0,d,0,0);
+  DIM={w,h};
+  BG.width=w*d; BG.height=h*d; bgx.setTransform(d,0,0,d,0,0);
+  buildScene(w,h);
+  VIG=cx.createRadialGradient(w/2,h*.52,Math.min(w,h)*.46,w/2,h*.52,Math.max(w,h)*.82);
+  VIG.addColorStop(0,'rgba(0,0,0,0)'); VIG.addColorStop(1,'rgba(0,0,0,.34)');
+  return DIM;
+}
+
+function ridge(g,w,y,amp,step,col,alpha,blur){
+  g.save(); g.globalAlpha=alpha;
+  if(blur&&'filter' in g) g.filter=`blur(${blur}px)`;
+  g.fillStyle=col; g.beginPath(); g.moveTo(-10,y+amp);
+  const rr=mulberry32(Math.round(amp*97+step));
+  for(let x=-10;x<=w+step;x+=step) g.lineTo(x,y-rr()*amp);
+  g.lineTo(w+10,y+amp*2); g.lineTo(-10,y+amp*2); g.closePath(); g.fill();
+  g.restore();
+}
+
+function buildScene(w,h){
+  const hy=h*HORIZON, rng=mulberry32(20260816);
+  bgx.clearRect(0,0,w,h);
+  // sky
+  let g=bgx.createLinearGradient(0,0,0,hy+8);
+  g.addColorStop(0,'#16294a'); g.addColorStop(.42,'#4d719b');
+  g.addColorStop(.76,'#c98f6b'); g.addColorStop(1,'#eec096');
+  bgx.fillStyle=g; bgx.fillRect(0,0,w,hy+8);
+  // sun glow
+  const sx=w*.73, sy=hy*.52, sr=Math.max(46,h*.3);
+  const sg=bgx.createRadialGradient(sx,sy,1,sx,sy,sr);
+  sg.addColorStop(0,'rgba(255,233,182,.95)'); sg.addColorStop(.22,'rgba(255,214,150,.4)');
+  sg.addColorStop(1,'rgba(255,198,138,0)');
+  bgx.fillStyle=sg; bgx.fillRect(0,0,w,hy+8);
+  bgx.fillStyle='rgba(255,238,200,.92)';
+  bgx.beginPath(); bgx.arc(sx,sy,Math.max(8,h*.032),0,7); bgx.fill();
+  // parallax ridges
+  ridge(bgx,w,hy-h*.015,h*.13,w/13,'#2c3e54',.55,2.2);
+  ridge(bgx,w,hy+h*.005,h*.085,w/10,'#35485a',.7,1.4);
+  ridge(bgx,w,hy+h*.022,h*.05,w/8,'#3b4a35',.85,.7);
+  // treeline
+  bgx.save(); bgx.globalAlpha=.85; bgx.fillStyle='#2b3a24';
+  for(let x=0;x<w;x+=Math.max(9,w/58)){
+    if(rng()<.42) continue;
+    const th=h*(.022+rng()*.026), bx=x+rng()*6, by=hy+h*.045;
+    bgx.beginPath(); bgx.moveTo(bx,by-th); bgx.lineTo(bx+th*.46,by); bgx.lineTo(bx-th*.46,by); bgx.fill();
+  }
+  bgx.restore();
+  // haze where ground meets distance
+  const b=band(h);
+  g=bgx.createLinearGradient(0,hy,0,hy+h*.09);
+  g.addColorStop(0,'rgba(214,182,150,.5)'); g.addColorStop(1,'rgba(214,182,150,0)');
+  // ground
+  let gg=bgx.createLinearGradient(0,hy,0,h);
+  gg.addColorStop(0,'#7f8b52'); gg.addColorStop(.22,'#66743a'); gg.addColorStop(.62,'#4e5a2b'); gg.addColorStop(1,'#333b1c');
+  bgx.fillStyle=gg; bgx.fillRect(0,hy+h*.028,w,h);
+  bgx.fillStyle=g; bgx.fillRect(0,hy,w,h*.09);
+
+  const y0=b.top-b.ht*.16, span=(b.bot-y0)||1;
+  const persp=y=>Math.max(.18,Math.min(1,(y-y0)/span));   // 0 far → 1 near
+  bgx.save();
+  // beaten track running the length of the lane
+  bgx.globalAlpha=.16; bgx.fillStyle='#8a7a4c';
+  for(let i=0;i<ROWS;i++){
+    const y=groundY(h,i), t=persp(y);
+    bgx.fillRect(0,y-2*t,w,4.5*t);
+  }
+  // long grain streaks
+  bgx.globalAlpha=.34; bgx.strokeStyle='#3f4a22'; bgx.lineWidth=1;
+  for(let i=0;i<34;i++){
+    const y=y0+rng()*span;
+    bgx.beginPath(); bgx.moveTo(rng()*w*.35,y); bgx.lineTo(rng()*w*.4+w*.55,y+(rng()-.5)*3); bgx.stroke();
+  }
+  // dirt patches — flatter and lighter than before so they read as ground, not blobs
+  bgx.globalAlpha=.2; bgx.fillStyle='#6d6a38';
+  for(let i=0;i<20;i++){
+    const y=y0+rng()*span, t=persp(y), rx=w*(.02+rng()*.05)*t;
+    bgx.beginPath(); bgx.ellipse(rng()*w,y,rx,rx*.16,0,0,7); bgx.fill();
+  }
+  // craters
+  bgx.globalAlpha=.4;
+  for(let i=0;i<7;i++){
+    const y=y0+rng()*span, t=persp(y), rx=(9+rng()*16)*t;
+    bgx.fillStyle='#4a4526'; bgx.beginPath(); bgx.ellipse(rng()*w,y,rx,rx*.34,0,0,7); bgx.fill();
+  }
+  // rocks
+  bgx.globalAlpha=.55;
+  for(let i=0;i<16;i++){
+    const y=y0+rng()*span, t=persp(y), x=rng()*w, s=(2+rng()*4.5)*t;
+    bgx.fillStyle='#5d5c46'; bgx.beginPath(); bgx.ellipse(x,y-s*.35,s,s*.7,0,0,7); bgx.fill();
+    bgx.fillStyle='#75745a'; bgx.beginPath(); bgx.ellipse(x-s*.2,y-s*.55,s*.55,s*.36,0,0,7); bgx.fill();
+  }
+  // grass tufts, denser and bigger up close
+  for(let i=0;i<150;i++){
+    const y=y0+rng()*span, t=persp(y), x=rng()*w, s=(1.4+rng()*2.6)*t*1.7;
+    bgx.globalAlpha=.28+rng()*.34;
+    bgx.fillStyle=rng()<.5?'#88985a':'#6d7c42';
+    bgx.beginPath(); bgx.moveTo(x,y); bgx.lineTo(x+s*.45,y-s*2.6); bgx.lineTo(x+s,y); bgx.fill();
+  }
+  bgx.restore();
+}
+
+/* ---------- particles ---------- */
+function spark(x,y,n,col,spd,life){
+  if(LOWFX) return;
+  for(let i=0;i<n&&PART.length<260;i++){
+    const a=Math.random()*Math.PI*2, v=spd*(.4+Math.random()*.8);
+    PART.push({x,y,vx:Math.cos(a)*v,vy:Math.sin(a)*v-spd*.35,g:120,
+      life:life*(.6+Math.random()*.7),max:life,r:1+Math.random()*1.8,col,fade:1});
+  }
+}
+function puff(x,y,n,col,rise){
+  if(LOWFX) return;
+  for(let i=0;i<n&&PART.length<260;i++){
+    PART.push({x:x+(Math.random()-.5)*7,y:y+(Math.random()-.5)*3,
+      vx:(Math.random()-.5)*10,vy:-rise*(.4+Math.random()),g:-6,
+      life:.5+Math.random()*.7,max:1.2,r:3+Math.random()*5,col,fade:.55,grow:9});
+  }
+}
+function dmgNum(x,y,v){ if(LOWFX) return; DMGN.push({x,y,v:Math.round(v),life:.95}); }
+
+/* ---------- unit painters (feet at 0,0; facing +x) ---------- */
+function shade(g,x,y,wd,ht,top,bot){
+  const gr=g.createLinearGradient(0,y,0,y+ht);
+  gr.addColorStop(0,top); gr.addColorStop(1,bot);
+  g.fillStyle=gr; g.fillRect(x,y,wd,ht);
+}
+function soldier(g,col,dark,ph,firing,variant){
+  const sw=Math.sin(ph)*3.4;
+  g.fillStyle='#2f2a20';
+  g.beginPath(); g.moveTo(-2.5,-9); g.lineTo(-2.5+sw,0); g.lineTo(.5+sw,0); g.lineTo(1,-9); g.fill();
+  g.beginPath(); g.moveTo(1.5,-9); g.lineTo(1.5-sw,0); g.lineTo(4.5-sw,0); g.lineTo(4,-9); g.fill();
+  // torso
+  const lean = variant==='run' ? 4 : 0;
+  g.save(); if(lean) g.translate(lean*.5,0), g.rotate(-.13);
+  shade(g,-6,-24,13,16,col,dark);
+  g.fillStyle='rgba(0,0,0,.28)'; g.fillRect(-6,-24,4,16);
+  g.fillStyle='#6b4a2a'; g.fillRect(-7,-18,15,4.5);
+  // head + helmet
+  g.fillStyle='#c98b63'; g.beginPath(); g.arc(0,-29.5,5.6,0,7); g.fill();
+  g.fillStyle=dark; g.beginPath(); g.arc(0,-31,6.2,Math.PI,0); g.fill();
+  g.fillRect(-6.4,-31,12.8,2.1);
+  g.restore();
+  // weapon
+  const rec=firing?-2.4:0;
+  g.fillStyle='#2b2b2b';
+  if(variant==='mg'){
+    g.fillRect(2+rec,-21,22,3.2);
+    g.fillRect(6+rec,-18,3,6); g.fillRect(12+rec,-18,3,6);   // bipod
+    g.fillRect(19+rec,-22.4,6,1.6);
+  }else if(variant==='at'){
+    g.save(); g.rotate(-.16);
+    g.fillRect(-4+rec,-26,30,4.6);
+    g.fillStyle='#3f3f3f'; g.fillRect(20+rec,-27.4,7,7.4);
+    g.restore();
+  }else{
+    g.fillRect(2+rec,-20,19,2.6);
+    g.fillRect(17+rec,-21.4,5,1.6);
+  }
+  if(firing){
+    const mx = variant==='at'?30:variant==='mg'?26:23, my = variant==='at'?-28:-20.5;
+    const fg=g.createRadialGradient(mx,my,0,mx,my,9);
+    fg.addColorStop(0,'rgba(255,255,255,.95)'); fg.addColorStop(.4,'rgba(255,214,122,.8)');
+    fg.addColorStop(1,'rgba(255,150,46,0)');
+    g.fillStyle=fg; g.beginPath(); g.arc(mx,my,9,0,7); g.fill();
+  }
+}
+function tank(g,col,dark,ph,firing){
+  const rec=firing?-3:0;
+  // tracks
+  g.fillStyle='#26281f';
+  g.beginPath(); g.roundRect(-32,-11,64,11,5); g.fill();
+  g.fillStyle='#4a4d3e';
+  for(let i=-25;i<=25;i+=12.5){ g.beginPath(); g.arc(i,-5.5,4.4,0,7); g.fill(); }
+  g.fillStyle='#1b1d16';
+  for(let i=-25;i<=25;i+=12.5){ g.beginPath(); g.arc(i,-5.5,1.7,0,7); g.fill(); }
+  g.fillStyle='rgba(0,0,0,.35)';
+  for(let i=-31;i<32;i+=6){ g.fillRect(i+((ph*8)%6),-11,2.4,3); }
+  // hull
+  let gr=g.createLinearGradient(0,-24,0,-11);
+  gr.addColorStop(0,'#9aa08c'); gr.addColorStop(.45,col); gr.addColorStop(1,dark);
+  g.fillStyle=gr; g.beginPath();
+  g.moveTo(-34,-24); g.lineTo(34,-24); g.lineTo(30,-11); g.lineTo(-30,-11); g.closePath(); g.fill();
+  g.fillStyle='rgba(255,255,255,.25)'; g.fillRect(-34,-24,68,2.6);
+  // turret
+  gr=g.createLinearGradient(0,-37,0,-24);
+  gr.addColorStop(0,'#a8ae96'); gr.addColorStop(.5,col); gr.addColorStop(1,dark);
+  g.fillStyle=gr; g.beginPath();
+  g.moveTo(-20,-37); g.lineTo(12,-37); g.lineTo(21,-24); g.lineTo(-24,-24); g.closePath(); g.fill();
+  g.fillStyle='#3f4436'; g.beginPath(); g.arc(-9,-39,3.6,0,7); g.fill();
+  // barrel
+  g.fillStyle='#5a604d'; g.fillRect(10+rec,-34,38,4.6);
+  g.fillStyle='#9aa08c'; g.fillRect(10+rec,-34,38,1.5);
+  g.fillStyle='#464b3b'; g.fillRect(44+rec,-35.4,7,7.4);
+  if(firing){
+    const mx=54,my=-31.6;
+    const fg=g.createRadialGradient(mx,my,0,mx,my,15);
+    fg.addColorStop(0,'rgba(255,255,255,.97)'); fg.addColorStop(.35,'rgba(255,214,122,.85)');
+    fg.addColorStop(1,'rgba(255,150,46,0)');
+    g.fillStyle=fg; g.beginPath(); g.arc(mx,my,15,0,7); g.fill();
+  }
+}
+const PAINT={
+  inf:(g,c,d,p,f)=>soldier(g,c,d,p,f,'rifle'),
+  gun:(g,c,d,p,f)=>soldier(g,c,d,p,f,'mg'),
+  mob:(g,c,d,p,f)=>soldier(g,c,d,p*1.7,f,'run'),
+  at :(g,c,d,p,f)=>soldier(g,c,d,p,f,'at'),
+  tank:(g,c,d,p,f)=>tank(g,c,d,p,f),
+};
+const SIDECOL=[{body:'#a83f26',dark:'#6d2515'},{body:'#1f5390',dark:'#123152'}];
+
+/* ---------- fort ---------- */
+function fort(g,w,h,s){
+  const b=band(h), x=toPix(w,s===0?0:LANE), gy=groundY(h,ROWS-1)+b.ht*.03;
+  const H=Math.max(64,Math.min(206,b.ht*.62)), sc=H/76, W=H*.58;
+  const frac=Math.max(0,S.hp[s]/BASE_HP);
+  g.save(); g.translate(x,gy);
+  g.fillStyle='rgba(0,0,0,.34)';
+  g.beginPath(); g.ellipse(0,0,W*.78,W*.2,0,0,7); g.fill();
+  const gr=g.createLinearGradient(0,-H,0,0);
+  gr.addColorStop(0,'#bfb49e'); gr.addColorStop(1,'#5c5446');
+  g.fillStyle=gr; g.fillRect(-W/2,-H,W,H);
+  g.fillStyle='#cdc2ab'; g.fillRect(-W/2,-H,W,H*.06);
+  g.fillStyle='#4a4335';
+  for(let i=0;i<4;i++) g.fillRect(-W/2+i*(W/4),-H-H*.1,W/7,H*.1);
+  g.fillStyle='#2e2a22';
+  g.fillRect(-W*.16,-H*.42,W*.32,H*.42);
+  g.beginPath(); g.arc(0,-H*.42,W*.16,Math.PI,0); g.fill();
+  g.fillStyle='#39332a';
+  g.fillRect(-W*.4,-H*.72,W*.16,H*.16); g.fillRect(W*.24,-H*.72,W*.16,H*.16);
+  g.fillStyle='rgba(0,0,0,.22)'; g.fillRect(-W/2,-H,W,H*.34);
+  // banner
+  const px=(s===0?1:-1)*W*.5;
+  g.fillStyle='#3a3a3a'; g.fillRect(px-1.5,-H-H*.5,3,H*.42);
+  g.fillStyle=SIDE[s].col;
+  g.beginPath(); g.moveTo(px,-H-H*.48);
+  g.lineTo(px+(s===0?1:-1)*W*.5,-H-H*.48);
+  g.lineTo(px+(s===0?1:-1)*W*.34,-H-H*.36);
+  g.lineTo(px+(s===0?1:-1)*W*.5,-H-H*.24);
+  g.lineTo(px,-H-H*.24); g.closePath(); g.fill();
+  // damage
+  if(frac<.75){
+    g.strokeStyle='rgba(24,20,14,.55)'; g.lineWidth=1.6;
+    g.beginPath(); g.moveTo(-W*.3,-H*.9); g.lineTo(-W*.1,-H*.55); g.lineTo(-W*.22,-H*.3); g.stroke();
+  }
+  if(frac<.45){
+    g.strokeStyle='rgba(24,20,14,.6)'; g.lineWidth=2;
+    g.beginPath(); g.moveTo(W*.32,-H*.95); g.lineTo(W*.1,-H*.6); g.lineTo(W*.28,-H*.25); g.stroke();
+    g.fillStyle='rgba(20,16,12,.5)'; g.fillRect(-W/2,-H*.14,W,H*.14);
+  }
+  // hp bar, tucked just above the battlements rather than floating in the sky
+  const bw=W*.88, bh=Math.max(5,6.5*sc), by=-H-H*.1-bh-3*sc;
+  g.fillStyle='rgba(4,7,11,.8)';
+  g.beginPath(); g.roundRect(-bw/2-1.5,by-1.5,bw+3,bh+3,(bh+3)/2); g.fill();
+  g.fillStyle=SIDE[s].col; g.beginPath(); g.roundRect(-bw/2,by,bw*frac,bh,bh/2); g.fill();
+  g.restore();
+  return {x,gy,W,H,frac};
+}
+
+/* ---------- firing detection (renderer-only; sim untouched) ---------- */
+function firingSet(){
+  const set=new Set();
+  for(const u of S.units){
+    const U=UNITS[u.type], dir=u.s===0?1:-1;
+    let best=1e9;
+    for(const e of S.units){ if(e.s===u.s)continue;
+      const d=(e.x-u.x)*dir; if(d>=0&&d<best)best=d; }
+    const dBase=((u.s===0?LANE:0)-u.x)*dir;
+    if(dBase<=U.rng||best<=U.rng) set.add(u.id);
+  }
+  return set;
+}
+
+function draw(now){
+  const {w,h}=DIM; if(!w) return;
+  const rt=now||performance.now();
+  let dt=Math.min(.05,(rt-(LASTRT||rt))/1000); LASTRT=rt;
+
+  cx.save();
+  if(SHAKE>.2){
+    cx.translate((Math.random()-.5)*SHAKE,(Math.random()-.5)*SHAKE);
+    SHAKE*=Math.pow(.0025,dt);
+  } else SHAKE=0;
+
+  cx.drawImage(BG,0,0,w,h);
+
+  // ---- base damage → shake + smoke
+  [0,1].forEach(s=>{
+    const d=PREVBASE[s]-S.hp[s];
+    if(d>0.4){ SHAKE=Math.min(14,SHAKE+d*.5); }
+    PREVBASE[s]=S.hp[s];
+  });
+  const forts=[fort(cx,w,h,0),fort(cx,w,h,1)];
+  SMOKET-=dt;
+  if(SMOKET<=0){
+    SMOKET=.22;
+    forts.forEach((f,s)=>{ if(f.frac<.6) puff(f.x,f.gy-f.H,f.frac<.3?3:1,'70,64,58',26); });
+  }
+
+  // ---- decals (corpses) under everything living
+  DECAL=DECAL.filter(d=>(d.life-=dt)>0);
+  DECAL.forEach(d=>{
+    const a=Math.min(1,d.life/3), y=groundY(h,d.row), sc=rowScale(h,d.row);
+    cx.save(); cx.globalAlpha=a*.6; cx.translate(toPixRow(w,d.x,d.row),y); cx.scale(sc,sc);
+    cx.fillStyle='#241f16'; cx.beginPath(); cx.ellipse(0,-2,11,3.4,0,0,7); cx.fill();
+    cx.fillStyle=d.col; cx.beginPath(); cx.ellipse(-2,-4,7,2.8,0,0,7); cx.fill();
+    cx.restore();
+  });
+
+  // ---- units, sorted far→near
+  const fire=firingSet();
+  const list=[...S.units].sort((a,b)=>rowOf(a)-rowOf(b));
+  const seen=new Set();
+  for(const u of list){
+    seen.add(u.id);
+    const U=UNITS[u.type], r=rowOf(u), gy=groundY(h,r), sc=rowScale(h,r), px=toPixRow(w,u.x,r);
+    const dir=u.s===0?1:-1, firing=fire.has(u.id), haze=0.84+0.16*(r/(ROWS-1));
+    // damage accumulation → floating numbers
+    const prev=PREVU.get(u.id);
+    if(prev!==undefined&&prev>u.hp){
+      const a=(ACC.get(u.id)||0)+(prev-u.hp);
+      if(a>=7){ dmgNum(px,gy-34*sc,a); ACC.set(u.id,0); } else ACC.set(u.id,a);
+    }
+    PREVU.set(u.id,u.hp);
+    // shadow
+    cx.save(); cx.translate(px,gy);
+    cx.fillStyle='rgba(0,0,0,.36)';
+    cx.beginPath(); cx.ellipse(0,0,(u.type==='tank'?34:14)*sc,(u.type==='tank'?7:4.4)*sc,0,0,7); cx.fill();
+    cx.restore();
+    // body
+    cx.save(); cx.globalAlpha=haze; cx.translate(px,gy); cx.scale(sc*dir,sc);
+    const moving = !firing;
+    const ph = moving ? (S.t*U.spd*.9+u.id*1.7) : 0;
+    const C=SIDECOL[u.s];
+    if(u.fl>0){ cx.save(); cx.globalAlpha=1; PAINT[u.type](cx,'#ffffff','#d8d8d8',ph,firing); cx.restore(); }
+    else PAINT[u.type](cx,C.body,C.dark,ph,firing);
+    cx.restore();
+    // dust while walking
+    if(moving&&!LOWFX&&Math.random()<dt*7)
+      puff(px-dir*10*sc,gy,1,'176,166,132',9);
+    // hp pip
+    const hf=Math.max(0,u.hp/u.mx);
+    if(hf<1){
+      const bw=(u.type==='tank'?36:18)*sc, by=gy-(u.type==='tank'?46:40)*sc;
+      cx.fillStyle='rgba(4,7,11,.66)';
+      cx.beginPath(); cx.roundRect(px-bw/2,by,bw,3.4*sc,1.7*sc); cx.fill();
+      cx.fillStyle=hf>.5?'#5fbf6a':hf>.25?'#d9a72e':'#c9543a';
+      cx.beginPath(); cx.roundRect(px-bw/2,by,bw*hf,3.4*sc,1.7*sc); cx.fill();
+    }
+    // tracer
+    if(firing&&!LOWFX&&Math.random()<dt*(u.type==='tank'?4:9)){
+      const tx=px+dir*(u.type==='tank'?54:24)*sc, ty=gy-(u.type==='tank'?32:20)*sc;
+      let tgt=null,best=1e9;
+      for(const e of S.units){ if(e.s===u.s)continue; const d=(e.x-u.x)*dir; if(d>=0&&d<best){best=d;tgt=e;} }
+      const ex = tgt?toPixRow(w,tgt.x,rowOf(tgt)):toPixRow(w,u.s===0?LANE:0,r);
+      const ey = tgt?groundY(h,rowOf(tgt))-18*rowScale(h,rowOf(tgt)):gy-40*sc;
+      cx.strokeStyle='rgba(255,233,168,.85)'; cx.lineWidth=1.6*sc; cx.lineCap='round';
+      cx.beginPath(); cx.moveTo(tx,ty); cx.lineTo(ex,ey); cx.stroke();
+      spark(ex,ey,2,'255,224,150',60,.22);
+      if(u.type==='tank') SHAKE=Math.min(9,SHAKE+1.6);
+    }
+  }
+
+  // ---- deaths: explosion + decal
+  PREVU.forEach((hp,id)=>{
+    if(seen.has(id)) return;
+    const p=DEADPOS.get(id);
+    if(p){
+      const gy=groundY(h,p.row), px=toPix(w,p.x);
+      spark(px,gy-14,LOWFX?0:14,'255,196,110',150,.5);
+      puff(px,gy-8,LOWFX?0:5,'92,84,70',34);
+      DECAL.push({x:p.x,row:p.row,col:SIDECOL[p.s].dark,life:9});
+      if(DECAL.length>44) DECAL.shift();
+      SHAKE=Math.min(10,SHAKE+(p.type==='tank'?5:.8));
+    }
+    PREVU.delete(id); ACC.delete(id); DEADPOS.delete(id);
+  });
+  S.units.forEach(u=>DEADPOS.set(u.id,{x:u.x,row:rowOf(u),s:u.s,type:u.type}));
+
+  // ---- particles
+  PART=PART.filter(p=>{
+    p.life-=dt; if(p.life<=0) return false;
+    p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=p.g*dt;
+    const a=Math.max(0,p.life/p.max)*p.fade;
+    cx.fillStyle=`rgba(${p.col},${a})`;
+    cx.beginPath(); cx.arc(p.x,p.y,p.r+(p.grow?(1-p.life/p.max)*p.grow:0),0,7); cx.fill();
+    return true;
+  });
+
+  // ---- damage numbers
+  DMGN=DMGN.filter(d=>{
+    d.life-=dt; if(d.life<=0) return false;
+    d.y-=26*dt;
+    const a=Math.min(1,d.life*2.2);
+    cx.save(); cx.globalAlpha=a;
+    cx.font=`800 ${Math.max(13,h*.042)}px "Saira Condensed",sans-serif`;
+    cx.textAlign='center'; cx.lineWidth=3; cx.strokeStyle='rgba(38,22,0,.85)';
+    cx.strokeText('-'+d.v,d.x,d.y); cx.fillStyle='#ffcf4d'; cx.fillText('-'+d.v,d.x,d.y);
+    cx.restore(); return true;
+  });
+
+  cx.fillStyle=VIG; cx.fillRect(0,0,w,h);
+  cx.restore();
+}
+const DEADPOS=new Map();
+
+function paintHUD(){
+  const m=Math.floor(S.t/60), sec=Math.floor(S.t%60);
+  document.getElementById('clock').textContent=`${m}:${String(sec).padStart(2,'0')}`;
+  [0,1].forEach(s=>{
+    const k=s===0?'A':'B';
+    document.getElementById('hp'+k).style.width=Math.max(0,S.hp[s]/BASE_HP*100)+'%';
+    document.getElementById('hp'+k+'n').textContent=Math.max(0,Math.round(S.hp[s]));
+    document.getElementById('coin'+k).textContent=Math.floor(S.coins[s]);
+    document.getElementById('sub'+k).textContent=`${(S.inc[s]*RAMP(S.t)).toFixed(1)}/s · eco ${S.eco[s]}/${ECO_MAX}`;
+    const comp=document.getElementById('comp'+k); comp.innerHTML='';
+    Object.keys(UNITS).forEach(ty=>{
+      const n=S.units.filter(u=>u.s===s&&u.type===ty).length;
+      if(!n) return;
+      const c=document.createElement('span'); c.className='chip';
+      c.textContent=`${UNITS[ty].g}${n}`;
+      comp.appendChild(c);
+    });
+  });
+}
+
+function drawLog(){
+  const box=document.getElementById('log');
+  if(!LOG.length){box.innerHTML='<div class="empty">Commander decisions appear here every 4 seconds of battle.</div>';return;}
+  box.innerHTML=[...LOG].reverse().slice(0,60).map(e=>{
+    const m=Math.floor(e.t/60),s=Math.floor(e.t%60);
+    return `<div class="entry"><div class="hd">${m}:${String(s).padStart(2,'0')}</div>
+      <div class="ln"><em style="color:${SIDE[e.s].col}">${SIDE[e.s].name}</em> →
+      ${e.queue.map(q=>q==='eco'?'ECO':UNITS[q].name).join(', ')||'—'}
+      <div class="rsn">${(e.why||'').replace(/</g,'&lt;')}</div></div></div>`;}).join('');
+}
+
+function buildTable(){
+  document.getElementById('utable').innerHTML=Object.entries(UNITS).map(([k,u])=>
+    `<tr><td class="n"><span class="glyph" style="background:${u.col};color:#f0f2ec">${u.g}</span>${u.name}</td>
+     <td>${u.cost}</td><td>${u.hp}</td><td>${u.dps}${u.splash?'*':''}</td><td>${u.spd}</td><td>${u.rng}</td></tr>`).join('')
+     +`<tr><td colspan="6" style="color:#5c6772;font-size:10.5px;padding-top:9px">* hits every enemy in range</td></tr>`;
+}
+
+/* ============================================================
+   5. LOOP + CONTROLS
+   ============================================================ */
+let acc=0, last=0;
+function frame(ts){
+  if(!last) last=ts;
+  let el=Math.min(.1,(ts-last)/1000); last=ts;
+  if(RUNNING&&!AWAIT){
+    acc+=el*SPEED;
+    let guard=0;
+    while(acc>=.05&&!AWAIT&&!S.over&&guard++<400){
+      if(S.t>=S.next){ runDecisions(); break; }
+      step(.05); acc-=.05;
+    }
+  }
+  draw(ts); paintHUD(); paintThink();
+  if(TAB==='log') drawLog();
+  RAF=requestAnimationFrame(frame);
+}
+
+/* ----- orientation: landscape primary, portrait fallback ----- */
+let FORCED=false;
+function applyMode(){
+  const portrait=window.matchMedia('(orientation: portrait)').matches;
+  const narrow=window.innerWidth<720;
+  const gate=portrait&&narrow&&!FORCED;
+  document.getElementById('rotate').style.display=gate?'flex':'none';
+  document.body.classList.toggle('split',portrait&&narrow&&FORCED);
+  if(!gate) setTimeout(()=>{fit();draw();},60);
+}
+document.getElementById('btnAnyway').onclick=()=>{FORCED=true;applyMode();};
+window.matchMedia('(orientation: portrait)').addEventListener('change',applyMode);
+window.addEventListener('resize',()=>{fit();draw();applyMode();});
+
+/* ----- sheet ----- */
+const sheet=document.getElementById('sheet');
+function openSheet(v){ sheet.classList.toggle('open', v!==undefined?v:!sheet.classList.contains('open')); }
+document.getElementById('grab').onclick=()=>openSheet();
+let dragY=null;
+document.getElementById('grab').addEventListener('pointerdown',e=>{dragY=e.clientY;});
+window.addEventListener('pointerup',e=>{
+  if(dragY===null) return;
+  const dy=e.clientY-dragY; dragY=null;
+  if(Math.abs(dy)>26) openSheet(dy<0);
+});
+document.querySelectorAll('.sheettabs button').forEach(b=>b.onclick=()=>{
+  TAB=b.dataset.s==='log'?'log':'battle';
+  document.querySelectorAll('.sheettabs button').forEach(x=>x.classList.toggle('on',x===b));
+  document.getElementById('feed').classList.toggle('on',b.dataset.s==='feed');
+  document.getElementById('log').classList.toggle('on',b.dataset.s==='log');
+  if(b.dataset.s==='log') drawLog();
+});
+
+/* ----- modals ----- */
+const modal=(id,v)=>document.getElementById(id).classList.toggle('on',v);
+['btnSetupOpen','btnSetupOpen2'].forEach(i=>document.getElementById(i).onclick=()=>modal('mSetup',true));
+['btnUnitsOpen','btnUnitsOpen2'].forEach(i=>document.getElementById(i).onclick=()=>modal('mUnits',true));
+document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>modal(b.dataset.close,false));
+
+/* ----- transport ----- */
+document.getElementById('btnPlay').onclick=e=>{
+  if(S.over) return;
+  RUNNING=!RUNNING; last=0;
+  e.target.textContent=RUNNING?'❚❚':'▶';
+};
+document.getElementById('btnSpeed').onclick=e=>{
+  SPEED=SPEED===1?2:SPEED===2?4:1;
+  e.target.textContent=SPEED+'×'; document.getElementById('spdTag').textContent=SPEED+'×';
+};
+const reset=()=>{newGame(+document.getElementById('seed').value||1);
+  STATS.forEach(x=>{x.calls=0;x.fail=0;x.bad=0;x.ms=0;}); STREAK[0]=STREAK[1]=0;
+  const bb=document.getElementById('banner'); bb.style.fontSize=''; bb.style.color='';
+  const f=document.getElementById('feed'); if(f) f.innerHTML='';
+  DEBRIEF=[null,null];
+  const db=document.getElementById('debrief'); if(db){db.style.display='none';db.innerHTML='';}
+  PART=[];DMGN=[];DECAL=[];SHAKE=0;PREVU.clear();ACC.clear();DEADPOS.clear();
+  PREVBASE=[BASE_HP,BASE_HP];
+  ['ovA','ovB'].forEach(i=>document.getElementById(i).classList.remove('on'));
+  document.getElementById('tickline').textContent='Match reset — press play.';
+  document.getElementById('btnPlay').textContent='▶';
+  refreshNames();fit();draw();paintHUD();drawLog();};
+document.getElementById('btnReset').onclick=reset;
+document.getElementById('btnReset2').onclick=reset;
+document.getElementById('lowfx').onchange=e=>{LOWFX=e.target.checked;};
+
+const saveLog=()=>{
+  const payload={
+    game:'breach', seed:+document.getElementById('seed').value, savedAt:new Date().toISOString(),
+    commanders:[0,1].map(s=>({side:SIDE[s].name,kind:CMD[s].kind,model:CMD[s].model,
+      calls:STATS[s].calls,failed:STATS[s].fail,malformed:STATS[s].bad,
+      avgLatencyMs:STATS[s].calls?Math.round(STATS[s].ms/STATS[s].calls):0})),
+    result:{winner:S.win===null?'draw':SIDE[S.win].name, over:S.over,
+      durationSeconds:+S.t.toFixed(1), baseHP:S.hp.map(h=>Math.max(0,Math.round(h))),
+      ecoUpgrades:[...S.eco]},
+    debrief:[0,1].map(s=>({side:SIDE[s].name,...(DEBRIEF[s]||{})})),
+    decisions:LOG.map(e=>({tSeconds:+e.t.toFixed(1),side:SIDE[e.s].name,queue:e.queue,
+      reasoning:e.why,latencyMs:e.ms?Math.round(e.ms):undefined,
+      invalidTokens:e.bad&&e.bad.length?e.bad:undefined,failed:e.failed||undefined})),
+  };
+  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=`breach-${SIDE[0].name}-vs-${SIDE[1].name}-${payload.seed}.json`.replace(/\s+/g,'');
+  a.click();
+};
+document.getElementById('btnExport').onclick=saveLog;
+document.getElementById('btnExport2').onclick=saveLog;
+
+/* ============================================================
+   6. LLM SEAT
+   Replace agent(S,s) with a call to this to seat a real model.
+   It is called once every 4 seconds of battle time — roughly
+   35-75 calls per side per game.
+   ============================================================ */
+const RULES=`You command one side of a two-base lane battle. Lane is ${LANE}m. Both bases start at ${BASE_HP} HP.
+You earn coins per second and spend them on units, which walk toward the enemy base and fight what they meet.
+Reaching the enemy base means damaging it at your unit's DPS. First base to 0 loses.
+
+UNITS: ${Object.entries(UNITS).map(([k,u])=>`${k} (cost ${u.cost}, hp ${u.hp}, dps ${u.dps}${u.splash?' SPLASH':''}, speed ${u.spd}, range ${u.rng}, class ${u.cls})`).join('; ')}
+
+COUNTERS: gun does 2x to light class. at does 4x to armor class. tank hits every enemy in range at once.
+The cycle is tank > gun > at > tank. Infantry is a cheap generalist. Raider is fast but weak — use it to
+punish an empty lane, not to win fights.
+
+ECONOMY: "eco" costs ${ECO_COST} and permanently adds +${ECO_STEP} coins/sec, max ${ECO_MAX} times.
+Passive income roughly doubles by 60s and keeps climbing, so late armies are far bigger than early ones. Buying economy while under pressure loses games.
+
+You are called every ${DECIDE} seconds. Return a build queue that is spent in order as coins allow;
+it is replaced at your next decision, so queue 2-4 items, not more.
+
+Reply ONLY with JSON, no markdown fences:
+{"why":"<one sentence read of the battle>","queue":["inf","gun","inf"]}`;
+
+async function llmAgent(St,s,model){
+  const key=(document.getElementById('apikey').value||'').trim();
+  if(!key) throw new Error('no API key set');
+  const cls=side=>{const o={light:0,support:0,armor:0};
+    St.units.filter(u=>u.s===side).forEach(u=>o[UNITS[u.type].cls]++);return o;};
+  const eList=St.units.filter(u=>u.s!==s);
+  const nearest=eList.length?Math.min(...eList.map(u=>s===0?u.x:LANE-u.x)):null;
+  const view={
+    time:+St.t.toFixed(1), secondsLeft:Math.round(TIME_CAP-St.t),
+    me:SIDE[s].name, myCoins:Math.floor(St.coins[s]),
+    myIncome:+(St.inc[s]*RAMP(St.t)).toFixed(2), myEco:St.eco[s], ecoMax:ECO_MAX,
+    myBaseHP:Math.round(St.hp[s]), enemyBaseHP:Math.round(St.hp[1-s]),
+    myUnits:St.units.filter(u=>u.s===s).map(u=>({type:u.type,hp:Math.round(u.hp),
+      metresFromEnemyBase:+(s===0?LANE-u.x:u.x).toFixed(1)})),
+    enemyUnits:eList.map(u=>({type:u.type,hp:Math.round(u.hp),
+      metresFromMyBase:+(s===0?u.x:LANE-u.x).toFixed(1)})),
+    myComposition:cls(s), enemyComposition:cls(1-s),
+    enemyNearestToMyBaseMetres:nearest,
+    threat: nearest!==null&&nearest<25 ? 'ENEMY IS PUSHING YOUR BASE' : 'lane contested or quiet',
+    counterHint:'gun beats light · at beats armor · tank splash beats clumps of support',
+  };
+  await rateGate(/:free$/.test(model));
+  // NOTE: no AbortController here. Sandboxed webviews proxy fetch over postMessage,
+  // which structured-clones the options object, and AbortSignal is not cloneable.
+  const timeout=new Promise((_,rej)=>setTimeout(()=>rej(new Error('timed out after 25s')),25000));
+  try{
+    const r=await Promise.race([fetch('https://openrouter.ai/api/v1/chat/completions',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`,
+        'HTTP-Referer':location.origin||'https://localhost','X-Title':'Breach'},
+      body:JSON.stringify({model,messages:[{role:'system',content:RULES},
+        {role:'user',content:JSON.stringify(view)}],temperature:0.7,max_tokens:3000,
+        ...(NO_REASON_PARAM?{}:{reasoning:{effort:'low'}})})
+    }),timeout]);
+    if(r.status===429){ await sleep(6000); throw new Error('rate limited (429) — retrying'); }
+    if(r.status===400){
+      const body=await r.text();
+      if(/reasoning/i.test(body)&&!NO_REASON_PARAM){ NO_REASON_PARAM=true;
+        throw new Error('provider rejected reasoning control — retrying without it'); }
+      throw new Error(`HTTP 400 ${body.slice(0,140)}`);
+    }
+    if(!r.ok) throw new Error(`HTTP ${r.status} ${(await r.text()).slice(0,120)}`);
+    const j=await r.json();
+    if(j.error) throw new Error(j.error.message||JSON.stringify(j.error).slice(0,160));
+    const ch=j.choices&&j.choices[0], msg=ch&&ch.message;
+    const flat=v=>Array.isArray(v)?v.map(x=>(x&&x.text)||'').join(''):(v||'');
+    const cands=[flat(msg&&msg.content), flat(msg&&msg.reasoning)].filter(t=>t&&t.trim());
+    if(!cands.length)
+      throw new Error(`empty content · finish_reason=${ch&&ch.finish_reason} · usage=${JSON.stringify(j.usage||{})}`);
+    LAST_RAW=cands[0].slice(0,300);
+    for(const c of cands){ try{ return extractJSON(c); }catch(e){} }
+    throw new Error(`no JSON · finish_reason=${ch&&ch.finish_reason}`
+      +(ch&&ch.finish_reason==='length'?' (truncated mid-thought — raise max_tokens)':'')
+      +` · ${cands[0].slice(0,110)}`);
+  } catch(e){ throw new Error(hintFor(e)); }
+}
+
+let LAST_RAW='';
+let NO_REASON_PARAM=false;   // flipped if a provider refuses the reasoning field
+// models wrap JSON in fences, prose, or both — dig it out rather than failing
+function extractJSON(txt){
+  const clean=txt.replace(/```json/gi,'').replace(/```/g,'').trim();
+  try{ return JSON.parse(clean); }catch(e){}
+  const first=clean.indexOf('{'), last=clean.lastIndexOf('}');
+  if(first>=0&&last>first){ try{ return JSON.parse(clean.slice(first,last+1)); }catch(e){} }
+  throw new Error('no JSON in reply: '+clean.slice(0,140));
+}
+
+// sandboxed viewers block outbound calls in ways worth naming explicitly
+function hintFor(e){
+  const m=String(e&&e.message||e);
+  if(/postMessage|could not be cloned|structured/i.test(m))
+    return m+' — this viewer proxies network calls and cannot pass browser objects. Open the file in Chrome or Safari instead.';
+  if(/Failed to fetch|NetworkError|CORS|Load failed/i.test(m))
+    return m+' — the request was blocked. In-app file previews usually forbid outside calls; download the file and open it in a real browser.';
+  if(/401|403/.test(m)) return m+' — key rejected. Check it is an sk-or- key and is active.';
+  if(/404|deprecat/i.test(m))
+    return m+' — that model id is gone or deprecated. Tap "Load live models" in Setup to pull the current catalogue.';
+  return m;
+}
+
+async function testKey(){
+  const out=document.getElementById('testout');
+  const model=CMD[0].model||'openai/gpt-oss-120b';
+  out.textContent='Testing '+model+'…'; out.style.color='#7b8692';
+  const t0=performance.now();
+  try{
+    const d=await llmAgent(S,0,model);
+    const q=sanitize(d);
+    out.style.color=q.queue.length?'#74ab7c':'#c9a227';
+    out.textContent=`OK · ${Math.round(performance.now()-t0)}ms · queue [${q.queue.join(', ')}]`
+      +(q.bad.length?` · dropped invalid: ${q.bad.join(', ')}`:'');
+  }catch(e){ out.style.color='#c9765c';
+    out.innerHTML='FAILED · '+e.message+(LAST_RAW?`<br><span style="color:#5c6772">raw: ${LAST_RAW.replace(/</g,'&lt;').slice(0,220)}</span>`:''); }
+}
+
+['A','B'].forEach((k,i)=>{
+  const sel=document.getElementById('model'+k);
+  const grp=t=>`<optgroup label="${t==='paid'?'Cheap paid — no daily cap':'Free — 50/day cap'}">`+
+    FREE_MODELS.filter(m=>m.tier===t).map(m=>`<option value="${m.id}">${m.label} · ${m.p}</option>`).join('')+'</optgroup>';
+  sel.innerHTML=grp('paid')+grp('free');
+  sel.value=i===0?'openai/gpt-oss-120b':'google/gemini-2.5-flash-lite';
+  const sync=()=>{
+    const custom=document.getElementById('custom'+k).value.trim();
+    CMD[i].model=custom||sel.value;
+    refreshNames();
+  };
+  sel.onchange=sync;
+  document.getElementById('custom'+k).oninput=sync;
+  document.getElementById('kind'+k).onchange=e=>{CMD[i].kind=e.target.value;refreshNames();};
+  sync();
+});
+['mLo','mHi','mFail','mBad'].forEach(id=>document.getElementById(id).onchange=()=>{
+  MOCK.lat=[+document.getElementById('mLo').value||500,+document.getElementById('mHi').value||3000];
+  MOCK.fail=(+document.getElementById('mFail').value||0)/100;
+  MOCK.bad=(+document.getElementById('mBad').value||0)/100;
+});
+document.getElementById('btnTest').onclick=testKey;
+document.getElementById('btnModels').onclick=async()=>{
+  const out=document.getElementById('modelsout');
+  out.style.color='#7b8692'; out.textContent='Fetching live catalogue from OpenRouter…';
+  try{
+    const r=await fetch('https://openrouter.ai/api/v1/models');
+    const j=await r.json();
+    const live=(j.data||[])
+      .filter(m=>{
+        const a=m.architecture||{};
+        const out_=a.output_modalities||['text'], in_=a.input_modalities||['text'];
+        return out_.includes('text') && in_.includes('text') && m.pricing && m.pricing.prompt!=null;
+      })
+      .map(m=>({id:m.id, name:m.name||m.id,
+        pin:parseFloat(m.pricing.prompt)*1e6, pout:parseFloat(m.pricing.completion||0)*1e6}))
+      .filter(m=>isFinite(m.pin))
+      .sort((a,b)=>(a.pin-b.pin)||(a.pout-b.pout));
+    if(!live.length) throw new Error('catalogue empty');
+    const fmt=n=>n===0?'free':(n<1?'$'+n.toFixed(3):'$'+n.toFixed(2));
+    const opts=live.map(m=>`<option value="${m.id}">${m.name} · ${fmt(m.pin)}/${fmt(m.pout)}</option>`).join('');
+    ['A','B'].forEach((k,i)=>{
+      const sel=document.getElementById('model'+k), keep=CMD[i].model;
+      sel.innerHTML=`<optgroup label="Live catalogue — cheapest first">${opts}</optgroup>`;
+      if(live.some(m=>m.id===keep)) sel.value=keep;
+      CMD[i].model=sel.value;
+    });
+    refreshNames();
+    out.style.color='#74ab7c';
+    out.textContent=`Loaded ${live.length} live text models, cheapest first. Deprecated ids are gone.`;
+  }catch(e){
+    out.style.color='#c9765c';
+    out.textContent='Could not load catalogue ('+String(e.message).slice(0,90)+'). The built-in list still works.';
+  }
+};
+setInterval(()=>{
+  const any=STATS[0].calls+STATS[1].calls;
+  document.getElementById('stats').innerHTML = !any ? 'No calls yet.' :
+    [0,1].map(s=>STATS[s].calls?`<span style="color:${SIDE[s].col}">${SIDE[s].name}</span>: ${STATS[s].calls} calls · avg ${Math.round(STATS[s].ms/STATS[s].calls)}ms · ${STATS[s].fail} failed · ${STATS[s].bad} malformed`:'').filter(Boolean).join('<br>');
+},1000);
+
+/* ----- key persistence (opt-in) ----- */
+(function(){
+  const box=document.getElementById('apikey'), chk=document.getElementById('remember');
+  try{
+    const saved=localStorage.getItem('breach.key');
+    if(saved){ box.value=saved; chk.checked=true; }
+  }catch(e){}
+  const save=()=>{ try{
+    if(chk.checked&&box.value.trim()) localStorage.setItem('breach.key',box.value.trim());
+    else localStorage.removeItem('breach.key');
+  }catch(e){} };
+  box.addEventListener('input',save); chk.addEventListener('change',save);
+})();
+
+/* boot */
+buildTable(); refreshNames(); newGame(42); applyMode(); fit(); paintHUD(); drawLog();
+RUNNING=true; document.getElementById('btnPlay').textContent='❚❚';
+RAF=requestAnimationFrame(frame);
+</script>
+</body>
+</html>
