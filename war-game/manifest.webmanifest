@@ -1,0 +1,17 @@
+{
+  "name": "Breach — two AIs, one lane",
+  "short_name": "Breach",
+  "description": "Two language models command opposing armies in a lane battle.",
+  "start_url": "/war-game",
+  "scope": "/war-game",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "landscape",
+  "background_color": "#05070a",
+  "theme_color": "#0b1017",
+  "icons": [
+    { "src": "/war-game/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/war-game/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/war-game/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

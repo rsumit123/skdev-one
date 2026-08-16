@@ -6,6 +6,13 @@
 <meta name="theme-color" content="#0b1017">
 <meta name="description" content="Breach — two language models command opposing armies in a lane battle. A benchmark harness that looks like a game.">
 <title>Breach — two AIs, one lane</title>
+<link rel="manifest" href="/war-game/manifest.webmanifest">
+<link rel="icon" href="/war-game/icon-192.png" sizes="192x192">
+<link rel="apple-touch-icon" href="/war-game/icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Breach">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Saira+Condensed:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -18,6 +25,7 @@
   --st:env(safe-area-inset-top,0px);
   --sl:env(safe-area-inset-left,0px);
   --sr:env(safe-area-inset-right,0px);
+  --peek:30px;            /* visible lip of the collapsed sheet */
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%;overflow:hidden;overscroll-behavior:none;background:#05070a}
@@ -59,7 +67,7 @@ canvas#field{display:block;width:100%;height:100%}
   text-transform:uppercase;text-align:center;padding:20px;backdrop-filter:blur(3px);z-index:6}
 
 /* decision overlays */
-.ovcard{position:absolute;bottom:52px;max-width:min(38%,300px);padding:8px 10px;border-radius:9px;
+.ovcard{position:absolute;bottom:calc(var(--peek) + 26px);max-width:min(38%,300px);padding:8px 10px;border-radius:9px;
   border:1px solid;font-family:"Saira Condensed",sans-serif;font-size:13px;line-height:1.4;
   backdrop-filter:blur(7px);box-shadow:0 8px 26px rgba(0,0,0,.6);pointer-events:none;
   opacity:0;transform:translateY(8px);transition:opacity .3s,transform .3s;z-index:5;text-transform:none;
@@ -77,7 +85,8 @@ canvas#field{display:block;width:100%;height:100%}
 .ovlat{opacity:.6;font-size:10px;margin-left:auto}
 .ovcard.b .ovlat{margin-left:0;margin-right:auto}
 
-#ticker{position:absolute;left:0;right:0;bottom:0;padding:7px calc(10px + var(--sr)) calc(7px + var(--sb)) calc(10px + var(--sl));
+/* sits above the collapsed sheet lip, which would otherwise hide the coins */
+#ticker{position:absolute;left:0;right:0;bottom:var(--peek);padding:7px calc(10px + var(--sr)) 7px calc(10px + var(--sl));
   background:linear-gradient(0deg,rgba(5,7,10,.94),rgba(5,7,10,.55),transparent);
   display:flex;align-items:center;gap:10px;pointer-events:none;z-index:4}
 .tcoin{display:flex;align-items:center;gap:5px;font-family:"Saira Condensed",sans-serif;font-size:17px;
@@ -89,7 +98,9 @@ canvas#field{display:block;width:100%;height:100%}
 #tickline{flex:1;text-align:center;font-size:10px;color:#9aa5b1;white-space:nowrap;overflow:hidden;
   text-overflow:ellipsis;text-shadow:0 1px 4px rgba(0,0,0,.9)}
 
-#fabs{position:absolute;right:calc(9px + var(--sr));top:calc(74px + var(--st));display:flex;flex-direction:column;gap:7px;z-index:5}
+#fabs{position:absolute;right:calc(9px + var(--sr));top:calc(74px + var(--st));display:flex;flex-direction:column;
+  gap:7px;z-index:5;max-height:calc(100% - 96px - var(--st) - var(--sb));flex-wrap:wrap-reverse;
+  align-content:flex-end}
 .fab{width:44px;height:44px;border-radius:50%;border:1px solid rgba(255,255,255,.16);
   background:rgba(10,15,21,.8);color:#dfe6ee;font-family:"Saira Condensed",sans-serif;font-size:13px;
   font-weight:700;letter-spacing:.04em;cursor:pointer;backdrop-filter:blur(6px);
@@ -97,14 +108,25 @@ canvas#field{display:block;width:100%;height:100%}
 .fab.primary{background:rgba(224,184,58,.92);color:#20180a;border-color:rgba(255,255,255,.3)}
 .fab:active{transform:scale(.93)}
 
+#nudge{position:absolute;left:50%;bottom:calc(var(--peek) + 30px);transform:translateX(-50%);
+  display:none;z-index:7;width:max-content;max-width:min(86%,440px);text-align:center;
+  background:rgba(224,184,58,.96);color:#20180a;border-radius:8px;padding:7px 11px;
+  font-family:"Saira Condensed",sans-serif;font-size:12.5px;letter-spacing:.02em;
+  box-shadow:0 6px 22px rgba(0,0,0,.55);line-height:1.35}
+#nudge.on{display:block}
+#nudge b{font-weight:700}
+#nudge button{border:0;background:rgba(0,0,0,.22);color:#20180a;border-radius:5px;padding:3px 8px;
+  font-family:inherit;font-size:11px;font-weight:700;cursor:pointer;text-transform:uppercase;
+  margin-left:7px;vertical-align:baseline}
+
 /* ---------- sheet ---------- */
 #sheet{position:fixed;left:0;right:0;bottom:0;height:min(62dvh,420px);background:#0c1117;
   border-top:1px solid var(--rule);border-radius:14px 14px 0 0;z-index:20;
-  display:flex;flex-direction:column;transform:translateY(calc(100% - 30px));
+  display:flex;flex-direction:column;transform:translateY(calc(100% - var(--peek)));
   transition:transform .28s cubic-bezier(.3,.8,.4,1);box-shadow:0 -10px 34px rgba(0,0,0,.55);
   padding-bottom:var(--sb)}
 #sheet.open{transform:translateY(0)}
-#grab{height:30px;display:flex;align-items:center;justify-content:center;flex:none;cursor:grab;touch-action:none}
+#grab{height:var(--peek);display:flex;align-items:center;justify-content:center;flex:none;cursor:grab;touch-action:none}
 #grab::before{content:'';width:44px;height:4px;border-radius:2px;background:rgba(255,255,255,.32)}
 .sheettabs{display:flex;gap:6px;padding:0 12px 8px;flex:none}
 .sheettabs button{flex:1;border:1px solid var(--rule);background:#141a21;color:var(--txt-3);
@@ -192,21 +214,55 @@ body.split #app{flex:0 0 42dvh}
 body.split .ovcard{display:none}
 /* In split mode the battlefield is small, so only the transport controls stay
    on it — setup and units move into the sheet footer where there is room. */
-body.split #fabs{top:auto;bottom:calc(40px + var(--sb));flex-direction:row;gap:6px}
+body.split #fabs{top:auto;bottom:38px;flex-direction:row;gap:6px;max-height:none}
 body.split .fab{width:34px;height:34px;font-size:11px}
 body.split #btnSetupOpen,body.split #btnUnitsOpen{display:none}
-body.split #ticker{padding-bottom:7px}
-.footonly{display:none;padding:9px 11px}
-body.split .footonly{display:block}
+body.split #ticker{bottom:0}
+body.split #nudge{display:none}
+/* Setup lives in two places on purpose — a browser bar can push the floating
+   buttons off a short screen, and Setup must never become unreachable. */
+.footonly{display:block;padding:9px 11px}
 @media (max-width:560px){
   .tcoin small,.tcoin .comp{display:none}
   #tickline{font-size:9.5px}
 }
-@media (max-height:430px){
-  .hpname{width:70px;font-size:11px}
-  .ovcard{bottom:46px;font-size:12px;padding:6px 8px}
-  .fab{width:38px;height:38px;font-size:12px}
-  #fabs{top:calc(66px + var(--st));gap:6px}
+/* Android/iOS landscape with browser chrome leaves very little height. */
+@media (max-height:470px){
+  .hpstack{max-width:min(50%,240px)}
+  .hpname{width:64px;font-size:10px}
+  .hpbar{height:7px}
+  .hpnum{font-size:9px;width:27px}
+  .clockwrap span{font-size:15px}
+  .clockwrap small{font-size:7.5px}
+  #hudTop{top:calc(4px + var(--st))}
+  #fabs{top:calc(44px + var(--st));gap:5px;max-height:calc(100% - 62px - var(--st) - var(--sb))}
+  .fab{width:32px;height:32px;font-size:11px}
+  .ovcard{bottom:calc(var(--peek) + 12px);font-size:11px;padding:5px 7px;max-width:min(33%,230px);
+    max-height:52%;overflow:hidden;border-radius:7px}
+  .ovh{font-size:8.5px;margin-bottom:2px}
+  .ovq{margin-top:3px}
+  .ovq i{font-size:8.5px}
+  .tcoin{font-size:14px}
+  #ticker{padding-top:4px}
+  #think{top:calc(38px + var(--st));font-size:11px;padding:5px 10px}
+  #sheet{height:min(86dvh,300px)}
+  #banner{font-size:21px}
+}
+/* Below this there is genuinely no room for overlay cards — the ticker and
+   the sheet carry the reasoning instead of covering the battlefield. */
+@media (max-height:360px){
+  :root{--peek:20px}
+  .ovcard{display:none}
+  #fabs{flex-direction:row;flex-wrap:wrap;align-content:flex-start;top:auto;
+    bottom:calc(var(--peek) + 24px);right:calc(5px + var(--sr));gap:4px;max-height:none}
+  .fab{width:29px;height:29px;font-size:10px}
+  .hpstack{max-width:min(42%,180px)}
+  .hpname{width:50px;font-size:9px}
+  .hpnum{font-size:8px;width:22px}
+  .clockwrap span{font-size:13px}
+  .clockwrap small{display:none}
+  #nudge{bottom:calc(var(--peek) + 56px);font-size:11.5px;padding:6px 9px;max-width:94%}
+  #grab::before{width:34px;height:3px}
 }
 </style>
 </head>
@@ -249,10 +305,17 @@ body.split .footonly{display:block}
 
   <div id="fabs">
     <button class="fab primary" id="btnPlay">Start</button>
+    <button class="fab" id="btnFull" title="Fullscreen">&#9974;</button>
     <button class="fab" id="btnSpeed">1×</button>
     <button class="fab" id="btnReset2">&#8635;</button>
     <button class="fab" id="btnSetupOpen">&#9881;</button>
     <button class="fab" id="btnUnitsOpen">&#8505;</button>
+  </div>
+
+  <div id="nudge">
+    <b>Tap &#9974; for fullscreen</b> — your browser bar is eating the screen.
+    <span id="nudgeInstall">Or install it: menu &rsaquo; Add to Home screen.</span>
+    <button id="nudgeX">Got it</button>
   </div>
 </div>
 
@@ -1244,6 +1307,7 @@ function applyMode(){
   document.getElementById('rotate').style.display=gate?'flex':'none';
   document.body.classList.toggle('split',portrait&&narrow&&FORCED);
   if(!gate) setTimeout(()=>{fit();draw();},60);
+  if(window.checkNudge) window.checkNudge();
 }
 document.getElementById('btnAnyway').onclick=()=>{FORCED=true;applyMode();};
 window.matchMedia('(orientation: portrait)').addEventListener('change',applyMode);
@@ -1273,6 +1337,58 @@ const modal=(id,v)=>document.getElementById(id).classList.toggle('on',v);
 ['btnSetupOpen','btnSetupOpen2'].forEach(i=>document.getElementById(i).onclick=()=>modal('mSetup',true));
 ['btnUnitsOpen','btnUnitsOpen2'].forEach(i=>document.getElementById(i).onclick=()=>modal('mUnits',true));
 document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>modal(b.dataset.close,false));
+
+/* ----- fullscreen -----
+   Installed as a PWA the manifest handles this, but most people just open the
+   URL, and on Android the browser bar can eat well over half a landscape
+   screen. Fullscreen API reclaims it in one tap. iOS Safari has no fullscreen
+   for web pages at all — there the Add-to-Home-Screen route is the only fix,
+   so the button hides itself rather than lying. */
+const CAN_FULL = !!(document.documentElement.requestFullscreen||document.documentElement.webkitRequestFullscreen);
+async function toggleFull(){
+  const el=document.documentElement;
+  try{
+    if(!document.fullscreenElement&&!document.webkitFullscreenElement){
+      const req=el.requestFullscreen||el.webkitRequestFullscreen;
+      await req.call(el,{navigationUI:'hide'});
+      if(screen.orientation&&screen.orientation.lock){
+        try{ await screen.orientation.lock('landscape'); }catch(e){}
+      }
+    }else{
+      if(screen.orientation&&screen.orientation.unlock) try{ screen.orientation.unlock(); }catch(e){}
+      await (document.exitFullscreen||document.webkitExitFullscreen).call(document);
+    }
+  }catch(e){}
+  setTimeout(()=>{fit();draw();applyMode();},240);
+}
+const btnFull=document.getElementById('btnFull');
+if(CAN_FULL) btnFull.onclick=toggleFull; else btnFull.style.display='none';
+document.addEventListener('fullscreenchange',()=>{
+  btnFull.innerHTML=document.fullscreenElement?'&#10063;':'&#9974;';
+  setTimeout(()=>{fit();draw();},200);
+});
+
+/* One-time nudge, only when the viewport is actually being squeezed. */
+(function(){
+  const n=document.getElementById('nudge');
+  let dismissed=false;
+  try{ dismissed=localStorage.getItem('breach.nudge')==='1'; }catch(e){}
+  document.getElementById('nudgeX').onclick=()=>{
+    n.classList.remove('on');
+    try{ localStorage.setItem('breach.nudge','1'); }catch(e){}
+    dismissed=true;
+  };
+  if(!CAN_FULL) document.getElementById('nudgeInstall').textContent=
+    'Add to Home Screen from the share menu for a fullscreen app.';
+  window.checkNudge=()=>{
+    const cramped = innerHeight<430 && innerWidth>innerHeight
+      && !document.fullscreenElement
+      && !matchMedia('(display-mode: fullscreen)').matches
+      && !matchMedia('(display-mode: standalone)').matches;
+    n.classList.toggle('on', cramped && !dismissed);
+  };
+  setTimeout(window.checkNudge,900);
+})();
 
 /* ----- transport ----- */
 document.getElementById('btnPlay').onclick=e=>{
