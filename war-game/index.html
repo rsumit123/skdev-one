@@ -73,6 +73,18 @@ canvas#field{display:block;width:100%;height:100%}
   opacity:0;transform:translateY(8px);transition:opacity .3s,transform .3s;z-index:5;text-transform:none;
   letter-spacing:.01em}
 .ovcard.on{opacity:1;transform:translateY(0)}
+.ovcard.flash{animation:ovflash .55s ease-out}
+@keyframes ovflash{0%{transform:translateY(5px) scale(.985);filter:brightness(1.5)}100%{transform:none;filter:none}}
+
+/* Fallback reasoning strip for viewports too short for the cards — the
+   reasoning must always be somewhere on screen, never nowhere. */
+#mini{position:absolute;left:0;right:0;bottom:calc(var(--peek) + 22px);display:none;
+  flex-direction:column;gap:1px;padding:0 calc(8px + var(--sr)) 0 calc(8px + var(--sl));
+  pointer-events:none;z-index:4}
+.minirow{font-size:9.5px;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  text-shadow:0 1px 4px rgba(0,0,0,.95);color:#cfd7e0}
+.minirow b{font-family:"Saira Condensed",sans-serif;letter-spacing:.05em;font-weight:700;margin-right:4px}
+.minirow.b{text-align:right}
 .ovcard.a{left:calc(9px + var(--sl));background:rgba(58,16,9,.8);border-color:var(--A);color:#f8e2da}
 .ovcard.b{right:calc(9px + var(--sr));background:rgba(9,32,58,.8);border-color:var(--B);color:#d9e9f8;text-align:right}
 .ovh{font-weight:700;font-size:10px;letter-spacing:.13em;text-transform:uppercase;margin-bottom:3px;
@@ -125,6 +137,7 @@ canvas#field{display:block;width:100%;height:100%}
   display:flex;flex-direction:column;transform:translateY(calc(100% - var(--peek)));
   transition:transform .28s cubic-bezier(.3,.8,.4,1);box-shadow:0 -10px 34px rgba(0,0,0,.55);
   padding-bottom:var(--sb)}
+#sheet.half{transform:translateY(58%)}
 #sheet.open{transform:translateY(0)}
 #grab{height:var(--peek);display:flex;align-items:center;justify-content:center;flex:none;cursor:grab;touch-action:none}
 #grab::before{content:'';width:44px;height:4px;border-radius:2px;background:rgba(255,255,255,.32)}
@@ -253,6 +266,7 @@ body.split #nudge{display:none}
 @media (max-height:360px){
   :root{--peek:20px}
   .ovcard{display:none}
+  #mini{display:flex}
   #fabs{flex-direction:row;flex-wrap:wrap;align-content:flex-start;top:auto;
     bottom:calc(var(--peek) + 24px);right:calc(5px + var(--sr));gap:4px;max-height:none}
   .fab{width:29px;height:29px;font-size:10px}
@@ -292,6 +306,11 @@ body.split #nudge{display:none}
 
   <div class="ovcard a" id="ovA"></div>
   <div class="ovcard b" id="ovB"></div>
+
+  <div id="mini">
+    <div class="minirow a" id="miniA"></div>
+    <div class="minirow b" id="miniB"></div>
+  </div>
 
   <div id="ticker">
     <span class="tcoin" style="color:#e8845e">
@@ -406,6 +425,7 @@ body.split #nudge{display:none}
     </div>
     <div class="setrow"><label class="inline" for="seed">Seed</label><input type="number" id="seed" value="42" style="width:88px">
       <button class="act" id="btnReset">Reset</button><button class="act" id="btnExport">Save log</button></div>
+    <label class="chk"><input type="checkbox" id="labels" checked> Show unit type badges (I / G / R / A / T)</label>
     <label class="chk"><input type="checkbox" id="lowfx"> Reduce effects (helps older phones)</label>
   </div>
 </div>
@@ -757,27 +777,35 @@ function paintThink(){
   });
   const el=document.getElementById('think');
   const who=[0,1].filter(s=>THINK[s]);
-  if(!AWAIT||!who.length){el.style.display='none';return;}
+  if(!AWAIT||!who.length){el.style.display='none';THINK_T0=0;return;}
+  if(!THINK_T0) THINK_T0=performance.now();
   el.style.display='flex';
+  // a live counter so a 20s model call reads as "working", not "frozen"
+  const secs=((performance.now()-THINK_T0)/1000).toFixed(1);
   el.innerHTML='<span class="spin on"></span>'+
     who.map(s=>`<span style="color:${SIDE[s].col}">${SIDE[s].name}</span>`).join(' &amp; ')+
-    (GATED?' rate-limited, waiting…':' thinking…');
+    (GATED?' rate-limited, waiting…':' thinking…')+
+    `<b style="margin-left:2px;color:#e0b83a;font-weight:700">${secs}s</b>`;
 }
+let THINK_T0=0;
 
 /* Decision arrives: overlay card on the battlefield (spectacle) AND a
    permanent entry in the sheet (the record). Never only transient. */
+/* These stay up permanently and are simply replaced on the next decision —
+   they used to fade after 6.5s, which meant looking away lost the reasoning
+   entirely. A brief flash marks the update instead. */
 const OVT=[null,null];
 function showOverlay(e){
   const el=document.getElementById(e.s===0?'ovA':'ovB');
   if(!el) return;
-  const q=e.queue.map(x=>x==='eco'?'ECO':UNITS[x].name).join(' · ')||'—';
   el.innerHTML=`<div class="ovh"><span style="color:${SIDE[e.s].col}">${SIDE[e.s].name}</span>
-      ${e.ms?`<span class="ovlat">${Math.round(e.ms)}ms</span>`:''}</div>
+      ${e.ms?`<span class="ovlat">${(e.ms/1000).toFixed(1)}s</span>`:''}</div>
     ${(e.why||'').replace(/</g,'&lt;')}
-    <div class="ovq">${e.queue.map(x=>`<i>${x==='eco'?'eco':x}</i>`).join('')||'<i>—</i>'}</div>`;
+    <div class="ovq">${e.queue.map(x=>`<i>${x==='eco'?'eco':x}</i>`).join('')||'<i>holding</i>'}</div>`;
   el.classList.add('on');
-  clearTimeout(OVT[e.s]);
-  OVT[e.s]=setTimeout(()=>el.classList.remove('on'),6500);
+  el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
+  const mini=document.getElementById(e.s===0?'miniA':'miniB');
+  if(mini) mini.innerHTML=`<b style="color:${SIDE[e.s].col}">${SIDE[e.s].name}</b> ${(e.why||'').replace(/</g,'&lt;')}`;
 }
 
 function pushFeed(e){
@@ -807,8 +835,8 @@ function pushFeed(e){
    ============================================================ */
 const cv=document.getElementById('field'), cx=cv.getContext('2d');
 const HORIZON=.38, ROWS=5, PADF=.06;
-let DIM={w:0,h:0}, BG=document.createElement('canvas'), bgx=BG.getContext('2d'), VIG=null;
-let PART=[], DMGN=[], DECAL=[], SHAKE=0, LOWFX=false;
+let DIM={w:0,h:0}, BG=document.createElement('canvas'), bgx=BG.getContext('2d'), VIG=null, VIGRED=null;
+let PART=[], DMGN=[], DECAL=[], SHAKE=0, LOWFX=false, LABELS=true;
 let PREVU=new Map(), ACC=new Map(), PREVBASE=[BASE_HP,BASE_HP], LASTRT=0, SMOKET=0;
 
 /* The playable ground is a band, not the whole lower half: the top of the
@@ -841,6 +869,8 @@ function fit(){
   buildScene(w,h);
   VIG=cx.createRadialGradient(w/2,h*.52,Math.min(w,h)*.46,w/2,h*.52,Math.max(w,h)*.82);
   VIG.addColorStop(0,'rgba(0,0,0,0)'); VIG.addColorStop(1,'rgba(0,0,0,.34)');
+  VIGRED=cx.createRadialGradient(w/2,h*.52,Math.min(w,h)*.34,w/2,h*.52,Math.max(w,h)*.72);
+  VIGRED.addColorStop(0,'rgba(190,40,20,0)'); VIGRED.addColorStop(1,'rgba(190,40,20,1)');
   return DIM;
 }
 
@@ -961,45 +991,100 @@ function shade(g,x,y,wd,ht,top,bot){
   gr.addColorStop(0,top); gr.addColorStop(1,bot);
   g.fillStyle=gr; g.fillRect(x,y,wd,ht);
 }
-function soldier(g,col,dark,ph,firing,variant){
+/* Each type needs a silhouette you can read at phone scale, not just a
+   different gun. Rifleman stands tall, gunner is squat behind a drum-fed
+   MG, raider leans hard forward, AT kneels with a tube angled skyward.
+   Gear also carries a fixed per-type accent colour. */
+const TYPEACC={inf:'#e3e8ee',gun:'#5fd07a',mob:'#f0b93f',at:'#ab99ea',tank:'#e8916a'};
+
+function muzzle(g,mx,my,r){
+  const fg=g.createRadialGradient(mx,my,0,mx,my,r);
+  fg.addColorStop(0,'rgba(255,255,255,.96)'); fg.addColorStop(.4,'rgba(255,214,122,.82)');
+  fg.addColorStop(1,'rgba(255,150,46,0)');
+  g.fillStyle=fg; g.beginPath(); g.arc(mx,my,r,0,7); g.fill();
+}
+function legs(g,ph,spread){
   const sw=Math.sin(ph)*3.4;
   g.fillStyle='#2f2a20';
-  g.beginPath(); g.moveTo(-2.5,-9); g.lineTo(-2.5+sw,0); g.lineTo(.5+sw,0); g.lineTo(1,-9); g.fill();
-  g.beginPath(); g.moveTo(1.5,-9); g.lineTo(1.5-sw,0); g.lineTo(4.5-sw,0); g.lineTo(4,-9); g.fill();
-  // torso
-  const lean = variant==='run' ? 4 : 0;
-  g.save(); if(lean) g.translate(lean*.5,0), g.rotate(-.13);
+  g.beginPath(); g.moveTo(-2.5,-9); g.lineTo(-2.5+sw-spread,0); g.lineTo(.5+sw-spread,0); g.lineTo(1,-9); g.fill();
+  g.beginPath(); g.moveTo(1.5,-9); g.lineTo(1.5-sw+spread,0); g.lineTo(4.5-sw+spread,0); g.lineTo(4,-9); g.fill();
+}
+function head(g,dark,acc,y,r){
+  g.fillStyle='#c98b63'; g.beginPath(); g.arc(0,y,r,0,7); g.fill();
+  g.fillStyle=acc; g.beginPath(); g.arc(0,y-1.5,r*1.11,Math.PI,0); g.fill();
+  g.fillRect(-r*1.14,y-1.5,r*2.28,2.1);
+  g.fillStyle='rgba(0,0,0,.22)'; g.fillRect(-r*1.14,y-1.5,r*.6,2.1);
+  g.fillStyle=dark; g.fillRect(-r*1.14,y-1.5,r*2.28,.9);
+}
+
+function rifleman(g,col,dark,ph,firing){
+  legs(g,ph,0);
   shade(g,-6,-24,13,16,col,dark);
   g.fillStyle='rgba(0,0,0,.28)'; g.fillRect(-6,-24,4,16);
   g.fillStyle='#6b4a2a'; g.fillRect(-7,-18,15,4.5);
-  // head + helmet
-  g.fillStyle='#c98b63'; g.beginPath(); g.arc(0,-29.5,5.6,0,7); g.fill();
-  g.fillStyle=dark; g.beginPath(); g.arc(0,-31,6.2,Math.PI,0); g.fill();
-  g.fillRect(-6.4,-31,12.8,2.1);
-  g.restore();
-  // weapon
+  head(g,dark,TYPEACC.inf,-29.5,5.6);
   const rec=firing?-2.4:0;
-  g.fillStyle='#2b2b2b';
-  if(variant==='mg'){
-    g.fillRect(2+rec,-21,22,3.2);
-    g.fillRect(6+rec,-18,3,6); g.fillRect(12+rec,-18,3,6);   // bipod
-    g.fillRect(19+rec,-22.4,6,1.6);
-  }else if(variant==='at'){
-    g.save(); g.rotate(-.16);
-    g.fillRect(-4+rec,-26,30,4.6);
-    g.fillStyle='#3f3f3f'; g.fillRect(20+rec,-27.4,7,7.4);
-    g.restore();
-  }else{
-    g.fillRect(2+rec,-20,19,2.6);
-    g.fillRect(17+rec,-21.4,5,1.6);
-  }
-  if(firing){
-    const mx = variant==='at'?30:variant==='mg'?26:23, my = variant==='at'?-28:-20.5;
-    const fg=g.createRadialGradient(mx,my,0,mx,my,9);
-    fg.addColorStop(0,'rgba(255,255,255,.95)'); fg.addColorStop(.4,'rgba(255,214,122,.8)');
-    fg.addColorStop(1,'rgba(255,150,46,0)');
-    g.fillStyle=fg; g.beginPath(); g.arc(mx,my,9,0,7); g.fill();
-  }
+  g.fillStyle='#2b2b2b'; g.fillRect(2+rec,-20,19,2.6); g.fillRect(17+rec,-21.4,5,1.6);
+  g.fillStyle='#54402a'; g.fillRect(-1+rec,-19.4,5,3.4);   // wooden stock
+  if(firing) muzzle(g,23+rec,-20.5,9);
+}
+
+function gunner(g,col,dark,ph,firing){
+  // squat and wide — reads as a heavy weapons team even at 20px tall
+  const sw=Math.sin(ph)*2.2;
+  g.fillStyle='#2f2a20';
+  g.beginPath(); g.moveTo(-9,-7); g.lineTo(-13+sw,0); g.lineTo(-8+sw,0); g.lineTo(-4,-7); g.fill();
+  g.beginPath(); g.moveTo(-1,-8); g.lineTo(-3,0); g.lineTo(3,0); g.lineTo(4,-8); g.fill();
+  shade(g,-9,-19,15,12,col,dark);
+  g.fillStyle='rgba(0,0,0,.3)'; g.fillRect(-9,-19,5,12);
+  g.fillStyle='#6b4a2a'; g.fillRect(-10,-14,17,4);
+  head(g,dark,TYPEACC.gun,-23.5,5.3);
+  const rec=firing?-3:0;
+  g.fillStyle='#2b2b2b'; g.fillRect(0+rec,-17,30,3.6);           // long barrel
+  g.fillStyle='#3a3a3a'; g.fillRect(24+rec,-18.6,7,2);
+  g.fillStyle='#43483c'; g.beginPath(); g.arc(4+rec,-12.4,4.6,0,7); g.fill();  // drum mag
+  g.fillStyle='#2b2b2b'; g.beginPath(); g.arc(4+rec,-12.4,1.8,0,7); g.fill();
+  g.strokeStyle='#2b2b2b'; g.lineWidth=1.8;                       // bipod
+  g.beginPath(); g.moveTo(19,-14); g.lineTo(15,0); g.moveTo(19,-14); g.lineTo(24,0); g.stroke();
+  if(firing) muzzle(g,33+rec,-15.2,11);
+}
+
+function raider(g,col,dark,ph,firing){
+  g.save(); g.rotate(-.30); g.translate(2,1);                     // hard forward lean
+  const sw=Math.sin(ph)*5.2;
+  g.fillStyle='#2f2a20';
+  g.beginPath(); g.moveTo(-2.5,-9); g.lineTo(-4+sw,1); g.lineTo(0+sw,1); g.lineTo(1,-9); g.fill();
+  g.beginPath(); g.moveTo(1.5,-9); g.lineTo(3-sw,1); g.lineTo(7-sw,1); g.lineTo(4,-9); g.fill();
+  shade(g,-6,-23,12,15,col,dark);
+  g.fillStyle='rgba(0,0,0,.26)'; g.fillRect(-6,-23,4,15);
+  head(g,dark,TYPEACC.mob,-28,5.2);
+  g.fillStyle=TYPEACC.mob;                                        // trailing scarf
+  g.beginPath(); g.moveTo(-4,-25); g.lineTo(-15-sw*.6,-27+sw*.4); g.lineTo(-14-sw*.6,-23+sw*.4);
+  g.lineTo(-4,-21); g.closePath(); g.fill();
+  const rec=firing?-2:0;
+  g.fillStyle='#2b2b2b'; g.fillRect(2+rec,-19,12,2.6);            // stubby SMG
+  if(firing) muzzle(g,16+rec,-19,7);
+  g.restore();
+  g.fillStyle='rgba(210,200,170,.3)';                             // speed streaks
+  for(let i=0;i<3;i++) g.fillRect(-16-i*7,-16+i*5,6,1.6);
+}
+
+function atTeam(g,col,dark,ph,firing){
+  g.fillStyle='#2f2a20';                                          // kneeling
+  g.beginPath(); g.moveTo(-7,-7); g.lineTo(-11,0); g.lineTo(-3,0); g.lineTo(-2,-7); g.fill();
+  g.fillRect(1,-9,4,9);
+  shade(g,-7,-21,13,13,col,dark);
+  g.fillStyle='rgba(0,0,0,.28)'; g.fillRect(-7,-21,4,13);
+  head(g,dark,TYPEACC.at,-25.5,5.4);
+  const rec=firing?-3.4:0;
+  g.save(); g.rotate(-.29);                    // rests on the shoulder, clear of the head
+  g.fillStyle='#3f4436'; g.fillRect(-8+rec,-19.5,34,5.2);
+  g.fillStyle=TYPEACC.at; g.fillRect(11+rec,-19.5,7,5.2);         // warhead band
+  g.fillStyle='#2b2b2b'; g.fillRect(-12+rec,-20.8,6,7.8);         // back-blast cone
+  if(firing) muzzle(g,31+rec,-17,11);
+  g.restore();
+  if(firing){ g.fillStyle='rgba(140,130,120,.5)';
+    g.beginPath(); g.ellipse(-20,-12,9,6,0,0,7); g.fill(); }
 }
 function tank(g,col,dark,ph,firing){
   const rec=firing?-3:0;
@@ -1037,12 +1122,10 @@ function tank(g,col,dark,ph,firing){
   }
 }
 const PAINT={
-  inf:(g,c,d,p,f)=>soldier(g,c,d,p,f,'rifle'),
-  gun:(g,c,d,p,f)=>soldier(g,c,d,p,f,'mg'),
-  mob:(g,c,d,p,f)=>soldier(g,c,d,p*1.7,f,'run'),
-  at :(g,c,d,p,f)=>soldier(g,c,d,p,f,'at'),
-  tank:(g,c,d,p,f)=>tank(g,c,d,p,f),
+  inf:rifleman, gun:gunner, at:atTeam, tank:tank,
+  mob:(g,c,d,p,f)=>raider(g,c,d,p*1.7,f),
 };
+const TOPY={inf:40,gun:32,mob:38,at:34,tank:46};   // where the HP pip sits per type
 const SIDECOL=[{body:'#a83f26',dark:'#6d2515'},{body:'#1f5390',dark:'#123152'}];
 
 /* ---------- fort ---------- */
@@ -1175,13 +1258,25 @@ function draw(now){
     if(moving&&!LOWFX&&Math.random()<dt*7)
       puff(px-dir*10*sc,gy,1,'176,166,132',9);
     // hp pip
-    const hf=Math.max(0,u.hp/u.mx);
+    const hf=Math.max(0,u.hp/u.mx), topy=TOPY[u.type]||40;
     if(hf<1){
-      const bw=(u.type==='tank'?36:18)*sc, by=gy-(u.type==='tank'?46:40)*sc;
+      const bw=(u.type==='tank'?36:18)*sc, by=gy-topy*sc;
       cx.fillStyle='rgba(4,7,11,.66)';
       cx.beginPath(); cx.roundRect(px-bw/2,by,bw,3.4*sc,1.7*sc); cx.fill();
       cx.fillStyle=hf>.5?'#5fbf6a':hf>.25?'#d9a72e':'#c9543a';
       cx.beginPath(); cx.roundRect(px-bw/2,by,bw*hf,3.4*sc,1.7*sc); cx.fill();
+    }
+    // type badge — the reliable way to tell a rifleman from a gunner at speed
+    if(LABELS&&sc>.62){
+      const bw=13.5*sc, bh=11*sc, by=gy-(topy+13)*sc;
+      cx.fillStyle='rgba(6,9,13,.85)';
+      cx.beginPath(); cx.roundRect(px-bw/2,by,bw,bh,3*sc); cx.fill();
+      cx.strokeStyle=TYPEACC[u.type]; cx.lineWidth=1.1*sc;
+      cx.beginPath(); cx.roundRect(px-bw/2,by,bw,bh,3*sc); cx.stroke();
+      cx.fillStyle=TYPEACC[u.type];
+      cx.font=`700 ${8.6*sc}px "Saira Condensed",sans-serif`;
+      cx.textAlign='center'; cx.textBaseline='middle';
+      cx.fillText(U.g,px,by+bh/2+.6*sc);
     }
     // tracer
     if(firing&&!LOWFX&&Math.random()<dt*(u.type==='tank'?4:9)){
@@ -1236,6 +1331,13 @@ function draw(now){
   });
 
   cx.fillStyle=VIG; cx.fillRect(0,0,w,h);
+  // a base in danger should feel like it — pulsing red edges under 25%
+  const low=Math.min(S.hp[0],S.hp[1])/BASE_HP;
+  if(low<.25&&!S.over){
+    const p=(Math.sin(rt/230)+1)/2, urgency=1-low/.25;
+    cx.save(); cx.globalAlpha=(.10+.20*p)*urgency;
+    cx.fillStyle=VIGRED; cx.fillRect(0,0,w,h); cx.restore();
+  }
   cx.restore();
 }
 const DEADPOS=new Map();
@@ -1248,7 +1350,18 @@ function paintHUD(){
     document.getElementById('hp'+k).style.width=Math.max(0,S.hp[s]/BASE_HP*100)+'%';
     document.getElementById('hp'+k+'n').textContent=Math.max(0,Math.round(S.hp[s]));
     document.getElementById('coin'+k).textContent=Math.floor(S.coins[s]);
-    document.getElementById('sub'+k).textContent=`${(S.inc[s]*RAMP(S.t)).toFixed(1)}/s · eco ${S.eco[s]}/${ECO_MAX}`;
+    /* An unaffordable item at the head of the queue blocks everything behind
+       it — a model that queues eco early can build nothing for half a minute.
+       That was invisible before; say it out loud. */
+    const sub=document.getElementById('sub'+k), head=S.q[s]&&S.q[s][0];
+    const cost=head==='eco'?ECO_COST:(head&&UNITS[head]?UNITS[head].cost:0);
+    if(head&&S.coins[s]<cost){
+      sub.textContent=`saving ${Math.floor(S.coins[s])}/${cost} for ${head==='eco'?'ECO':UNITS[head].name}`;
+      sub.style.color='#e0b83a';
+    }else{
+      sub.textContent=`${(S.inc[s]*RAMP(S.t)).toFixed(1)}/s · eco ${S.eco[s]}/${ECO_MAX}`;
+      sub.style.color='';
+    }
     const comp=document.getElementById('comp'+k); comp.innerHTML='';
     Object.keys(UNITS).forEach(ty=>{
       const n=S.units.filter(u=>u.s===s&&u.type===ty).length;
@@ -1273,7 +1386,7 @@ function drawLog(){
 
 function buildTable(){
   document.getElementById('utable').innerHTML=Object.entries(UNITS).map(([k,u])=>
-    `<tr><td class="n"><span class="glyph" style="background:${u.col};color:#f0f2ec">${u.g}</span>${u.name}</td>
+    `<tr><td class="n"><span class="glyph" style="background:${TYPEACC[k]};color:#10151b">${u.g}</span>${u.name}</td>
      <td>${u.cost}</td><td>${u.hp}</td><td>${u.dps}${u.splash?'*':''}</td><td>${u.spd}</td><td>${u.rng}</td></tr>`).join('')
      +`<tr><td colspan="6" style="color:#5c6772;font-size:10.5px;padding-top:9px">* hits every enemy in range</td></tr>`;
 }
@@ -1314,16 +1427,26 @@ window.matchMedia('(orientation: portrait)').addEventListener('change',applyMode
 window.addEventListener('resize',()=>{fit();draw();applyMode();});
 
 /* ----- sheet ----- */
+/* Three states: peek → half (live log visible while you watch) → full.
+   Tapping cycles; dragging jumps straight to the end you dragged toward. */
 const sheet=document.getElementById('sheet');
-function openSheet(v){ sheet.classList.toggle('open', v!==undefined?v:!sheet.classList.contains('open')); }
+let SHEET=0;
+function setSheet(n){
+  SHEET=Math.max(0,Math.min(2,n));
+  sheet.classList.toggle('half',SHEET===1);
+  sheet.classList.toggle('open',SHEET===2);
+  try{ localStorage.setItem('breach.sheet',String(SHEET)); }catch(e){}
+}
+function openSheet(v){ setSheet(v===true?2:v===false?0:(SHEET+1)%3); }
 document.getElementById('grab').onclick=()=>openSheet();
 let dragY=null;
 document.getElementById('grab').addEventListener('pointerdown',e=>{dragY=e.clientY;});
 window.addEventListener('pointerup',e=>{
   if(dragY===null) return;
   const dy=e.clientY-dragY; dragY=null;
-  if(Math.abs(dy)>26) openSheet(dy<0);
+  if(Math.abs(dy)>26) setSheet(dy<0?2:0);
 });
+try{ const s0=localStorage.getItem('breach.sheet'); if(s0!==null) setSheet(+s0); }catch(e){}
 document.querySelectorAll('.sheettabs button').forEach(b=>b.onclick=()=>{
   TAB=b.dataset.s==='log'?'log':'battle';
   document.querySelectorAll('.sheettabs button').forEach(x=>x.classList.toggle('on',x===b));
@@ -1408,13 +1531,15 @@ const reset=()=>{newGame(+document.getElementById('seed').value||1);
   const db=document.getElementById('debrief'); if(db){db.style.display='none';db.innerHTML='';}
   PART=[];DMGN=[];DECAL=[];SHAKE=0;PREVU.clear();ACC.clear();DEADPOS.clear();
   PREVBASE=[BASE_HP,BASE_HP];
-  ['ovA','ovB'].forEach(i=>document.getElementById(i).classList.remove('on'));
+  ['ovA','ovB'].forEach(i=>{const e=document.getElementById(i);e.classList.remove('on','flash');e.innerHTML='';});
+  ['miniA','miniB'].forEach(i=>document.getElementById(i).innerHTML='');
   document.getElementById('tickline').textContent='Match reset — press play.';
   document.getElementById('btnPlay').textContent='▶';
   refreshNames();fit();draw();paintHUD();drawLog();};
 document.getElementById('btnReset').onclick=reset;
 document.getElementById('btnReset2').onclick=reset;
 document.getElementById('lowfx').onchange=e=>{LOWFX=e.target.checked;};
+document.getElementById('labels').onchange=e=>{LABELS=e.target.checked;draw(performance.now());};
 
 const saveLog=()=>{
   const payload={
