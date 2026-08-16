@@ -79,6 +79,27 @@ benchmark latency as much as intelligence and destroy reproducibility. I also re
 pipelining (prefetching one interval early) because it feeds the model a 4-second-stale
 board, degrading the exact thing being measured.
 
+### Prompt versions
+
+Saved logs carry `promptVersion`. **v1 and v2 runs are not comparable.**
+
+- **v1** — original contract. Analysis of two real v1 matches (GPT-5 Nano vs Gemini 2.5
+  Lite, Granite 4.0 vs Nova Micro) found: only 6–39% of decisions cited any concrete
+  quantity, 35–75% of decisions put an unaffordable item at the head of the queue, and
+  models named a unit then failed to queue it 10–29% of the time. Across both matches
+  **zero tanks, AT teams or raiders were ever built** — neither side exceeded 37 coins
+  against a tank's 45 — so the tank → gun → at cycle was never exercised at all.
+- **v2** — adds three things the v1 prompt lacked:
+  1. `costs` and `affordableNow`, plus an explicit statement that an unaffordable item
+     **blocks everything behind it** and that saving requires re-queueing the same item
+     first across several decisions.
+  2. A feedback loop — `yourLastQueue`, `builtSinceYourLastDecision`,
+     `unspentFromLastQueue` — so a model can notice its tank never spawned.
+  3. `counterHint` computed from the actual enemy composition rather than one static line.
+
+The scripted `agent()` never sees the prompt, so the headless mirror baseline is
+unaffected by prompt changes and still reads 30/30, median 182s, 0 timeouts.
+
 ### Agent contract
 
 Each call sends fogless full state: coins, income, eco level, both base HPs, every unit

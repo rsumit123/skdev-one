@@ -699,6 +699,9 @@ function agent(St,s){
    model is never punished for being slow.
    ------------------------------------------------------------ */
 const CMD=[{kind:'script',model:''},{kind:'script',model:''}];
+// what each side submitted last time, and what actually spawned since — fed
+// back into the next prompt so a model can notice its tank never appeared
+let LASTQ=[[],[]], SINCE=[{},{}];
 const MOCK={lat:[900,5000],fail:0.06,bad:0.10};
 let AWAIT=false, THINK=[false,false];
 const STATS=[{calls:0,fail:0,bad:0,ms:0},{calls:0,fail:0,bad:0,ms:0}];
@@ -760,6 +763,7 @@ async function runDecisions(){
   const need = CMD.some(c=>c.kind!=='script');
   if(!need){
     for(let s=0;s<2;s++){const d=sanitize(agent(S,s));S.q[s]=d.queue;
+      LASTQ[s]=[...d.queue]; SINCE[s]={};
       const e={t:S.t,s,queue:[...d.queue],why:d.why}; LOG.push(e); pushFeed(e);}
     S.next+=DECIDE; return;
   }
@@ -767,6 +771,7 @@ async function runDecisions(){
   const [a,b]=await Promise.all([decide(0),decide(1)]);
   [a,b].forEach((d,s)=>{
     S.q[s]=d.queue;
+    LASTQ[s]=[...d.queue]; SINCE[s]={};   // reset the window after the view was read
     const e={t:S.t,s,queue:[...d.queue],why:d.why,ms:d.ms,bad:d.bad,failed:d.failed};
     LOG.push(e); pushFeed(e);
   });
@@ -1443,8 +1448,10 @@ function frame(ts){
     while(acc>=.05&&!AWAIT&&!S.over&&guard++<400){
       if(S.t>=S.next){ runDecisions(); break; }
       const b4=S.nid; step(.05); acc-=.05;
-      if(S.nid>b4) for(const u of S.units)
-        if(u.id>=b4) BUILT[u.s][u.type]=(BUILT[u.s][u.type]||0)+1;
+      if(S.nid>b4) for(const u of S.units) if(u.id>=b4){
+        BUILT[u.s][u.type]=(BUILT[u.s][u.type]||0)+1;
+        SINCE[u.s][u.type]=(SINCE[u.s][u.type]||0)+1;
+      }
       PEAK[0]=Math.max(PEAK[0],S.coins[0]); PEAK[1]=Math.max(PEAK[1],S.coins[1]);
     }
   }
@@ -1572,7 +1579,7 @@ const reset=()=>{newGame(+document.getElementById('seed').value||1);
   DEBRIEF=[null,null];
   const db=document.getElementById('debrief'); if(db){db.style.display='none';db.innerHTML='';}
   PART=[];DMGN=[];DECAL=[];SHAKE=0;PREVU.clear();ACC.clear();DEADPOS.clear();
-  PREVBASE=[BASE_HP,BASE_HP]; BUILT=[{},{}]; PEAK=[0,0];
+  PREVBASE=[BASE_HP,BASE_HP]; BUILT=[{},{}]; PEAK=[0,0]; LASTQ=[[],[]]; SINCE=[{},{}];
   const sm=document.getElementById('summary'); if(sm){sm.style.display='none';sm.innerHTML='';}
   ['ovA','ovB'].forEach(i=>{const e=document.getElementById(i);e.classList.remove('on','flash');e.innerHTML='';});
   ['miniA','miniB'].forEach(i=>document.getElementById(i).innerHTML='');
@@ -1586,7 +1593,10 @@ document.getElementById('labels').onchange=e=>{LABELS=e.target.checked;draw(perf
 
 const saveLog=()=>{
   const payload={
-    game:'breach', seed:+document.getElementById('seed').value, savedAt:new Date().toISOString(),
+    game:'breach', promptVersion:2,   // v2 added affordability + feedback loop; v1 runs are not comparable
+    seed:+document.getElementById('seed').value, savedAt:new Date().toISOString(),
+    unitsBuilt:[0,1].map(s=>({side:SIDE[s].name,...BUILT[s]})),
+    peakCoins:[0,1].map(s=>Math.floor(PEAK[s])),
     commanders:[0,1].map(s=>({side:SIDE[s].name,kind:CMD[s].kind,model:CMD[s].model,
       calls:STATS[s].calls,failed:STATS[s].fail,malformed:STATS[s].bad,
       avgLatencyMs:STATS[s].calls?Math.round(STATS[s].ms/STATS[s].calls):0})),
@@ -1625,11 +1635,32 @@ punish an empty lane, not to win fights.
 ECONOMY: "eco" costs ${ECO_COST} and permanently adds +${ECO_STEP} coins/sec, max ${ECO_MAX} times.
 Passive income roughly doubles by 60s and keeps climbing, so late armies are far bigger than early ones. Buying economy while under pressure loses games.
 
-You are called every ${DECIDE} seconds. Return a build queue that is spent in order as coins allow;
-it is replaced at your next decision, so queue 2-4 items, not more.
+HOW THE QUEUE ACTUALLY WORKS — read this carefully, it decides most games:
+- Your queue is spent strictly in order, and only when you can afford the NEXT item.
+- An item you cannot afford BLOCKS everything behind it. Queue ["tank","inf"] holding
+  16 coins and you build NOTHING — not even the 8-coin infantry — until you reach 45.
+- Your whole queue is REPLACED at your next decision in ${DECIDE} seconds. Anything unspent is lost.
+- Therefore saving is only possible by DELIBERATE REPETITION: to afford a ${UNITS.tank.cost}-coin tank or
+  ${ECO_COST}-coin eco you must keep it FIRST in your queue across several consecutive decisions and
+  accept building nothing meanwhile. If you switch to cheap units, you spend the savings and
+  never reach the expensive one.
+- "affordableNow" in the state tells you exactly what you can buy this instant.
+
+You are called every ${DECIDE} seconds. Queue 2-4 items, not more.
 
 Reply ONLY with JSON, no markdown fences:
 {"why":"<one sentence read of the battle>","queue":["inf","gun","inf"]}`;
+
+/* The old hint was one static line regardless of the board. Make it name the
+   counter that is actually relevant right now. */
+function counterHint(e){
+  const h=[];
+  if(e.armor>0)   h.push(`Enemy fields ${e.armor} ARMOUR — "at" does 4x to armor and is your answer.`);
+  if(e.light>=3)  h.push(`Enemy fields ${e.light} LIGHT — "gun" does 2x to light.`);
+  if(e.support>=2)h.push(`Enemy fields ${e.support} SUPPORT — "tank" splash hits all of them at once.`);
+  if(!h.length)   h.push('No dominant enemy class yet. Cheap infantry holds the lane while you decide.');
+  return h.join(' ');
+}
 
 async function llmAgent(St,s,model){
   const key=(document.getElementById('apikey').value||'').trim();
@@ -1650,7 +1681,15 @@ async function llmAgent(St,s,model){
     myComposition:cls(s), enemyComposition:cls(1-s),
     enemyNearestToMyBaseMetres:nearest,
     threat: nearest!==null&&nearest<25 ? 'ENEMY IS PUSHING YOUR BASE' : 'lane contested or quiet',
-    counterHint:'gun beats light · at beats armor · tank splash beats clumps of support',
+    // affordability: models routinely queued units they could never buy
+    costs:{...Object.fromEntries(Object.entries(UNITS).map(([k,u])=>[k,u.cost])), eco:ECO_COST},
+    affordableNow:[...Object.keys(UNITS).filter(k=>St.coins[s]>=UNITS[k].cost),
+                   ...(St.eco[s]<ECO_MAX&&St.coins[s]>=ECO_COST?['eco']:[])],
+    // feedback loop: without this a model cannot tell that its tank never spawned
+    yourLastQueue: LASTQ[s].length?LASTQ[s]:'(none yet)',
+    builtSinceYourLastDecision: Object.keys(SINCE[s]).length?SINCE[s]:'nothing was built',
+    unspentFromLastQueue: St.q[s].length?[...St.q[s]]:'queue fully spent',
+    counterHint: counterHint(cls(1-s)),
   };
   await rateGate(/:free$/.test(model));
   // NOTE: no AbortController here. Sandboxed webviews proxy fetch over postMessage,
