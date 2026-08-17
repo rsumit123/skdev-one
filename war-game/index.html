@@ -863,7 +863,7 @@ const cv=document.getElementById('field'), cx=cv.getContext('2d');
 const HORIZON=.38, ROWS=5, PADF=.06;
 let DIM={w:0,h:0}, BG=document.createElement('canvas'), bgx=BG.getContext('2d'), VIG=null, VIGRED=null;
 let PART=[], DMGN=[], DECAL=[], SHAKE=0, LOWFX=false, LABELS=true;
-let PREVU=new Map(), ACC=new Map(), PREVBASE=[BASE_HP,BASE_HP], LASTRT=0, SMOKET=0;
+let PREVU=new Map(), ACC=new Map(), PREVBASE=[BASE_HP,BASE_HP], PREVECO=[0,0], LASTRT=0, SMOKET=0;
 
 /* The playable ground is a band, not the whole lower half: the top of the
    band sits below the horizon and the bottom reserves room for the ticker,
@@ -1198,6 +1198,27 @@ function fort(g,w,h,s){
   g.fillStyle='rgba(4,7,11,.8)';
   g.beginPath(); g.roundRect(-bw/2-1.5,by-1.5,bw+3,bh+3,(bh+3)/2); g.fill();
   g.fillStyle=SIDE[s].col; g.beginPath(); g.roundRect(-bw/2,by,bw*frac,bh,bh/2); g.fill();
+
+  /* Economy pips above the base — one coin per possible upgrade, lit when
+     owned. Economy decides most matches and was previously invisible on the
+     battlefield, so you could not see who was out-scaling whom. */
+  const pr=Math.max(2.4,3.4*sc), gap=pr*2.8, py=by-pr*2.7;
+  for(let i=0;i<ECO_MAX;i++){
+    const cxp=(i-(ECO_MAX-1)/2)*gap, owned=i<S.eco[s];
+    g.beginPath(); g.arc(cxp,py,pr,0,7);
+    g.fillStyle=owned?'#e0b83a':'rgba(6,10,15,.55)'; g.fill();
+    g.lineWidth=Math.max(.8,sc); g.strokeStyle=owned?'#fff0b8':'rgba(255,255,255,.2)'; g.stroke();
+    if(owned){ g.fillStyle='rgba(122,90,12,.6)'; g.fillRect(cxp-pr*.13,py-pr*.5,pr*.26,pr); }
+  }
+  if(S.eco[s]>0){                       // live income, so the payoff is visible
+    g.font=`700 ${Math.max(8,9*sc)}px "Saira Condensed",sans-serif`;
+    g.textAlign='center'; g.textBaseline='middle';
+    g.fillStyle='rgba(6,10,15,.7)';
+    const tw=Math.max(26,30*sc), th=Math.max(9,11*sc);
+    g.beginPath(); g.roundRect(-tw/2,py-pr-th-2*sc,tw,th,th/2); g.fill();
+    g.fillStyle='#e8c65a';
+    g.fillText((S.inc[s]*RAMP(S.t)).toFixed(1)+'/s',0,py-pr-th/2-2*sc);
+  }
   g.restore();
   return {x,gy,W,H,frac};
 }
@@ -1236,6 +1257,15 @@ function draw(now){
     PREVBASE[s]=S.hp[s];
   });
   const forts=[fort(cx,w,h,0),fort(cx,w,h,1)];
+  // an eco upgrade completing is a big moment and used to be silent
+  [0,1].forEach(s=>{
+    if(S.eco[s]>PREVECO[s]){
+      DMGN.push({x:forts[s].x, y:forts[s].gy-forts[s].H-30, life:2.4,
+        txt:`ECONOMY ${S.eco[s]}/${ECO_MAX}  +${ECO_STEP}/s`, col:'#7ee08a'});
+      SHAKE=Math.max(SHAKE,3);
+    }
+    PREVECO[s]=S.eco[s];
+  });
   SMOKET-=dt;
   if(SMOKET<=0){
     SMOKET=.22;
@@ -1347,12 +1377,16 @@ function draw(now){
   // ---- damage numbers
   DMGN=DMGN.filter(d=>{
     d.life-=dt; if(d.life<=0) return false;
-    d.y-=26*dt;
-    const a=Math.min(1,d.life*2.2);
+    d.y-=(d.txt?14:26)*dt;
+    const a=Math.min(1,d.life*2.2), label=d.txt||('-'+d.v);
     cx.save(); cx.globalAlpha=a;
-    cx.font=`800 ${Math.max(13,h*.042)}px "Saira Condensed",sans-serif`;
-    cx.textAlign='center'; cx.lineWidth=3; cx.strokeStyle='rgba(38,22,0,.85)';
-    cx.strokeText('-'+d.v,d.x,d.y); cx.fillStyle='#ffcf4d'; cx.fillText('-'+d.v,d.x,d.y);
+    cx.font=`800 ${Math.max(d.txt?11:13,h*(d.txt?.034:.042))}px "Saira Condensed",sans-serif`;
+    cx.textAlign='center'; cx.textBaseline='alphabetic';
+    // bases sit at the screen edges, so a centred callout would run off
+    const tw=cx.measureText(label).width;
+    const lx=Math.max(tw/2+6,Math.min(w-tw/2-6,d.x));
+    cx.lineWidth=3; cx.strokeStyle='rgba(10,20,10,.85)';
+    cx.strokeText(label,lx,d.y); cx.fillStyle=d.col||'#ffcf4d'; cx.fillText(label,lx,d.y);
     cx.restore(); return true;
   });
 
@@ -1588,7 +1622,7 @@ const reset=()=>{newGame(+document.getElementById('seed').value||1);
   DEBRIEF=[null,null];
   const db=document.getElementById('debrief'); if(db){db.style.display='none';db.innerHTML='';}
   PART=[];DMGN=[];DECAL=[];SHAKE=0;PREVU.clear();ACC.clear();DEADPOS.clear();
-  PREVBASE=[BASE_HP,BASE_HP]; BUILT=[{},{}]; PEAK=[0,0]; LASTQ=[[],[]]; SINCE=[{},{}];
+  PREVBASE=[BASE_HP,BASE_HP]; PREVECO=[0,0]; BUILT=[{},{}]; PEAK=[0,0]; LASTQ=[[],[]]; SINCE=[{},{}];
   const sm=document.getElementById('summary'); if(sm){sm.style.display='none';sm.innerHTML='';}
   ['ovA','ovB'].forEach(i=>{const e=document.getElementById(i);e.classList.remove('on','flash');e.innerHTML='';});
   ['miniA','miniB'].forEach(i=>document.getElementById(i).innerHTML='');
