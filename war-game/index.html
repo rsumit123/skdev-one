@@ -584,14 +584,16 @@ body.split #nudge{display:none}
         browser's localStorage so you don't retype it on mobile.</div>
     </div>
     <div class="grp"><h3>Results server</h3>
-      <input type="text" id="apiBase" placeholder="https://breach-api.skdev.one" style="width:100%">
-      <input type="password" id="apiTok" placeholder="write token" style="width:100%;margin-top:7px" autocomplete="off">
+      <div class="tout" style="margin-top:0">Every finished match uploads automatically —
+        no setup on any device. Leave these blank unless you are self-hosting.</div>
+      <input type="text" id="apiBase" placeholder="https://breach-api.skdev.one (default)" style="width:100%;margin-top:8px">
+      <input type="password" id="apiTok" placeholder="write token (only if your server requires one)" style="width:100%;margin-top:7px" autocomplete="off">
       <div class="crow" style="margin-top:9px"><button class="act" id="btnApiTest">Test</button>
         <button class="act" id="btnApiPushAll">Upload local history</button></div>
-      <div id="apiOut" class="tout">Not configured — matches are saved in this browser only.</div>
-      <div class="warnbox">With a server set, every finished match uploads automatically and the
-        leaderboard reads from it, so history follows you across devices. Reading is public;
-        the write token stays in this browser and never appears in the page source.</div>
+      <div id="apiOut" class="tout">Using the default server.</div>
+      <div class="warnbox">History follows you across devices because matches live on the server,
+        not in one browser. Reads and writes are both open — a match is only recorded when a real
+        model played it, which needs your own API key, so there is nothing worth locking.</div>
     </div>
 
     <div class="grp"><h3>Mock LLM (free testing)</h3>
@@ -2115,16 +2117,22 @@ function paintRanks(){
    Reads are public so the leaderboard renders anywhere. The write token lives
    only in this browser, never in the page source. */
 let LB_REMOTE=[];
-const apiBase=()=>{ try{ return (localStorage.getItem('breach.api')||'').replace(/\/+$/,''); }catch(e){ return ''; } };
+/* Built in on purpose. Requiring a URL and token on every device was setup
+   friction defending a risk that barely exists: a match is only recorded when
+   one side is a real model, which needs the player's own paid API key. Writes
+   are open and rate limited server-side instead. Override below if you self-host. */
+const API_DEFAULT='https://breach-api.skdev.one';
+const apiBase=()=>{ try{ const v=localStorage.getItem('breach.api');
+  return (v===null?API_DEFAULT:v).replace(/\/+$/,''); }catch(e){ return API_DEFAULT; } };
 const apiTok =()=>{ try{ return localStorage.getItem('breach.apitoken')||''; }catch(e){ return ''; } };
 
 async function lbPush(rec){
   const b=apiBase(), t=apiTok();
-  if(!b||!t) return {skipped:true};
+  if(!b) return {skipped:true};
   try{
-    const r=await fetch(b+'/v1/matches',{method:'POST',
-      headers:{'Content-Type':'application/json','X-Breach-Token':t},
-      body:JSON.stringify(rec)});
+    const h={'Content-Type':'application/json'};
+    if(t) h['X-Breach-Token']=t;
+    const r=await fetch(b+'/v1/matches',{method:'POST',headers:h,body:JSON.stringify(rec)});
     const j=await r.json().catch(()=>({}));
     return r.ok?{ok:true,...j}:{ok:false,error:j.error||('HTTP '+r.status)};
   }catch(e){ return {ok:false,error:String(e.message).slice(0,90)}; }
@@ -2149,17 +2157,20 @@ function apiStatus(msg,col){
 }
 ['apiBase','apiTok'].forEach(id=>{
   const el=document.getElementById(id), k=id==='apiBase'?'breach.api':'breach.apitoken';
-  try{ el.value=localStorage.getItem(k)||''; }catch(e){}
-  el.addEventListener('input',()=>{ try{ localStorage.setItem(k,el.value.trim()); }catch(e){} });
+  try{ const v=localStorage.getItem(k); if(v!==null) el.value=v; }catch(e){}
+  el.addEventListener('input',()=>{ try{
+    const v=el.value.trim();
+    if(id==='apiBase'&&!v) localStorage.removeItem(k);   // blank -> fall back to the default
+    else localStorage.setItem(k,v);
+  }catch(e){} });
 });
 document.getElementById('btnApiTest').onclick=async()=>{
-  const b=apiBase(); if(!b) return apiStatus('Enter a server URL first.','#c9a227');
-  apiStatus('Checking…','#7b8692');
+  const b=apiBase(); if(!b) return apiStatus('No server configured.','#c9a227');
+  apiStatus('Checking '+b+' …','#7b8692');
   try{
     const r=await fetch(b+'/v1/health',{cache:'no-store'});
     const j=await r.json();
-    apiStatus(`Connected — ${j.matches} matches stored${apiTok()?'':' (no write token set, uploads disabled)'}`,
-      apiTok()?'#74ab7c':'#c9a227');
+    apiStatus(`Connected to ${b} — ${j.matches} matches stored. Uploads are on.`,'#74ab7c');
     await lbFetchRemote();
   }catch(e){ apiStatus('Cannot reach it: '+String(e.message).slice(0,70),'#c9765c'); }
 };
@@ -2169,7 +2180,7 @@ document.getElementById('btnApiPushAll').onclick=async()=>{
   apiStatus(`Uploading ${local.length}…`,'#7b8692');
   let ok=0,dup=0,fail=0;
   for(const r of local){ const res=await lbPush(r);
-    if(res.skipped){ return apiStatus('Set a server URL and write token first.','#c9a227'); }
+    if(res.skipped){ return apiStatus('No server configured.','#c9a227'); }
     if(res.ok&&res.stored) ok++; else if(res.ok) dup++; else fail++; }
   apiStatus(`Uploaded ${ok}, already there ${dup}${fail?', failed '+fail:''}.`,fail?'#c9765c':'#74ab7c');
   await lbFetchRemote();
