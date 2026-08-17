@@ -431,7 +431,7 @@ body.split #nudge{display:none}
       Tanks hit <b>everything</b> in range at once, so they shred swarms.<br><br>
       <b>Infantry</b> is the cheap generalist — beats AT Teams and Raiders, loses to Gunners and Tanks.<br>
       <b>Raider</b> loses most fights but moves 11 m/s. Its job is reaching an undefended base, not winning duels.<br><br>
-      <b>Economy</b> costs <span id="ecoCostTxt">40</span> and adds +0.5 coins/sec, up to three times. Income also escalates on its own — it roughly
+      <b>Economy</b> costs <span id="ecoCostTxt">45</span> (price rises each time) and adds +0.5 to base income, up to three times. Income also escalates on its own — it roughly
       doubles by the one-minute mark and keeps climbing, so no stalemate holds.
     </div>
     <div class="setrow"><label class="inline" for="seed">Seed</label><input type="number" id="seed" value="42" style="width:88px">
@@ -458,10 +458,14 @@ const MULT=(a,t)=>{
   return 1.0;
 };
 const LANE=80, BASE_HP=600, BASE_DPS=6, BASE_RNG=7,
-      // 60 was unreachable in practice: across four real matches and eight
-      // commander slots, zero eco upgrades were ever completed — peak coins
-      // topped out at 44. 40 sits inside observed banking range.
-      ECO_COST=40, ECO_STEP=0.5, ECO_MAX=3, DECIDE=4, TIME_CAP=300;
+      ECO_COST=45, ECO_STEP=0.5, ECO_MAX=3, ECO_ESC=0.75, DECIDE=4, TIME_CAP=300;
+/* Economy was the dominant strategy at every flat price tested (45 through 80):
+   a trivial "buy eco whenever the lane is clear" heuristic beat the adaptive
+   control 88-98% of the time. A flat price plus a ramped payout means the first
+   upgrade is always correct and the game is solved. Escalating the price keeps
+   the first upgrade strong, makes the third a real commitment, and lands that
+   heuristic at 55% — a choice rather than an answer. */
+const ecoPrice=n=>Math.round(ECO_COST*(1+ECO_ESC*n));
 const RAMP=t=>1+t/55;   // war economy escalates hard — doubles by ~1min
 const SIDE=[{name:'Vulcan',col:'#c25a3a'},{name:'Cobalt',col:'#3f83ad'}];
 // prices per million tokens (in/out), read from OpenRouter Aug 2026
@@ -543,7 +547,8 @@ function step(dt){
       const it=S.q[s][0];
       if(it==='eco'){
         if(S.eco[s]>=ECO_MAX){S.q[s].shift();continue;}
-        if(S.coins[s]>=ECO_COST){S.coins[s]-=ECO_COST;S.eco[s]++;S.inc[s]+=ECO_STEP;S.q[s].shift();}
+        const ep=ecoPrice(S.eco[s]);
+        if(S.coins[s]>=ep){S.coins[s]-=ep;S.eco[s]++;S.inc[s]+=ECO_STEP;S.q[s].shift();}
         else break;
       }else{
         const u=UNITS[it]; if(!u){S.q[s].shift();continue;}
@@ -1375,7 +1380,7 @@ function paintHUD(){
        it — a model that queues eco early can build nothing for half a minute.
        That was invisible before; say it out loud. */
     const sub=document.getElementById('sub'+k), head=S.q[s]&&S.q[s][0];
-    const cost=head==='eco'?ECO_COST:(head&&UNITS[head]?UNITS[head].cost:0);
+    const cost=head==='eco'?ecoPrice(S.eco[s]):(head&&UNITS[head]?UNITS[head].cost:0);
     if(head&&S.coins[s]<cost){
       sub.textContent=`saving ${Math.floor(S.coins[s])}/${cost} for ${head==='eco'?'ECO':UNITS[head].name}`;
       sub.style.color='#e0b83a';
@@ -1432,7 +1437,7 @@ function drawLog(){
 }
 
 function buildTable(){
-  const ec=document.getElementById('ecoCostTxt'); if(ec) ec.textContent=ECO_COST;
+  const ec=document.getElementById('ecoCostTxt'); if(ec) ec.textContent=[0,1,2].map(ecoPrice).join(' / ');
   document.getElementById('utable').innerHTML=Object.entries(UNITS).map(([k,u])=>
     `<tr><td class="n"><span class="glyph" style="background:${TYPEACC[k]};color:#10151b">${u.g}</span>${u.name}</td>
      <td>${u.cost}</td><td>${u.hp}</td><td>${u.dps}${u.splash?'*':''}</td><td>${u.spd}</td><td>${u.rng}</td></tr>`).join('')
@@ -1597,10 +1602,10 @@ document.getElementById('labels').onchange=e=>{LABELS=e.target.checked;draw(perf
 
 const saveLog=()=>{
   const payload={
-    game:'breach', promptVersion:2,   // v2 added affordability + feedback loop; v1 runs are not comparable
+    game:'breach', promptVersion:3,   // v3 fixed the economy description; v1/v2 runs are not comparable
     // balance is stamped into every log so a tuning change can never silently
     // invalidate a comparison between two saved matches
-    balance:{ecoCost:ECO_COST,ecoStep:ECO_STEP,ecoMax:ECO_MAX,lane:LANE,baseHP:BASE_HP,
+    balance:{ecoCost:ECO_COST,ecoEscalation:ECO_ESC,ecoPrices:[0,1,2].map(ecoPrice),ecoStep:ECO_STEP,ecoMax:ECO_MAX,lane:LANE,baseHP:BASE_HP,
       decideEvery:DECIDE,timeCap:TIME_CAP,
       unitCosts:Object.fromEntries(Object.entries(UNITS).map(([k,u])=>[k,u.cost]))},
     seed:+document.getElementById('seed').value, savedAt:new Date().toISOString(),
@@ -1641,8 +1646,16 @@ COUNTERS: gun does 2x to light class. at does 4x to armor class. tank hits every
 The cycle is tank > gun > at > tank. Infantry is a cheap generalist. Raider is fast but weak — use it to
 punish an empty lane, not to win fights.
 
-ECONOMY: "eco" costs ${ECO_COST} and permanently adds +${ECO_STEP} coins/sec, max ${ECO_MAX} times.
-Passive income roughly doubles by 60s and keeps climbing, so late armies are far bigger than early ones. Buying economy while under pressure loses games.
+ECONOMY — the most commonly misplayed part of this game:
+"eco" is permanent and can be bought ${ECO_MAX} times. The price ESCALATES: ${[0,1,2].map(n=>ecoPrice(n)).join(', then ')}.
+Each one adds +${ECO_STEP} to your BASE income — and base income is multiplied by an escalating
+ramp, so the real payout grows as the match goes on. One upgrade is worth about
++${(ECO_STEP*RAMP(60)).toFixed(1)} coins/sec at 60s and about +${(ECO_STEP*RAMP(200)).toFixed(1)} coins/sec at 200s, not a flat +${ECO_STEP}.
+It typically pays for itself in 25-45 seconds and returns several hundred coins across a
+full match — far more than any single unit. Do not judge it by the sticker price.
+The catch: while you save for it you build nothing, so buying it with the enemy near your
+base loses games. Buy it when the lane is clear, not when you are under pressure.
+"ecoNextPrice" and "ecoValueNow" in the state give you the exact current numbers.
 
 HOW THE QUEUE ACTUALLY WORKS — read this carefully, it decides most games:
 - Your queue is spent strictly in order, and only when you can afford the NEXT item.
@@ -1691,9 +1704,16 @@ async function llmAgent(St,s,model){
     enemyNearestToMyBaseMetres:nearest,
     threat: nearest!==null&&nearest<25 ? 'ENEMY IS PUSHING YOUR BASE' : 'lane contested or quiet',
     // affordability: models routinely queued units they could never buy
-    costs:{...Object.fromEntries(Object.entries(UNITS).map(([k,u])=>[k,u.cost])), eco:ECO_COST},
+    costs:{...Object.fromEntries(Object.entries(UNITS).map(([k,u])=>[k,u.cost])),
+           eco:St.eco[s]<ECO_MAX?ecoPrice(St.eco[s]):'maxed'},
     affordableNow:[...Object.keys(UNITS).filter(k=>St.coins[s]>=UNITS[k].cost),
-                   ...(St.eco[s]<ECO_MAX&&St.coins[s]>=ECO_COST?['eco']:[])],
+                   ...(St.eco[s]<ECO_MAX&&St.coins[s]>=ecoPrice(St.eco[s])?['eco']:[])],
+    // spelled out because the sticker price badly understates the real return
+    ecoNextPrice: St.eco[s]<ECO_MAX?ecoPrice(St.eco[s]):'maxed out',
+    ecoValueNow: St.eco[s]<ECO_MAX
+      ? `+${(ECO_STEP*RAMP(St.t)).toFixed(2)} coins/sec right now, rising to about `+
+        `+${(ECO_STEP*RAMP(TIME_CAP*0.7)).toFixed(2)}/sec late game`
+      : 'already maxed',
     // feedback loop: without this a model cannot tell that its tank never spawned
     yourLastQueue: LASTQ[s].length?LASTQ[s]:'(none yet)',
     builtSinceYourLastDecision: Object.keys(SINCE[s]).length?SINCE[s]:'nothing was built',
