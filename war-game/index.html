@@ -166,6 +166,45 @@ body:not(.live) #sheet{transform:translateY(100%);pointer-events:none}
   font-family:inherit;font-size:11px;font-weight:700;cursor:pointer;text-transform:uppercase;
   margin-left:7px;vertical-align:baseline}
 
+/* ---------- human order picker (fair mode) ---------- */
+#picker{position:absolute;left:0;right:0;bottom:0;z-index:22;display:none;flex-direction:column;gap:5px;
+  background:linear-gradient(0deg,rgba(7,11,16,.97),rgba(7,11,16,.93));
+  border-top:1px solid rgba(224,184,58,.35);box-shadow:0 -12px 34px rgba(0,0,0,.6);
+  padding:8px calc(10px + var(--sr)) calc(8px + var(--sb)) calc(10px + var(--sl));
+  max-height:62%;overflow-y:auto}
+#picker.on{display:flex}
+.pkhead{display:flex;align-items:center;gap:8px}
+.pkwho{font-family:"Saira Condensed",sans-serif;font-size:13px;letter-spacing:.13em;
+  text-transform:uppercase;color:var(--amber);font-weight:700}
+.pkcoins{margin-left:auto;display:flex;align-items:center;gap:5px;
+  font-family:"Saira Condensed",sans-serif;font-size:16px;font-weight:700;color:#f0dc9a}
+.pkcoins small{font-size:9.5px;font-family:"IBM Plex Mono",monospace;color:var(--txt-3);font-weight:400}
+.pkdot{width:9px;height:9px;border-radius:50%;background:#e0b83a;flex:none}
+.pkhint{font-size:10px;color:#9aa5b1;line-height:1.45}
+.pkgrid{display:flex;gap:5px;flex-wrap:wrap}
+.pku{flex:1 1 78px;min-width:70px;border:1px solid #333d47;background:#141a21;border-radius:7px;
+  padding:5px 4px;cursor:pointer;text-align:center;color:var(--txt);line-height:1.25}
+.pku:active{transform:scale(.96)}
+.pku .g{display:inline-flex;align-items:center;justify-content:center;width:19px;height:19px;
+  border-radius:5px;font-family:"Saira Condensed",sans-serif;font-weight:700;font-size:11px;color:#10151b}
+.pku .n{font-family:"Saira Condensed",sans-serif;font-size:11.5px;letter-spacing:.04em;margin-top:2px}
+.pku .c{font-size:9.5px;color:var(--txt-3)}
+.pku.cant{opacity:.45}
+.pku.cant .c{color:#c9765c}
+.pkq{display:flex;gap:4px;flex-wrap:wrap;min-height:24px;align-items:center}
+.pkq .e{font-size:10px;font-family:"IBM Plex Mono",monospace;background:#1d2630;border:1px solid #3b4753;
+  border-radius:5px;padding:3px 7px;cursor:pointer;color:#dfe6ee}
+.pkq .ph{font-size:10px;color:var(--txt-3)}
+.pkwarn{font-size:9.5px;color:#e0b83a;line-height:1.4;min-height:0}
+.pkrow{display:flex;gap:7px}
+.pkrow .act{flex:1;padding:9px}
+@media (max-height:400px){
+  #picker{max-height:74%;gap:4px;padding-top:6px}
+  .pku{padding:4px;flex:1 1 66px;min-width:62px}
+  .pku .n{font-size:10.5px}.pku .c{font-size:9px}
+  .pkhint{font-size:9px}
+}
+
 /* ---------- sheet ---------- */
 #sheet{position:fixed;left:0;right:0;bottom:0;height:min(62dvh,420px);background:#0c1117;
   border-top:1px solid var(--rule);border-radius:14px 14px 0 0;z-index:20;
@@ -387,6 +426,21 @@ body.split #nudge{display:none}
     </div>
   </div>
 
+  <div id="picker">
+    <div class="pkhead">
+      <span class="pkwho">Your orders</span>
+      <span class="pkcoins"><span class="pkdot"></span><b id="pkCoins">0</b><small id="pkInc"></small></span>
+    </div>
+    <div class="pkhint" id="pkHint"></div>
+    <div class="pkgrid" id="pkGrid"></div>
+    <div class="pkq" id="pkQueue"></div>
+    <div class="pkwarn" id="pkWarn"></div>
+    <div class="pkrow">
+      <button class="act" id="pkClear">Clear</button>
+      <button class="act primary" id="pkGo">Send orders</button>
+    </div>
+  </div>
+
   <div id="title">
     <div class="tbrand">BREACH</div>
     <div class="tsub">Two language models command opposing armies down one lane.
@@ -470,11 +524,11 @@ body.split #nudge{display:none}
   <div class="mbody">
     <div class="grp"><h3>Commanders</h3>
       <div class="crow"><span class="cw2" style="color:var(--A)">Vulcan</span>
-        <select id="kindA"><option value="script">Scripted</option><option value="mock">Mock LLM</option><option value="llm">OpenRouter</option></select></div>
+        <select id="kindA"><option value="script">Scripted</option><option value="human">You (fair mode)</option><option value="mock">Mock LLM</option><option value="llm">OpenRouter</option></select></div>
       <div class="crow" style="margin-top:7px"><select id="modelA"></select></div>
       <div class="crow" style="margin-top:7px"><input type="text" id="customA" placeholder="or paste any model id" style="width:100%"></div>
       <div class="crow" style="margin-top:12px"><span class="cw2" style="color:var(--B)">Cobalt</span>
-        <select id="kindB"><option value="script">Scripted</option><option value="mock">Mock LLM</option><option value="llm">OpenRouter</option></select></div>
+        <select id="kindB"><option value="script">Scripted</option><option value="human">You (fair mode)</option><option value="mock">Mock LLM</option><option value="llm">OpenRouter</option></select></div>
       <div class="crow" style="margin-top:7px"><select id="modelB"></select></div>
       <div class="crow" style="margin-top:7px"><input type="text" id="customB" placeholder="or paste any model id" style="width:100%"></div>
     </div>
@@ -606,7 +660,7 @@ function shortName(id){
 }
 function commanderLabel(s){
   const c=CMD[s];
-  return c.kind==='script'?'scripted (no model calls)':c.kind==='mock'?'mock (no model calls)':c.model;
+  return c.kind==='script'?'scripted (no model calls)':c.kind==='human'?'you, fair mode — same 4s cadence as the model':c.kind==='mock'?'mock (no model calls)':c.model;
 }
 function paintWho(){
   const w=document.getElementById('whobar'); if(!w) return;
@@ -619,6 +673,7 @@ function refreshNames(){
   [0,1].forEach(s=>{
     const c=CMD[s];
     SIDE[s].name = c.kind==='script' ? (s?'Scripted B':'Scripted A')
+                 : c.kind==='human'  ? 'You'
                  : c.kind==='mock'   ? (s?'Mock B':'Mock A')
                  : shortName(c.model);
   });
@@ -853,9 +908,77 @@ async function mockAgent(St,s){
   return agent(St,s);
 }
 
+/* Fair mode: a human turn is just another async decision. The sim is already
+   frozen while decisions resolve, so you and the model think at the same time
+   under identical rules — same 4s cadence, same queue-replacement contract,
+   same information. Neither is penalised for taking longer. */
+let PICK=null;
+function humanTurn(s){
+  return new Promise(resolve=>{
+    PICK={s,queue:[],resolve};
+    renderPicker();
+    document.getElementById('picker').classList.add('on');
+  });
+}
+function renderPicker(){
+  if(!PICK) return;
+  const s=PICK.s, coins=Math.floor(S.coins[s]);
+  const cost=k=>k==='eco'?ecoPrice(S.eco[s]):UNITS[k].cost;
+  const cls=side=>{const o={light:0,support:0,armor:0};
+    S.units.filter(u=>u.s===side).forEach(u=>o[UNITS[u.type].cls]++);return o;};
+  const foe=cls(1-s), mine=cls(s);
+  document.getElementById('pkCoins').textContent=coins;
+  document.getElementById('pkInc').textContent=`${(S.inc[s]*RAMP(S.t)).toFixed(1)}/s · eco ${S.eco[s]}/${ECO_MAX}`;
+  document.getElementById('pkHint').innerHTML=
+    `Enemy: ${foe.light} light · ${foe.support} support · ${foe.armor} armour &nbsp;|&nbsp; `+
+    `You: ${mine.light} / ${mine.support} / ${mine.armor}<br>${counterHint(foe)}`;
+  const keys=[...Object.keys(UNITS),...(S.eco[s]<ECO_MAX?['eco']:[])];
+  document.getElementById('pkGrid').innerHTML=keys.map(k=>{
+    const c=cost(k), can=coins>=c;
+    const g=k==='eco'?'$':UNITS[k].g, col=k==='eco'?'#e0b83a':TYPEACC[k];
+    const nm=k==='eco'?'Economy':UNITS[k].name;
+    return `<div class="pku${can?'':' cant'}" data-k="${k}">
+      <span class="g" style="background:${col}">${g}</span>
+      <div class="n">${nm}</div><div class="c">${c}</div></div>`;}).join('');
+  document.getElementById('pkGrid').querySelectorAll('.pku').forEach(b=>b.onclick=()=>{
+    if(PICK.queue.length<6) PICK.queue.push(b.dataset.k);
+    renderPicker();
+  });
+  const q=document.getElementById('pkQueue');
+  q.innerHTML=PICK.queue.length
+    ? PICK.queue.map((k,i)=>`<span class="e" data-i="${i}">${k==='eco'?'eco':k} ✕</span>`).join('')
+    : '<span class="ph">Tap units to queue them. Sending nothing is a valid hold.</span>';
+  q.querySelectorAll('.e').forEach(e=>e.onclick=()=>{PICK.queue.splice(+e.dataset.i,1);renderPicker();});
+  // the same trap the prompt warns models about, surfaced for you too
+  const head=PICK.queue[0];
+  document.getElementById('pkWarn').textContent =
+    head && coins<cost(head)
+      ? `You cannot afford ${head} (${cost(head)}) yet — it blocks everything behind it until you can. That is how you save.`
+      : '';
+}
+function closePicker(){
+  document.getElementById('picker').classList.remove('on');
+  PICK=null;
+}
+document.getElementById('pkClear').onclick=()=>{ if(PICK){PICK.queue=[];renderPicker();} };
+document.getElementById('pkGo').onclick=()=>{
+  if(!PICK) return;
+  const {queue,resolve}=PICK; closePicker();
+  resolve({queue,why:queue.length?'Your orders: '+queue.join(', '):'Holding — no orders this cycle.'});
+};
+
 async function decide(s){
   const c=CMD[s];
   if(c.kind==='script') return {...sanitize(agent(S,s)),bad:[]};
+  if(c.kind==='human'){
+    THINK[s]=true; paintThink();
+    const t0=performance.now();
+    const raw=await humanTurn(s);
+    THINK[s]=false;
+    const ms=performance.now()-t0;
+    STATS[s].calls++; STATS[s].ms+=ms;
+    return {...sanitize(raw), ms};
+  }
   THINK[s]=true; paintThink(); const t0=performance.now();
   let raw=null, err=null;
   for(let attempt=0;attempt<2&&!raw;attempt++){
@@ -919,7 +1042,7 @@ function paintThink(){
   const secs=((performance.now()-THINK_T0)/1000).toFixed(1);
   el.innerHTML='<span class="spin on"></span>'+
     who.map(s=>`<span style="color:${SIDE[s].col}">${SIDE[s].name}</span>`).join(' &amp; ')+
-    (GATED?' rate-limited, waiting…':' thinking…')+
+    (GATED?' rate-limited, waiting…':(who.every(s=>CMD[s].kind==='human')?' — your move':' thinking…'))+
     `<b style="margin-left:2px;color:#e0b83a;font-weight:700">${secs}s</b>`;
 }
 let THINK_T0=0;
@@ -1800,7 +1923,7 @@ function lbAll(){
 }
 function lbRecord(){
   if(!CMD.some(c=>c.kind==='llm')) return;          // model leaderboard only
-  const side=s=>({name:SIDE[s].name, model:CMD[s].kind==='llm'?CMD[s].model:CMD[s].kind,
+  const side=s=>({name:SIDE[s].name, model:CMD[s].kind==='llm'?CMD[s].model:CMD[s].kind, human:CMD[s].kind==='human',
     kind:CMD[s].kind, calls:STATS[s].calls, failed:STATS[s].fail, malformed:STATS[s].bad,
     avgMs:STATS[s].calls?Math.round(STATS[s].ms/STATS[s].calls):0,
     built:{...BUILT[s]}, peakCoins:Math.floor(PEAK[s])});
@@ -1999,6 +2122,7 @@ const reset=()=>{newGame(+document.getElementById('seed').value||1);
   const f=document.getElementById('feed'); if(f) f.innerHTML='';
   DEBRIEF=[null,null];
   const db=document.getElementById('debrief'); if(db){db.style.display='none';db.innerHTML='';}
+  if(PICK){ const r=PICK.resolve; closePicker(); r({queue:[],why:'match reset'}); }
   PART=[];DMGN=[];DECAL=[];SHAKE=0;PREVU.clear();ACC.clear();DEADPOS.clear();
   PREVBASE=[BASE_HP,BASE_HP]; PREVECO=[0,0]; BUILT=[{},{}]; PEAK=[0,0]; LASTQ=[[],[]]; SINCE=[{},{}];
   const sm=document.getElementById('summary'); if(sm){sm.style.display='none';sm.innerHTML='';}

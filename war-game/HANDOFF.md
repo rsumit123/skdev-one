@@ -109,6 +109,23 @@ Saved logs carry `promptVersion`. **v1 and v2 runs are not comparable.**
 The scripted `agent()` never sees the prompt, so prompt changes never move the mirror
 baseline. Balance changes do — see §4.
 
+### Fair mode — a human commander
+
+`kind: 'human'` seats you as a commander. It reuses the lockstep path exactly: `decide(s)`
+returns a promise that resolves when you press Send orders, so the sim stays frozen while you
+and the model both think. Identical rules on purpose — same 4s cadence, same queue that is
+replaced each decision, same unaffordable-head blocking, and the picker shows the same state
+the model receives (coins, income, eco level, enemy composition by class, and the live
+`counterHint`).
+
+The point is an anchor. Every other number in the leaderboard is model-relative; a human
+result makes them interpretable. Matches record `human: true` on the relevant side.
+
+One honest asymmetry: models are capped by a 25s timeout, you are not. Since sim time is
+frozen for both, neither is punished for thinking longer, but a human taking two minutes on a
+decision is not doing the same task as a model taking four seconds. Read human results as a
+rough anchor, not a precise rating.
+
 ### Agent contract
 
 Each call sends fogless full state: coins, income, eco level, both base HPs, every unit
