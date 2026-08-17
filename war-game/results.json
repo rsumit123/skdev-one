@@ -4,9 +4,70 @@
     "promptVersion and balance both change what a match measures. Never compare across them.",
     "Every match so far was played on seed 42. Vulcan (side 0) has a measured ~55.7% win advantage, so a pairing means little until it has been played both ways — note GPT-4.1 Nano won twice from Cobalt, the disadvantaged seat.",
     "Sample sizes are tiny. Treat these as anecdotes, not rankings.",
-    "Prompt v3 plus the escalating eco price is the first configuration where any model bought an economy upgrade at all. v1 and v2 matches show 0/0 in every case."
+    "Prompt v3 plus the escalating eco price is the first configuration where any model bought an economy upgrade at all. v1 and v2 matches show 0/0 in every case.",
+    "Human matches are marked human:true. Fair mode gives identical rules, but a human is not capped by the 25s model timeout — read them as an anchor, not a rating."
   ],
   "matches": [
+    {
+      "at": "2026-08-17T00:00:00.000Z",
+      "promptVersion": 3,
+      "seed": 42,
+      "balance": {
+        "ecoCost": 45,
+        "ecoPrices": [
+          45,
+          79,
+          113
+        ]
+      },
+      "a": {
+        "name": "You",
+        "model": "human",
+        "kind": "human",
+        "human": true,
+        "calls": 52,
+        "failed": 0,
+        "malformed": 0,
+        "avgMs": 4178,
+        "built": {
+          "inf": 11,
+          "gun": 18,
+          "tank": 1,
+          "at": 14,
+          "mob": 2
+        },
+        "peakCoins": 81
+      },
+      "b": {
+        "name": "GPT-4.1 Nano",
+        "model": "openai/gpt-4.1-nano",
+        "kind": "llm",
+        "calls": 52,
+        "failed": 0,
+        "malformed": 0,
+        "avgMs": 1538,
+        "built": {
+          "inf": 16,
+          "gun": 8,
+          "at": 4,
+          "tank": 8
+        },
+        "peakCoins": 101
+      },
+      "winner": 0,
+      "t": 204.6,
+      "hp": [
+        512,
+        0
+      ],
+      "eco": [
+        2,
+        2
+      ],
+      "flags": [
+        "first human baseline (fair mode); human played Vulcan, the favoured seat"
+      ]
+    },
     {
       "at": "2026-08-17T07:21:32.881Z",
       "promptVersion": 3,

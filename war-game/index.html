@@ -2180,7 +2180,10 @@ const saveLog=()=>{
     seed:+document.getElementById('seed').value, savedAt:new Date().toISOString(),
     unitsBuilt:[0,1].map(s=>({side:SIDE[s].name,...BUILT[s]})),
     peakCoins:[0,1].map(s=>Math.floor(PEAK[s])),
-    commanders:[0,1].map(s=>({side:SIDE[s].name,kind:CMD[s].kind,model:CMD[s].model,
+    // record what actually played, not whatever was left in the model dropdown —
+    // a human match was being logged under an unrelated model id
+    commanders:[0,1].map(s=>({side:SIDE[s].name,kind:CMD[s].kind,
+      model:CMD[s].kind==='llm'?CMD[s].model:CMD[s].kind,
       calls:STATS[s].calls,failed:STATS[s].fail,malformed:STATS[s].bad,
       avgLatencyMs:STATS[s].calls?Math.round(STATS[s].ms/STATS[s].calls):0})),
     result:{winner:S.win===null?'draw':SIDE[S.win].name, over:S.over,
