@@ -351,6 +351,8 @@ table.lb td:first-child{text-align:left;white-space:normal}
 .lbmodel{font-size:9px;color:var(--txt-3);display:block;margin-top:1px}
 .lbwin{font-weight:700}
 .lbthin{color:#c9a227}
+.lbhuman{font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:#10151b;
+  background:#e0b83a;border-radius:3px;padding:1px 4px;vertical-align:middle}
 .lbh{font-family:"Saira Condensed",sans-serif;font-size:12px;letter-spacing:.12em;text-transform:uppercase;
   color:var(--amber);margin:14px 0 4px}
 .lbm{border-left:2px solid #2a333c;padding:6px 9px;margin-bottom:5px;background:#101720;
@@ -581,6 +583,17 @@ body.split #nudge{display:none}
         Unchecked, it is held in memory and gone when you close the tab. Checked, it is stored in this
         browser's localStorage so you don't retype it on mobile.</div>
     </div>
+    <div class="grp"><h3>Results server</h3>
+      <input type="text" id="apiBase" placeholder="https://breach-api.skdev.one" style="width:100%">
+      <input type="password" id="apiTok" placeholder="write token" style="width:100%;margin-top:7px" autocomplete="off">
+      <div class="crow" style="margin-top:9px"><button class="act" id="btnApiTest">Test</button>
+        <button class="act" id="btnApiPushAll">Upload local history</button></div>
+      <div id="apiOut" class="tout">Not configured — matches are saved in this browser only.</div>
+      <div class="warnbox">With a server set, every finished match uploads automatically and the
+        leaderboard reads from it, so history follows you across devices. Reading is public;
+        the write token stays in this browser and never appears in the page source.</div>
+    </div>
+
     <div class="grp"><h3>Mock LLM (free testing)</h3>
       <div class="crow"><label class="inline">Latency ms</label><input type="number" id="mLo" value="900" style="width:76px">
         <label class="inline">to</label><input type="number" id="mHi" value="5000" style="width:76px"></div>
@@ -1993,7 +2006,7 @@ const lbLoad=()=>{ try{ return JSON.parse(localStorage.getItem(LB_KEY)||'[]'); }
 const lbKey=r=>[r.at,r.seed,r.a&&r.a.model,r.b&&r.b.model].join('|');
 function lbAll(){
   const seen=new Set(), out=[];
-  for(const r of [...LB_SEED,...lbLoad()]){
+  for(const r of [...LB_SEED,...lbLoad(),...LB_REMOTE]){
     if(!r||!r.a||!r.b) continue;
     const k=lbKey(r); if(seen.has(k)) continue; seen.add(k); out.push(r);
   }
@@ -2011,6 +2024,15 @@ function lbRecord(){
     hp:S.hp.map(h=>Math.max(0,Math.round(h))), eco:[...S.eco]};
   const rs=lbLoad(); rs.push(rec);
   try{ localStorage.setItem(LB_KEY, JSON.stringify(rs.slice(-400))); }catch(e){}
+  // fire-and-forget upload; the local copy is already safe if this fails
+  lbPush(rec).then(res=>{
+    if(res.skipped) return;
+    const tl=document.getElementById('tickline');
+    if(!tl) return;
+    tl.textContent = res.ok
+      ? (res.stored?'Match uploaded to results server.':'Match already on the results server.')
+      : 'Upload failed — kept locally. '+(res.error||'');
+  });
 }
 function lbStandings(rows){
   const M={};
@@ -2060,7 +2082,9 @@ function paintRanks(){
     <th>Vulcan</th><th>Cobalt</th><th>Latency</th><th>Errors</th></tr></thead><tbody>`+
     st.map(e=>{
       const pct=e.p?Math.round(e.w*100/e.p):0, thin=e.p<4;
-      return `<tr><td><span class="lbname">${e.name}</span><span class="lbmodel">${e.model}</span></td>
+      const isHuman=e.model==='human';
+      return `<tr><td><span class="lbname">${e.name}${isHuman?' <span class="lbhuman">human</span>':''}</span>`+
+        `<span class="lbmodel">${isHuman?'fair mode — not a model':e.model}</span></td>
         <td>${e.p}</td><td>${e.w}</td><td>${e.l}</td>
         <td class="lbwin ${thin?'lbthin':''}">${pct}%${thin?'*':''}</td>
         <td>${e.v[0]}-${e.v[1]}</td><td>${e.c[0]}-${e.c[1]}</td>
@@ -2087,8 +2111,74 @@ function paintRanks(){
   if(r.ok){ const j=await r.json(); LB_SEED=j.matches||[]; }
 }catch(e){} })();
 
-document.getElementById('btnRanksOpen').onclick=()=>{paintRanks();modal('mRanks',true);};
-document.getElementById('btnRanks2').onclick=()=>{paintRanks();modal('mRanks',true);};
+/* ---- results server: makes history follow you across devices ----
+   Reads are public so the leaderboard renders anywhere. The write token lives
+   only in this browser, never in the page source. */
+let LB_REMOTE=[];
+const apiBase=()=>{ try{ return (localStorage.getItem('breach.api')||'').replace(/\/+$/,''); }catch(e){ return ''; } };
+const apiTok =()=>{ try{ return localStorage.getItem('breach.apitoken')||''; }catch(e){ return ''; } };
+
+async function lbPush(rec){
+  const b=apiBase(), t=apiTok();
+  if(!b||!t) return {skipped:true};
+  try{
+    const r=await fetch(b+'/v1/matches',{method:'POST',
+      headers:{'Content-Type':'application/json','X-Breach-Token':t},
+      body:JSON.stringify(rec)});
+    const j=await r.json().catch(()=>({}));
+    return r.ok?{ok:true,...j}:{ok:false,error:j.error||('HTTP '+r.status)};
+  }catch(e){ return {ok:false,error:String(e.message).slice(0,90)}; }
+}
+async function lbFetchRemote(){
+  const b=apiBase(); if(!b) { LB_REMOTE=[]; return; }
+  try{
+    const r=await fetch(b+'/v1/matches?limit=400',{cache:'no-store'});
+    if(!r.ok) return;
+    const j=await r.json();
+    // server rows use column names; map them onto the shape the UI already renders
+    LB_REMOTE=(j.matches||[]).map(m=>({
+      at:m.saved_at, promptVersion:m.prompt_version, seed:m.seed, remote:true,
+      a:{name:m.a_name,model:m.a_model,kind:m.a_kind,human:m.a_kind==='human'},
+      b:{name:m.b_name,model:m.b_model,kind:m.b_kind,human:m.b_kind==='human'},
+      winner:m.winner, t:m.duration, hp:[m.hp_a,m.hp_b], eco:[m.eco_a,m.eco_b]}));
+  }catch(e){}
+}
+function apiStatus(msg,col){
+  const o=document.getElementById('apiOut');
+  if(o){ o.textContent=msg; o.style.color=col||''; }
+}
+['apiBase','apiTok'].forEach(id=>{
+  const el=document.getElementById(id), k=id==='apiBase'?'breach.api':'breach.apitoken';
+  try{ el.value=localStorage.getItem(k)||''; }catch(e){}
+  el.addEventListener('input',()=>{ try{ localStorage.setItem(k,el.value.trim()); }catch(e){} });
+});
+document.getElementById('btnApiTest').onclick=async()=>{
+  const b=apiBase(); if(!b) return apiStatus('Enter a server URL first.','#c9a227');
+  apiStatus('Checking…','#7b8692');
+  try{
+    const r=await fetch(b+'/v1/health',{cache:'no-store'});
+    const j=await r.json();
+    apiStatus(`Connected — ${j.matches} matches stored${apiTok()?'':' (no write token set, uploads disabled)'}`,
+      apiTok()?'#74ab7c':'#c9a227');
+    await lbFetchRemote();
+  }catch(e){ apiStatus('Cannot reach it: '+String(e.message).slice(0,70),'#c9765c'); }
+};
+document.getElementById('btnApiPushAll').onclick=async()=>{
+  const local=lbLoad().concat(LB_SEED);
+  if(!local.length) return apiStatus('Nothing stored locally to upload.','#c9a227');
+  apiStatus(`Uploading ${local.length}…`,'#7b8692');
+  let ok=0,dup=0,fail=0;
+  for(const r of local){ const res=await lbPush(r);
+    if(res.skipped){ return apiStatus('Set a server URL and write token first.','#c9a227'); }
+    if(res.ok&&res.stored) ok++; else if(res.ok) dup++; else fail++; }
+  apiStatus(`Uploaded ${ok}, already there ${dup}${fail?', failed '+fail:''}.`,fail?'#c9765c':'#74ab7c');
+  await lbFetchRemote();
+};
+
+const openRanks=async()=>{ paintRanks(); modal('mRanks',true);
+  if(apiBase()){ await lbFetchRemote(); paintRanks(); } };
+document.getElementById('btnRanksOpen').onclick=openRanks;
+document.getElementById('btnRanks2').onclick=openRanks;
 document.getElementById('btnLbExport').onclick=()=>{
   const payload={note:'Breach leaderboard export — merge into war-game/results.json',
     exportedAt:new Date().toISOString(), matches:lbAll()};
