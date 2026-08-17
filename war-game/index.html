@@ -56,6 +56,27 @@ canvas#field{display:block;width:100%;height:100%}
 .spin.on{background:var(--amber);animation:pulse .85s infinite}
 @keyframes pulse{0%,100%{opacity:.35;transform:scale(.8)}50%{opacity:1;transform:scale(1.25)}}
 
+/* The match is really a sequence of 4-second turns and that rhythm was
+   invisible. This fills between decisions and pulses while a side thinks. */
+#beat{position:absolute;left:0;right:0;top:0;height:2px;background:rgba(255,255,255,.07);z-index:5;pointer-events:none}
+#beatFill{display:block;height:100%;width:0;background:linear-gradient(90deg,#8a6f1d,#e0b83a);
+  transition:width .12s linear}
+#beat.think #beatFill{width:100%!important;animation:beatpulse 1s ease-in-out infinite}
+@keyframes beatpulse{0%,100%{opacity:.28}50%{opacity:1}}
+
+/* Who controls the field right now — separate from who is winning the match. */
+.fieldrow{display:flex;align-items:center;gap:6px;margin-top:1px}
+.fieldlab{font-family:"Saira Condensed",sans-serif;font-size:9px;letter-spacing:.12em;
+  text-transform:uppercase;color:#8b95a1;width:88px;flex:none;text-shadow:0 1px 4px rgba(0,0,0,.95)}
+.fieldbar{flex:1;height:5px;border-radius:3px;overflow:hidden;display:flex;position:relative;
+  background:rgba(4,7,11,.72);border:1px solid rgba(255,255,255,.12)}
+.fieldbar>span{height:100%;transition:width .25s ease}
+#fieldA{background:linear-gradient(180deg,#e0724d,#a83a20)}
+#fieldB{background:linear-gradient(180deg,#5aa3ce,#2b6d95)}
+.fieldmid{position:absolute;left:50%;top:-1px;bottom:-1px;width:1px;background:rgba(255,255,255,.35)}
+.fieldnum{font-size:9px;color:#b9c3ce;width:56px;text-align:right;flex:none;
+  font-family:"IBM Plex Mono",monospace;text-shadow:0 1px 4px rgba(0,0,0,.95)}
+
 #think{position:absolute;left:50%;top:calc(58px + var(--st));transform:translateX(-50%);
   padding:7px 13px;border-radius:20px;background:rgba(8,12,17,.84);border:1px solid rgba(255,255,255,.13);
   font-family:"Saira Condensed",sans-serif;font-size:13px;letter-spacing:.11em;text-transform:uppercase;
@@ -142,6 +163,7 @@ body:not(.live) #sheet{transform:translateY(100%);pointer-events:none}
 .tcoin .comp{display:flex;gap:3px;margin-left:4px}
 .tcoin .comp .chip{font-size:9px;font-family:"IBM Plex Mono",monospace;color:#9aa5b1;
   background:rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.12);border-radius:3px;padding:0 4px;font-weight:400}
+.tcoin.dup{display:none}   /* coins, income and eco now live on the bases themselves */
 #tickline{flex:1;text-align:center;font-size:10px;color:#9aa5b1;white-space:nowrap;overflow:hidden;
   text-overflow:ellipsis;text-shadow:0 1px 4px rgba(0,0,0,.9)}
 
@@ -154,6 +176,10 @@ body:not(.live) #sheet{transform:translateY(100%);pointer-events:none}
   box-shadow:0 5px 18px rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;padding:0}
 .fab.primary{background:rgba(224,184,58,.92);color:#20180a;border-color:rgba(255,255,255,.3)}
 .fab:active{transform:scale(.93)}
+/* Six circles parked over Cobalt's base is a lot of permanently lost
+   battlefield. They fade while the match runs and any tap brings them back. */
+#fabs{transition:opacity .35s ease}
+#fabs.idle{opacity:0;pointer-events:none}
 
 #nudge{position:absolute;left:50%;bottom:calc(var(--peek) + 30px);transform:translateX(-50%);
   display:none;z-index:7;width:max-content;max-width:min(86%,440px);text-align:center;
@@ -398,6 +424,8 @@ body.split #nudge{display:none}
 <div id="app">
   <canvas id="field"></canvas>
 
+  <div id="beat"><span id="beatFill"></span></div>
+
   <div id="hudTop">
     <div class="hpstack">
       <div class="hprow">
@@ -409,6 +437,11 @@ body.split #nudge{display:none}
         <span class="hpname" style="color:var(--B)"><span class="spin" id="spinB"></span><span id="hpBname">Cobalt</span></span>
         <span class="hpbar"><span class="hpfill" id="hpB" style="background:linear-gradient(180deg,#5aa3ce,#2b6d95);width:100%"></span></span>
         <span class="hpnum" id="hpBn">600</span>
+      </div>
+      <div class="fieldrow">
+        <span class="fieldlab">Field</span>
+        <span class="fieldbar"><span id="fieldA"></span><span id="fieldB"></span><i class="fieldmid"></i></span>
+        <span class="fieldnum" id="fieldTxt">0 / 0</span>
       </div>
     </div>
     <div class="clockwrap"><span id="clock">0:00</span><small id="spdTag">1×</small></div>
@@ -463,11 +496,11 @@ body.split #nudge{display:none}
   </div>
 
   <div id="ticker">
-    <span class="tcoin" style="color:#e8845e">
+    <span class="tcoin dup" style="color:#e8845e">
       <span id="coinA">20</span><small id="subA">1.0/s · eco 0</small><span class="comp" id="compA"></span>
     </span>
     <span id="tickline">Scripted commanders — open Setup to seat real models.</span>
-    <span class="tcoin" style="color:#68aed6">
+    <span class="tcoin dup" style="color:#68aed6">
       <span class="comp" id="compB"></span><small id="subB">1.0/s · eco 0</small><span id="coinB">20</span>
     </span>
   </div>
@@ -826,6 +859,7 @@ async function runDebrief(){
 
 function endGame(){
   RUNNING=false;
+  if(typeof wakeFabs==='function') wakeFabs();
   lbRecord();
   paintSummary();
   setSheet(1);
@@ -1108,7 +1142,7 @@ function seedAttract(){
             x: s===0 ? -16-k*13 : LANE+16+k*13};
   });
 }
-let PREVU=new Map(), ACC=new Map(), PREVBASE=[BASE_HP,BASE_HP], PREVECO=[0,0], LASTRT=0, SMOKET=0;
+let PREVU=new Map(), ACC=new Map(), PREVBASE=[BASE_HP,BASE_HP], PREVECO=[0,0], BACC=[0,0], LASTRT=0, SMOKET=0;
 
 /* The playable ground is a band, not the whole lower half: the top of the
    band sits below the horizon and the bottom reserves room for the ticker,
@@ -1523,9 +1557,17 @@ function draw(now){
   [0,1].forEach(s=>{
     const d=PREVBASE[s]-S.hp[s];
     if(d>0.4){ SHAKE=Math.min(14,SHAKE+d*.5); }
+    BACC[s]=(BACC[s]||0)+Math.max(0,d);
     PREVBASE[s]=S.hp[s];
   });
   const forts=[fort(cx,w,h,0),fort(cx,w,h,1)];
+  [0,1].forEach(s=>{                      // base damage was previously invisible
+    if(BACC[s]>=10 && !S.over){
+      DMGN.push({x:forts[s].x, y:forts[s].gy-forts[s].H*.55, v:Math.round(BACC[s]),
+                 life:1.1, col:'#ff7a5e'});
+      BACC[s]=0;
+    }
+  });
   // an eco upgrade completing is a big moment and used to be silent
   [0,1].forEach(s=>{
     if(S.eco[s]>PREVECO[s]){
@@ -1705,6 +1747,21 @@ const DEADPOS=new Map();
 function paintHUD(){
   const m=Math.floor(S.t/60), sec=Math.floor(S.t%60);
   document.getElementById('clock').textContent=`${m}:${String(sec).padStart(2,'0')}`;
+
+  // turn rhythm: fills between decisions, pulses while a side is thinking
+  const beat=document.getElementById('beat');
+  beat.classList.toggle('think',AWAIT);
+  if(!AWAIT){
+    const el=Math.max(0,Math.min(1,(S.t-(S.next-DECIDE))/DECIDE));
+    document.getElementById('beatFill').style.width=(el*100).toFixed(1)+'%';
+  }
+
+  // field control: army value alive, which answers a different question to base HP
+  const val=s=>S.units.filter(u=>u.s===s).reduce((a,u)=>a+UNITS[u.type].cost,0);
+  const va=val(0), vb=val(1), tot=va+vb;
+  document.getElementById('fieldA').style.width=(tot?va/tot*100:50)+'%';
+  document.getElementById('fieldB').style.width=(tot?vb/tot*100:50)+'%';
+  document.getElementById('fieldTxt').textContent=va+' / '+vb;
   [0,1].forEach(s=>{
     const k=s===0?'A':'B';
     document.getElementById('hp'+k).style.width=Math.max(0,S.hp[s]/BASE_HP*100)+'%';
@@ -2075,7 +2132,7 @@ function goLive(){
   LIVE=true; document.body.classList.add('live');
   reset(); RUNNING=true; last=0;
   document.getElementById('btnPlay').textContent='❚❚';
-  fit(); draw(performance.now());
+  fit(); draw(performance.now()); wakeFabs();
 }
 document.getElementById('btnBegin').onclick=goLive;
 document.getElementById('btnPickModels').onclick=()=>modal('mSetup',true);
@@ -2108,11 +2165,24 @@ document.getElementById('btnSwap').onclick=()=>rematch({swap:true});
 document.getElementById('btnNewSeed').onclick=()=>rematch({newSeed:true});
 document.getElementById('btnSeeLog').onclick=()=>setSheet(2);   // never strand the log behind a closed drawer
 
+/* ----- controls fade out of the way while you watch ----- */
+let IDLET=null;
+function wakeFabs(){
+  const f=document.getElementById('fabs');
+  f.classList.remove('idle');
+  clearTimeout(IDLET);
+  if(LIVE && RUNNING && !S.over && !PICK)
+    IDLET=setTimeout(()=>f.classList.add('idle'),3200);
+}
+['pointerdown','pointermove'].forEach(ev=>
+  document.getElementById('app').addEventListener(ev,wakeFabs,{passive:true}));
+
 /* ----- transport ----- */
 document.getElementById('btnPlay').onclick=e=>{
   if(S.over){ rematch(); return; }        // used to be a dead button after a win
   RUNNING=!RUNNING; last=0;
   e.target.textContent=RUNNING?'❚❚':'▶';
+  wakeFabs();                       // paused means you want the controls back
 };
 document.getElementById('btnSpeed').onclick=e=>{
   SPEED=SPEED===1?2:SPEED===2?4:1;
@@ -2126,7 +2196,7 @@ const reset=()=>{newGame(+document.getElementById('seed').value||1);
   const db=document.getElementById('debrief'); if(db){db.style.display='none';db.innerHTML='';}
   if(PICK){ const r=PICK.resolve; closePicker(); r({queue:[],why:'match reset'}); }
   PART=[];DMGN=[];DECAL=[];SHAKE=0;PREVU.clear();ACC.clear();DEADPOS.clear();
-  PREVBASE=[BASE_HP,BASE_HP]; PREVECO=[0,0]; BUILT=[{},{}]; PEAK=[0,0]; LASTQ=[[],[]]; SINCE=[{},{}];
+  PREVBASE=[BASE_HP,BASE_HP]; PREVECO=[0,0]; BACC=[0,0]; BUILT=[{},{}]; PEAK=[0,0]; LASTQ=[[],[]]; SINCE=[{},{}];
   const sm=document.getElementById('summary'); if(sm){sm.style.display='none';sm.innerHTML='';}
   ['ovA','ovB'].forEach(i=>{const e=document.getElementById(i);e.classList.remove('on','flash');e.innerHTML='';});
   ['miniA','miniB'].forEach(i=>document.getElementById(i).innerHTML='');
