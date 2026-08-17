@@ -37,14 +37,15 @@ an empty lane at 11 m/s.
 ### Economy
 
 - Income = `inc[side] * RAMP(t)` per second, where `RAMP = 1 + t/55`
-- `eco` purchase: 60 coins, +0.5/s permanently, max 3 times
+- `eco` purchase: escalating price **45 / 79 / 113**, each +0.5/s to BASE income (so the
+  payout is multiplied by RAMP too), max 3 times — see §4 for why it escalates
 - Base defence: 6 dps at range 7, so lone raiders can't chip a base down
 
 ### Tuned constants (all in `CFG`-equivalent consts at the top of the script)
 
 ```
 LANE=80  BASE_HP=600  BASE_DPS=6  BASE_RNG=7
-ECO_COST=60  ECO_STEP=0.5  ECO_MAX=3
+ECO_COST=45  ECO_STEP=0.5  ECO_MAX=3  ECO_ESC=0.75   // price = 45*(1+0.75n)
 DECIDE=4        // seconds of sim time between agent decisions
 TIME_CAP=300
 RAMP = t => 1 + t/55
@@ -97,8 +98,16 @@ Saved logs carry `promptVersion`. **v1 and v2 runs are not comparable.**
      `unspentFromLastQueue` — so a model can notice its tank never spawned.
   3. `counterHint` computed from the actual enemy composition rather than one static line.
 
-The scripted `agent()` never sees the prompt, so the headless mirror baseline is
-unaffected by prompt changes and still reads 30/30, median 182s, 0 timeouts.
+- **v3** — rewrote the ECONOMY section. v1/v2 described eco as "+0.5 coins/sec", which
+  understates it by 2-5x: the bonus is added to BASE income and then multiplied by `RAMP(t)`,
+  so one upgrade is worth ~+1.0/sec at 60s and ~+2.3/sec at 200s, pays back in 25-45s, and
+  returns several hundred coins. v2 also carried a blanket "buying economy while under
+  pressure loses games", which models reading near-constant pressure appear to have taken as
+  "never". Ten commander slots across five matches bought **zero** eco upgrades. v3 states the
+  real value, the escalating price, and adds `ecoNextPrice` / `ecoValueNow` to the state.
+
+The scripted `agent()` never sees the prompt, so prompt changes never move the mirror
+baseline. Balance changes do — see §4.
 
 ### Agent contract
 
@@ -210,8 +219,47 @@ console.log('mirror:',a,'/',b,'| median',lens[30]+'s','| timeouts',lens.filter(l
 ```
 
 **Current verified baseline (must hold after any sim change):**
-- Scripted mirror, 60 seeds: **33 / 27**, median **160s**, **0 timeouts**, **1.93 eco upgrades per side**
-- Superseded baseline at `ECO_COST=60`: 30 / 30, median 182s, 0 timeouts, 1.01 eco per side
+- Scripted mirror, 200 seeds: **103 / 97**, median **183s**, **0 timeouts**, **1.92 eco per side**
+- Eco prices escalate: **45 / 79 / 113**
+
+### A mirror test cannot detect a dominant strategy — always run the round-robin too
+
+This is the most important lesson in this file. The mirror baseline ran clean for months
+while the game was **solved**. Symmetric play means both sides make the same mistake, so the
+result always looks balanced.
+
+A trivial heuristic — *"buy eco whenever the nearest enemy is more than 30m away, otherwise
+play the adaptive control"* — beat the adaptive agent **88-98% of the time at every flat eco
+price tested, from 45 all the way up to 80.** Economy was not merely strong, it was the
+answer to the game. Neither the mirror check nor any LLM match surfaced it, because no model
+ever bought economy at all.
+
+**Mandatory after any balance change**, 150 seeds each way with sides swapped:
+
+| archetype | meaning | must be |
+|---|---|---|
+| `ecogreedy` | eco when the lane is clear, else adaptive | 40-70% |
+| `ecorush` | nothing but eco until maxed | under 20% |
+| `spam` | infantry only | under 20% |
+| `noeco` | adaptive with eco stripped out | under 20% |
+
+Current values: ecogreedy 66%, ecorush 0%, spam 0%, noeco 3%.
+
+### Why the eco price escalates
+
+A flat price with a *ramped* payout means the first upgrade is always correct and the game
+has one right move. `ECO_STEP` adds to base income, and base income is multiplied by
+`RAMP(t)`, so a single upgrade is worth ~+1.0 coins/sec at 60s and ~+2.3 at 200s — it pays
+back in 25-45s and returns several hundred coins over a match. Escalating the price
+(`ecoPrice(n) = 45 × (1 + 0.75n)`) keeps the first upgrade strong while making the third a
+real commitment. That moved the `ecogreedy` heuristic from 98% to 66%.
+
+Dropping the flat price to 40 (briefly, before this fix) also made the crude `ecorush` viable
+at 100%. The tipping point was sharp: at 45+ ecorush lost 0/300, at 42 it won 83%.
+
+### Known: a mild side bias to Vulcan
+
+### Known: a mild side bias to Vulcan
 
 ### Why ECO_COST dropped from 60 to 40
 
@@ -239,8 +287,10 @@ that decision count drops materially.
 
 ### Known: a mild side bias to Vulcan
 
-Over 600 scripted mirror seeds the split is **334 / 266 (55.7% to side 0, z = 2.78)**. It is
-identical at `ECO_COST` 60 and 40, so it is pre-existing and not caused by tuning. At 60 seeds
+Measured before the escalating-price fix, 600 scripted mirror seeds split **334 / 266
+(55.7% to side 0, z = 2.78)**, identically at eco 60 and 40. Under the current escalating
+prices the 200-seed mirror reads 103/97, so the bias may be smaller now — but it has not been
+re-measured at 600 seeds, so treat side as a confound until it is. At 60 seeds
 it hides inside the noise, which is why earlier checks read 30/30. This is exactly why
 **every pairing must be played on both sides** — that rule cancels it. Do not read a single
 one-sided result as a model difference.
