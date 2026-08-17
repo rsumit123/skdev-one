@@ -85,6 +85,12 @@ canvas#field{display:block;width:100%;height:100%}
 
 /* a card, not a full-screen scrim: the results sheet opens underneath it at
    half height, and both need to be usable at the same time */
+#resultsChip{position:absolute;left:50%;top:11%;transform:translateX(-50%);display:none;
+  z-index:24;border:1px solid rgba(224,184,58,.5);background:rgba(6,9,14,.92);color:#e0b83a;
+  font-family:"Saira Condensed",sans-serif;font-size:12.5px;letter-spacing:.1em;text-transform:uppercase;
+  padding:7px 14px;border-radius:20px;cursor:pointer;backdrop-filter:blur(6px);
+  box-shadow:0 8px 24px rgba(0,0,0,.5)}
+#resultsChip.on{display:block}
 #banner{position:absolute;left:50%;top:11%;transform:translateX(-50%);
   display:none;align-items:center;justify-content:center;flex-direction:column;gap:13px;
   background:rgba(6,9,14,.92);border:1px solid rgba(255,255,255,.15);border-radius:13px;
@@ -491,6 +497,8 @@ body.split #nudge{display:none}
     </div>
   </div>
 
+  <button id="resultsChip">&#9873; Results</button>
+
   <div id="title">
     <div class="tbrand">BREACH</div>
     <div class="tsub">Two language models command opposing armies down one lane.
@@ -527,6 +535,7 @@ body.split #nudge{display:none}
     <button class="fab" id="btnSpeed">1×</button>
     <button class="fab" id="btnReset2">&#8635;</button>
     <button class="fab" id="btnSetupOpen">&#9881;</button>
+    <button class="fab" id="btnRanksFab">&#9733;</button>
     <button class="fab" id="btnUnitsOpen">&#8505;</button>
   </div>
 
@@ -1640,6 +1649,7 @@ function draw(now){
     BACC[s]=(BACC[s]||0)+Math.max(0,d);
     PREVBASE[s]=S.hp[s];
   });
+  const mdt = (AWAIT||S.over) ? 0 : dt;   // frozen while thinking, and once the match is decided
   const forts=[fort(cx,w,h,0),fort(cx,w,h,1)];
   [0,1].forEach(s=>{                      // base damage was previously invisible
     if(BACC[s]>=10 && !S.over){
@@ -1657,14 +1667,16 @@ function draw(now){
     }
     PREVECO[s]=S.eco[s];
   });
-  SMOKET-=dt;
-  if(SMOKET<=0){
+  /* Damaged-base smoke used to keep spawning after the match ended. With motion
+     frozen those particles never expire either, so they piled up indefinitely. */
+  SMOKET-=mdt;
+  if(SMOKET<=0 && mdt){
     SMOKET=.22;
     forts.forEach((f,s)=>{ if(f.frac<.6) puff(f.x,f.gy-f.H,f.frac<.3?3:1,'70,64,58',26); });
   }
 
   // ---- decals (corpses) under everything living
-  DECAL=DECAL.filter(d=>(d.life-=(AWAIT?0:dt))>0);
+  DECAL=DECAL.filter(d=>(d.life-=mdt)>0);
   DECAL.forEach(d=>{
     const a=Math.min(1,d.life/3), y=groundY(h,d.row), sc=rowScale(h,d.row);
     cx.save(); cx.globalAlpha=a*.6; cx.translate(toPixRow(w,d.x,d.row),y); cx.scale(sc,sc);
@@ -1712,7 +1724,7 @@ function draw(now){
   for(const u of list){
     seen.add(u.id);
     const U=UNITS[u.type], r=rowOf(u), gy=groundY(h,r), sc=rowScale(h,r), px=toPixRow(w,u.x,r);
-    const dir=u.s===0?1:-1, firing=fire.has(u.id), haze=0.84+0.16*(r/(ROWS-1));
+    const dir=u.s===0?1:-1, firing=!S.over&&fire.has(u.id), haze=0.84+0.16*(r/(ROWS-1));
     // damage accumulation → floating numbers
     const prev=PREVU.get(u.id);
     if(prev!==undefined&&prev>u.hp){
@@ -1734,7 +1746,7 @@ function draw(now){
     else PAINT[u.type](cx,C.body,C.dark,ph,firing);
     cx.restore();
     // dust while walking
-    if(moving&&!LOWFX&&!AWAIT&&Math.random()<dt*7)
+    if(moving&&!LOWFX&&!AWAIT&&!S.over&&Math.random()<dt*7)
       puff(px-dir*10*sc,gy,1,'176,166,132',9);
     // hp pip
     const hf=Math.max(0,u.hp/u.mx), topy=TOPY[u.type]||40;
@@ -1759,7 +1771,7 @@ function draw(now){
     }
     // weapon fire — suppressed while the sim is frozen for a decision
     const Wp=WEAPON[u.type]||WEAPON.inf;
-    if(firing&&!LOWFX&&!AWAIT&&Math.random()<dt*Wp.rate){
+    if(firing&&!LOWFX&&!AWAIT&&!S.over&&Math.random()<dt*Wp.rate){
       const muz=u.type==='tank'?54:u.type==='at'?31:u.type==='gun'?33:24;
       const muy=u.type==='tank'?32:u.type==='at'?17:u.type==='gun'?15:20;
       const tx=px+dir*muz*sc, ty=gy-muy*sc;
@@ -1788,7 +1800,6 @@ function draw(now){
   S.units.forEach(u=>DEADPOS.set(u.id,{x:u.x,row:rowOf(u),s:u.s,type:u.type}));
 
   // ---- projectiles: rockets and shells actually travel, so you can see them coming
-  const mdt = AWAIT ? 0 : dt;          // a frozen sim must look frozen
   PROJ=PROJ.filter(q=>{
     q.t+=mdt;
     const k=Math.min(1,q.t/q.dur), X=q.x+(q.ex-q.x)*k, Y=q.y+(q.ey-q.y)*k;
@@ -2269,6 +2280,7 @@ const openRanks=async()=>{ paintRanks(); modal('mRanks',true);
   if(apiBase()){ await lbFetchRemote(); paintRanks(); } };
 document.getElementById('btnRanksOpen').onclick=openRanks;
 document.getElementById('btnRanks2').onclick=openRanks;
+document.getElementById('btnRanksFab').onclick=openRanks;
 document.getElementById('btnLbExport').onclick=()=>{
   const payload={note:'Breach leaderboard export — merge into war-game/results.json',
     exportedAt:new Date().toISOString(), matches:lbAll()};
@@ -2354,7 +2366,7 @@ function rematch(opts){
   if(opts.swap) swapCommanders();
   if(opts.newSeed){ const sd=document.getElementById('seed');
     sd.value=(+sd.value||1)+1; }
-  document.getElementById('banner').style.display='none';
+  showResults(false);
   goLive();
   const tl=document.getElementById('tickline');
   if(tl&&opts.swap) tl.textContent='Sides swapped — '+SIDE[0].name+' now plays Vulcan.';
@@ -2363,24 +2375,28 @@ document.getElementById('btnRematch').onclick=()=>rematch();
 document.getElementById('btnSwap').onclick=()=>rematch({swap:true});
 document.getElementById('btnNewSeed').onclick=()=>rematch({newSeed:true});
 document.getElementById('btnNewModels').onclick=()=>{
-  document.getElementById('banner').style.display='none';
+  showResults(false);
   modal('mSetup',true);            // pick opponents, then Start match from in there
 };
 /* Configure-then-play used to require closing Setup, finding the transport and
    guessing which button restarted. This is the single obvious action. */
 document.getElementById('btnSetupStart').onclick=()=>{
   modal('mSetup',false);
-  document.getElementById('banner').style.display='none';
+  showResults(false);
   goLive();
 };
 document.getElementById('btnSeeLog').onclick=()=>{
-  document.getElementById('banner').style.display='none';   // get the card out of the way of the log
+  showResults(false);              // get the card out of the way of the log
   setSheet(2);
 };
-document.getElementById('bannerX').onclick=()=>{
-  document.getElementById('banner').style.display='none';
-  wakeFabs();                       // ↻ / play remain the way back to a new match
-};
+/* Dismissing the card used to destroy it: rematch, swap sides and the log were
+   gone until you reset. It now collapses to a chip that restores it. */
+function showResults(v){
+  document.getElementById('banner').style.display = v?'flex':'none';
+  document.getElementById('resultsChip').classList.toggle('on', !v && S.over);
+}
+document.getElementById('bannerX').onclick=()=>{ showResults(false); wakeFabs(); };
+document.getElementById('resultsChip').onclick=()=>showResults(true);
 
 /* ----- controls fade out of the way while you watch ----- */
 let IDLET=null;
@@ -2415,6 +2431,7 @@ const reset=()=>{newGame(+document.getElementById('seed').value||1);
   PART=[];DMGN=[];DECAL=[];PROJ=[];SHAKE=0;PREVU.clear();ACC.clear();DEADPOS.clear();
   PREVBASE=[BASE_HP,BASE_HP]; PREVECO=[0,0]; BACC=[0,0]; BUILT=[{},{}]; PEAK=[0,0]; LASTQ=[[],[]]; SINCE=[{},{}];
   const sm=document.getElementById('summary'); if(sm){sm.style.display='none';sm.innerHTML='';}
+  showResults(false);
   ['ovA','ovB'].forEach(i=>{const e=document.getElementById(i);e.classList.remove('on','flash');e.innerHTML='';});
   ['miniA','miniB'].forEach(i=>document.getElementById(i).innerHTML='');
   document.getElementById('tickline').textContent='Match reset — press play.';
