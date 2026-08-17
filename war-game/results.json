@@ -1,0 +1,61 @@
+{
+  "note": "Canonical match record for the Breach leaderboard. The page reads this file and merges it with matches stored locally in your browser. A static page cannot write here, so durable results are committed to git — export from the Leaderboard screen and add them.",
+  "caveats": [
+    "promptVersion and balance both change what a match measures. Never compare across them.",
+    "Every match below was played on seed 42 with one lineup only. Vulcan (side 0) has a measured ~55.7% win advantage, so a pairing means little until it has been played both ways.",
+    "Sample sizes are tiny. Treat these as anecdotes, not rankings."
+  ],
+  "matches": [
+    {
+      "at": "2026-08-16T08:03:32.467Z", "promptVersion": 1, "seed": 42,
+      "a": {"name": "GPT-5 Nano", "model": "openai/gpt-5-nano", "kind": "llm",
+            "calls": 20, "failed": 0, "malformed": 0, "avgMs": 6901},
+      "b": {"name": "Gemini 2.5 Lite", "model": "google/gemini-2.5-flash-lite", "kind": "llm",
+            "calls": 20, "failed": 0, "malformed": 0, "avgMs": 4041},
+      "winner": 0, "t": 108.8, "hp": [25, 0], "eco": [0, 0],
+      "flags": ["scripted decisions leaked into the opening (8 of 28 per side)"]
+    },
+    {
+      "at": "2026-08-16T14:56:03.517Z", "promptVersion": 1, "seed": 42,
+      "a": {"name": "Granite 4.0", "model": "ibm-granite/granite-4.0-h-micro", "kind": "llm",
+            "calls": 32, "failed": 1, "malformed": 0, "avgMs": 3639},
+      "b": {"name": "Nova Micro", "model": "amazon/nova-micro-v1", "kind": "llm",
+            "calls": 32, "failed": 0, "malformed": 0, "avgMs": 3904},
+      "winner": 0, "t": 139.4, "hp": [600, 0], "eco": [0, 0],
+      "flags": ["scripted decisions leaked into the opening (3 of 35 per side)"]
+    },
+    {
+      "at": "2026-08-16T15:31:07.351Z", "promptVersion": 2, "seed": 42,
+      "balance": {"ecoCost": 60},
+      "a": {"name": "Nova Micro", "model": "amazon/nova-micro-v1", "kind": "llm",
+            "calls": 56, "failed": 0, "malformed": 0, "avgMs": 1550,
+            "built": {"inf": 50, "gun": 9, "at": 4}, "peakCoins": 32},
+      "b": {"name": "Gemini 2.5 Lite", "model": "google/gemini-2.5-flash-lite", "kind": "llm",
+            "calls": 56, "failed": 0, "malformed": 0, "avgMs": 4121,
+            "built": {"inf": 49, "gun": 8, "tank": 2, "at": 1}, "peakCoins": 44},
+      "winner": 1, "t": 220.5, "hp": [0, 318], "eco": [0, 0]
+    },
+    {
+      "at": "2026-08-16T16:54:38.722Z", "promptVersion": 2, "seed": 42,
+      "balance": {"ecoCost": 60},
+      "a": {"name": "GPT-4.1 Nano", "model": "openai/gpt-4.1-nano", "kind": "llm",
+            "calls": 54, "failed": 0, "malformed": 1, "avgMs": 2097,
+            "built": {"inf": 21, "gun": 16, "at": 6}, "peakCoins": 40},
+      "b": {"name": "GPT-5.6 Luna", "model": "openai/gpt-5.6-luna", "kind": "llm",
+            "calls": 53, "failed": 0, "malformed": 0, "avgMs": 4706,
+            "built": {"inf": 56, "gun": 6, "tank": 2}, "peakCoins": 44},
+      "winner": 1, "t": 213.2, "hp": [0, 254], "eco": [0, 0]
+    },
+    {
+      "at": "2026-08-17T05:36:56.678Z", "promptVersion": 2, "seed": 42,
+      "balance": {"ecoCost": 40},
+      "a": {"name": "Nova Lite", "model": "amazon/nova-lite-v1", "kind": "llm",
+            "calls": 65, "failed": 0, "malformed": 0, "avgMs": 1955,
+            "built": {"inf": 66, "gun": 13, "mob": 1, "tank": 2}, "peakCoins": 44},
+      "b": {"name": "GPT-5.4 Nano", "model": "openai/gpt-5.4-nano", "kind": "llm",
+            "calls": 64, "failed": 0, "malformed": 0, "avgMs": 5683,
+            "built": {"inf": 52, "gun": 17, "at": 5}, "peakCoins": 41},
+      "winner": 0, "t": 256.8, "hp": [172, 0], "eco": [0, 0]
+    }
+  ]
+}

@@ -263,6 +263,30 @@ table.units td.n{text-align:left;display:flex;align-items:center;gap:7px}
 .cw{font-size:10.5px;color:var(--txt-2);line-height:1.6;margin-top:12px}
 .setrow{display:flex;align-items:center;gap:8px;margin-top:13px;flex-wrap:wrap}
 
+/* leaderboard */
+.lbchip{border:1px solid #39434e;background:#141a21;color:var(--txt-3);border-radius:20px;
+  padding:5px 11px;font-family:"Saira Condensed",sans-serif;font-size:11.5px;letter-spacing:.08em;
+  text-transform:uppercase;cursor:pointer;font-weight:700}
+.lbchip.on{background:#1d2630;color:#eef2f6;border-color:#4a5663}
+table.lb{width:100%;border-collapse:collapse;font-size:11.5px;margin-top:4px}
+table.lb th{text-align:right;color:var(--txt-3);font-weight:400;font-size:9px;letter-spacing:.08em;
+  text-transform:uppercase;padding:0 0 5px;white-space:nowrap}
+table.lb th:first-child{text-align:left}
+table.lb td{padding:6px 0;border-top:1px solid #1b232b;text-align:right;white-space:nowrap}
+table.lb td:first-child{text-align:left;white-space:normal}
+.lbname{font-family:"Saira Condensed",sans-serif;font-size:12.5px;letter-spacing:.04em;font-weight:700;color:#e6ecf3}
+.lbmodel{font-size:9px;color:var(--txt-3);display:block;margin-top:1px}
+.lbwin{font-weight:700}
+.lbthin{color:#c9a227}
+.lbh{font-family:"Saira Condensed",sans-serif;font-size:12px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--amber);margin:14px 0 4px}
+.lbm{border-left:2px solid #2a333c;padding:6px 9px;margin-bottom:5px;background:#101720;
+  border-radius:0 6px 6px 0;font-size:10.5px;line-height:1.5}
+.lbm b{color:#e6ecf3;font-weight:600}
+.lbm .lbmeta{color:var(--txt-3);font-size:9px;margin-top:2px}
+.lbflag{color:#c9765c;font-size:9px;margin-top:2px}
+.lbempty{color:var(--txt-3);font-size:11px;padding:16px 0;text-align:center;line-height:1.6}
+
 /* ---------- portrait split ---------- */
 body.split #sheet{position:relative;transform:none;height:auto;flex:1 1 auto;min-height:0;
   border-radius:0;box-shadow:none;border-top:1px solid var(--rule)}
@@ -364,6 +388,7 @@ body.split #nudge{display:none}
     <div class="trow">
       <button class="act primary" id="btnBegin">Start battle</button>
       <button class="act" id="btnPickModels">Choose models</button>
+      <button class="act" id="btnRanksOpen">Leaderboard</button>
     </div>
     <div class="tnote">Runs scripted commanders by default. Seat real models in Setup with an OpenRouter key.</div>
   </div>
@@ -416,6 +441,7 @@ body.split #nudge{display:none}
   </div>
   <div class="sheetfoot">
     <span class="whobar" id="whobar"></span>
+    <button class="act footonly" id="btnRanks2">&#9733;</button>
     <button class="act footonly" id="btnSetupOpen2">&#9881;</button>
     <button class="act footonly" id="btnUnitsOpen2">&#8505;</button>
     <button class="act" id="btnExport2">Save</button>
@@ -471,6 +497,25 @@ body.split #nudge{display:none}
         <b>4.5 cents</b>.<br><br>
         The <b>:free</b> routes are capped at 20/min and 50/day with no credits — not enough to finish
         one match, which is why Test returns 429. Paid routes have no daily cap.</div></div>
+  </div>
+</div>
+
+<div class="modal" id="mRanks">
+  <div class="mhead"><h3>Leaderboard</h3><button class="act" data-close="mRanks">Done</button></div>
+  <div class="mbody">
+    <div class="crow" id="lbFilter"></div>
+    <div id="lbWarn" class="warnbox"></div>
+    <div id="lbStand"></div>
+    <div id="lbMatches"></div>
+    <div class="setrow">
+      <button class="act" id="btnLbExport">Export all</button>
+      <button class="act" id="btnLbImport">Import</button>
+      <button class="act" id="btnLbClear">Clear local</button>
+    </div>
+    <input type="file" id="lbFile" accept="application/json" style="display:none">
+    <div class="warnbox">Finished matches are saved automatically in this browser. The committed
+      <code>results.json</code> is the durable record shared across devices — a static page cannot
+      write to it, so use <b>Export all</b> and add the file to the repo to make results permanent.</div>
   </div>
 </div>
 
@@ -716,6 +761,7 @@ async function runDebrief(){
 
 function endGame(){
   RUNNING=false;
+  lbRecord();
   paintSummary();
   setSheet(1);
   runDebrief();
@@ -1700,6 +1746,138 @@ document.addEventListener('fullscreenchange',()=>{
   };
   setTimeout(window.checkNudge,900);
 })();
+
+/* ============================================================
+   7. LEADERBOARD
+   No backend: finished matches go to localStorage, and results.json in the
+   repo holds the durable record. The page merges both. A static page cannot
+   write to the repo, so Export all -> commit is the path to permanence.
+   ============================================================ */
+const LB_KEY='breach.records';
+let LB_SEED=[], LB_FILTER='all';
+const lbLoad=()=>{ try{ return JSON.parse(localStorage.getItem(LB_KEY)||'[]'); }catch(e){ return []; } };
+const lbKey=r=>[r.at,r.seed,r.a&&r.a.model,r.b&&r.b.model].join('|');
+function lbAll(){
+  const seen=new Set(), out=[];
+  for(const r of [...LB_SEED,...lbLoad()]){
+    if(!r||!r.a||!r.b) continue;
+    const k=lbKey(r); if(seen.has(k)) continue; seen.add(k); out.push(r);
+  }
+  return out.sort((x,y)=>String(y.at).localeCompare(String(x.at)));
+}
+function lbRecord(){
+  if(!CMD.some(c=>c.kind==='llm')) return;          // model leaderboard only
+  const side=s=>({name:SIDE[s].name, model:CMD[s].kind==='llm'?CMD[s].model:CMD[s].kind,
+    kind:CMD[s].kind, calls:STATS[s].calls, failed:STATS[s].fail, malformed:STATS[s].bad,
+    avgMs:STATS[s].calls?Math.round(STATS[s].ms/STATS[s].calls):0,
+    built:{...BUILT[s]}, peakCoins:Math.floor(PEAK[s])});
+  const rec={at:new Date().toISOString(), promptVersion:3, seed:+document.getElementById('seed').value||0,
+    balance:{ecoCost:ECO_COST,ecoPrices:[0,1,2].map(ecoPrice)},
+    a:side(0), b:side(1), winner:S.win, t:+S.t.toFixed(1),
+    hp:S.hp.map(h=>Math.max(0,Math.round(h))), eco:[...S.eco]};
+  const rs=lbLoad(); rs.push(rec);
+  try{ localStorage.setItem(LB_KEY, JSON.stringify(rs.slice(-400))); }catch(e){}
+}
+function lbStandings(rows){
+  const M={};
+  const get=m=>M[m]||(M[m]={model:m,name:m,p:0,w:0,l:0,d:0,v:[0,0],c:[0,0],ms:0,calls:0,fail:0});
+  for(const r of rows){
+    [r.a,r.b].forEach((sd,i)=>{
+      const e=get(sd.model); e.name=sd.name||sd.model; e.p++;
+      const won=r.winner===i, lost=r.winner!==null&&r.winner!==i;
+      if(won)e.w++; else if(lost)e.l++; else e.d++;
+      (i===0?e.v:e.c)[won?0:1]++;
+      e.ms+=(sd.avgMs||0)*(sd.calls||0); e.calls+=sd.calls||0; e.fail+=(sd.failed||0)+(sd.malformed||0);
+    });
+  }
+  return Object.values(M).sort((x,y)=>
+    (y.w/Math.max(1,y.p))-(x.w/Math.max(1,x.p)) || y.p-x.p || x.name.localeCompare(y.name));
+}
+function lbUnpaired(rows){
+  const seen={}, out=[];
+  rows.forEach(r=>{ seen[r.a.model+'>'+r.b.model]=true; });
+  rows.forEach(r=>{ const back=r.b.model+'>'+r.a.model;
+    if(!seen[back] && !out.some(o=>o.k===back)) out.push({k:r.a.model+'>'+r.b.model, a:r.a.name, b:r.b.name}); });
+  return out;
+}
+function paintRanks(){
+  const rows0=lbAll();
+  const vers=[...new Set(rows0.map(r=>r.promptVersion||1))].sort((a,b)=>b-a);
+  const f=document.getElementById('lbFilter');
+  f.innerHTML=['all',...vers].map(v=>
+    `<span class="lbchip${LB_FILTER===String(v)?' on':''}" data-v="${v}">${v==='all'?'All':'Prompt v'+v}</span>`).join('');
+  f.querySelectorAll('.lbchip').forEach(c=>c.onclick=()=>{LB_FILTER=c.dataset.v;paintRanks();});
+  const rows=LB_FILTER==='all'?rows0:rows0.filter(r=>String(r.promptVersion||1)===LB_FILTER);
+
+  const warn=document.getElementById('lbWarn');
+  const unp=lbUnpaired(rows);
+  warn.innerHTML= !rows.length ? '' :
+    `<b>Read these standings carefully.</b> ${rows.length} match${rows.length===1?'':'es'}.
+     Vulcan (the left seat) has a measured ~55.7% side advantage, so a pairing only means
+     something once it has been played both ways — use <b>Swap sides</b> after a match.
+     ${LB_FILTER==='all'&&vers.length>1?'You are mixing prompt versions, which changed what the models were told. Filter to one version to compare fairly.':''}
+     ${unp.length?`<br><br><b>Not yet played both ways:</b> ${unp.map(u=>u.a+' vs '+u.b).join(' · ')}`:''}`;
+
+  const st=lbStandings(rows), box=document.getElementById('lbStand');
+  if(!st.length){ box.innerHTML='<div class="lbempty">No matches recorded yet.<br>Finish a match with at least one OpenRouter model seated and it will appear here.</div>';
+    document.getElementById('lbMatches').innerHTML=''; return; }
+  box.innerHTML=`<div class="lbh">Standings</div><table class="lb">
+    <thead><tr><th>Model</th><th>P</th><th>W</th><th>L</th><th>Win%</th>
+    <th>Vulcan</th><th>Cobalt</th><th>Latency</th><th>Errors</th></tr></thead><tbody>`+
+    st.map(e=>{
+      const pct=e.p?Math.round(e.w*100/e.p):0, thin=e.p<4;
+      return `<tr><td><span class="lbname">${e.name}</span><span class="lbmodel">${e.model}</span></td>
+        <td>${e.p}</td><td>${e.w}</td><td>${e.l}</td>
+        <td class="lbwin ${thin?'lbthin':''}">${pct}%${thin?'*':''}</td>
+        <td>${e.v[0]}-${e.v[1]}</td><td>${e.c[0]}-${e.c[1]}</td>
+        <td>${e.calls?(e.ms/e.calls/1000).toFixed(1)+'s':'—'}</td>
+        <td>${e.fail||0}</td></tr>`;}).join('')+
+    `</tbody></table><div class="lbempty" style="text-align:left;padding:6px 0">
+      * fewer than 4 matches — this number is noise, not a ranking.</div>`;
+
+  document.getElementById('lbMatches').innerHTML='<div class="lbh">Matches</div>'+rows.map(r=>{
+    const w=r.winner===null?'draw':(r.winner===0?r.a.name:r.b.name);
+    const bl=b=>Object.entries(b||{}).map(([k,v])=>(UNITS[k]?UNITS[k].g:k)+v).join(' ')||'—';
+    return `<div class="lbm">
+      <b>${r.a.name}</b> vs <b>${r.b.name}</b> — ${r.winner===null?'draw':'<b>'+w+'</b> wins'}
+      ${r.hp?`(${r.hp[0]} / ${r.hp[1]})`:''}
+      <div class="lbmeta">seed ${r.seed} · ${Math.round(r.t)}s · prompt v${r.promptVersion||1}
+        ${r.balance&&r.balance.ecoCost?' · eco '+(r.balance.ecoPrices?r.balance.ecoPrices.join('/'):r.balance.ecoCost):''}
+        · eco built ${r.eco?r.eco.join('/'):'0/0'}
+        · ${bl(r.a.built)} vs ${bl(r.b.built)}</div>
+      ${(r.flags||[]).map(x=>`<div class="lbflag">! ${x}</div>`).join('')}
+    </div>`;}).join('');
+}
+(async()=>{ try{
+  const r=await fetch('/war-game/results.json',{cache:'no-store'});  // absolute: the page serves at /war-game with no trailing slash
+  if(r.ok){ const j=await r.json(); LB_SEED=j.matches||[]; }
+}catch(e){} })();
+
+document.getElementById('btnRanksOpen').onclick=()=>{paintRanks();modal('mRanks',true);};
+document.getElementById('btnRanks2').onclick=()=>{paintRanks();modal('mRanks',true);};
+document.getElementById('btnLbExport').onclick=()=>{
+  const payload={note:'Breach leaderboard export — merge into war-game/results.json',
+    exportedAt:new Date().toISOString(), matches:lbAll()};
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}));
+  a.download='breach-results.json'; a.click();
+};
+document.getElementById('btnLbImport').onclick=()=>document.getElementById('lbFile').click();
+document.getElementById('lbFile').onchange=e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const rd=new FileReader();
+  rd.onload=()=>{ try{
+    const j=JSON.parse(rd.result), inc=j.matches||(Array.isArray(j)?j:[]);
+    const have=new Set(lbLoad().map(lbKey)), add=inc.filter(r=>r&&r.a&&r.b&&!have.has(lbKey(r)));
+    localStorage.setItem(LB_KEY, JSON.stringify([...lbLoad(),...add].slice(-400)));
+    paintRanks();
+  }catch(err){} };
+  rd.readAsText(f); e.target.value='';
+};
+document.getElementById('btnLbClear').onclick=()=>{
+  try{ localStorage.removeItem(LB_KEY); }catch(e){}
+  paintRanks();
+};
 
 /* ----- attract screen, rematch, side swap ----- */
 function goLive(){
