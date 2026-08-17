@@ -91,6 +91,12 @@ canvas#field{display:block;width:100%;height:100%}
   font-family:"Saira Condensed",sans-serif;font-size:27px;letter-spacing:.08em;
   text-transform:uppercase;text-align:center;padding:15px 22px;max-width:94%;
   backdrop-filter:blur(7px);z-index:25;box-shadow:0 14px 44px rgba(0,0,0,.65)}
+/* the card sits over the log — there must always be a way past it */
+#bannerX{position:absolute;top:5px;right:7px;width:30px;height:30px;border:0;border-radius:50%;
+  background:rgba(255,255,255,.08);color:#c3ccd6;font-size:21px;line-height:1;cursor:pointer;
+  font-family:system-ui,sans-serif;padding:0;display:flex;align-items:center;justify-content:center}
+#bannerX:hover{background:rgba(255,255,255,.16);color:#fff}
+#bannerX:active{transform:scale(.92)}
 .brow{display:flex;gap:9px;flex-wrap:wrap;justify-content:center}
 .brow .act{font-size:14px;padding:10px 16px}
 
@@ -455,6 +461,7 @@ body.split #nudge{display:none}
   <div id="think" style="display:none"></div>
 
   <div id="banner" style="display:none">
+    <button id="bannerX" aria-label="Close">&times;</button>
     <div id="bannerTxt"></div>
     <div class="brow">
       <button class="act primary" id="btnRematch">Rematch</button>
@@ -2026,8 +2033,9 @@ function lbRecord(){
     hp:S.hp.map(h=>Math.max(0,Math.round(h))), eco:[...S.eco]};
   const rs=lbLoad(); rs.push(rec);
   try{ localStorage.setItem(LB_KEY, JSON.stringify(rs.slice(-400))); }catch(e){}
-  // fire-and-forget upload; the local copy is already safe if this fails
-  lbPush(rec).then(res=>{
+  // upload the full log, not this summary: the point of the server is that the
+  // per-decision reasoning is retrievable later without anyone copying a file
+  lbPush(matchPayload()).then(res=>{
     if(res.skipped) return;
     const tl=document.getElementById('tickline');
     if(!tl) return;
@@ -2283,7 +2291,14 @@ function rematch(opts){
 document.getElementById('btnRematch').onclick=()=>rematch();
 document.getElementById('btnSwap').onclick=()=>rematch({swap:true});
 document.getElementById('btnNewSeed').onclick=()=>rematch({newSeed:true});
-document.getElementById('btnSeeLog').onclick=()=>setSheet(2);   // never strand the log behind a closed drawer
+document.getElementById('btnSeeLog').onclick=()=>{
+  document.getElementById('banner').style.display='none';   // get the card out of the way of the log
+  setSheet(2);
+};
+document.getElementById('bannerX').onclick=()=>{
+  document.getElementById('banner').style.display='none';
+  wakeFabs();                       // ↻ / play remain the way back to a new match
+};
 
 /* ----- controls fade out of the way while you watch ----- */
 let IDLET=null;
@@ -2359,8 +2374,8 @@ async function copyAnalysis(btn){
 document.getElementById('btnCopyAnalysis').onclick=e=>copyAnalysis(e.target);
 document.getElementById('btnCopyEnd').onclick=e=>copyAnalysis(e.target);
 
-const saveLog=()=>{
-  const payload={
+function matchPayload(){
+  return {
     game:'breach', promptVersion:3,   // v3 fixed the economy description; v1/v2 runs are not comparable
     // balance is stamped into every log so a tuning change can never silently
     // invalidate a comparison between two saved matches
@@ -2384,6 +2399,10 @@ const saveLog=()=>{
       reasoning:e.why,latencyMs:e.ms?Math.round(e.ms):undefined,
       invalidTokens:e.bad&&e.bad.length?e.bad:undefined,failed:e.failed||undefined})),
   };
+}
+
+const saveLog=()=>{
+  const payload=matchPayload();
   const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
   a.download=`breach-${SIDE[0].name}-vs-${SIDE[1].name}-${payload.seed}.json`.replace(/\s+/g,'');
