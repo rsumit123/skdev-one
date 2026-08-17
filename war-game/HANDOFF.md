@@ -257,7 +257,65 @@ real commitment. That moved the `ecogreedy` heuristic from 98% to 66%.
 Dropping the flat price to 40 (briefly, before this fix) also made the crude `ecorush` viable
 at 100%. The tipping point was sharp: at 45+ ecorush lost 0/300, at 42 it won 83%.
 
+### Confirmed working: prompt v3 + escalating eco price
+
+The first v3 match (Llama 4 Scout vs GPT-4.1 Nano, seed 42, 2026-08-17) is the first time in
+seven recorded matches that **any** model bought an economy upgrade. Every v1 and v2 match
+recorded `eco 0/0` on both sides.
+
+What changed in that match:
+
+| | Llama 4 | GPT-4.1 Nano |
+|---|---|---|
+| eco queued / queued FIRST | 20x / 10x | 24x / **22x** |
+| longest committed run | 2 decisions | **6 decisions** |
+| upgrades completed | 1 | **3 of 3** |
+| peak coins | 44 | **112** |
+| total economy (units + eco) | 655 | **924** |
+| result | base destroyed | **600 HP, untouched** |
+
+GPT-4.1 Nano is the same model that, under v2, showed 0% deliberate saving and lost to
+GPT-5.6 Luna. Under v3 it held eco at the head of its queue for six consecutive decisions.
+That is strong evidence the v1/v2 economy description — not model capability — was the
+bottleneck.
+
+The match also produced the **first full counter exchange**: Llama fielded 6 tanks, GPT-4.1
+answered with 12 AT teams at 4x versus armour, and won 600-0.
+
+Worth noting against over-trusting the reasoning metrics: Llama cited concrete quantities in
+48% of its decisions versus GPT-4.1's 13%, and used more distinct queues — it *articulated*
+better and lost decisively. Commitment beat commentary.
+
 ### Known: a mild side bias to Vulcan
+
+### Confirmed working: prompt v3 + escalating eco price
+
+The first v3 match (Llama 4 Scout vs GPT-4.1 Nano, seed 42, 2026-08-17) is the first time in
+seven recorded matches that **any** model bought an economy upgrade. Every v1 and v2 match
+recorded `eco 0/0` on both sides.
+
+What changed in that match:
+
+| | Llama 4 | GPT-4.1 Nano |
+|---|---|---|
+| eco queued / queued FIRST | 20x / 10x | 24x / **22x** |
+| longest committed run | 2 decisions | **6 decisions** |
+| upgrades completed | 1 | **3 of 3** |
+| peak coins | 44 | **112** |
+| total economy (units + eco) | 655 | **924** |
+| result | base destroyed | **600 HP, untouched** |
+
+GPT-4.1 Nano is the same model that, under v2, showed 0% deliberate saving and lost to
+GPT-5.6 Luna. Under v3 it held eco at the head of its queue for six consecutive decisions.
+That is strong evidence the v1/v2 economy description — not model capability — was the
+bottleneck.
+
+The match also produced the **first full counter exchange**: Llama fielded 6 tanks, GPT-4.1
+answered with 12 AT teams at 4x versus armour, and won 600-0.
+
+Worth noting against over-trusting the reasoning metrics: Llama cited concrete quantities in
+48% of its decisions versus GPT-4.1's 13%, and used more distinct queues — it *articulated*
+better and lost decisively. Commitment beat commentary.
 
 ### Known: a mild side bias to Vulcan
 
@@ -284,6 +342,35 @@ bug #3 — and roughly doubles how often tanks and AT teams reach the field, whi
 counter cycle needs. 40 was chosen because it sits inside the observed LLM banking range
 (peaks of 40 and 44) while keeping the median above 150s. Below 35 games get short enough
 that decision count drops materially.
+
+### Confirmed working: prompt v3 + escalating eco price
+
+The first v3 match (Llama 4 Scout vs GPT-4.1 Nano, seed 42, 2026-08-17) is the first time in
+seven recorded matches that **any** model bought an economy upgrade. Every v1 and v2 match
+recorded `eco 0/0` on both sides.
+
+What changed in that match:
+
+| | Llama 4 | GPT-4.1 Nano |
+|---|---|---|
+| eco queued / queued FIRST | 20x / 10x | 24x / **22x** |
+| longest committed run | 2 decisions | **6 decisions** |
+| upgrades completed | 1 | **3 of 3** |
+| peak coins | 44 | **112** |
+| total economy (units + eco) | 655 | **924** |
+| result | base destroyed | **600 HP, untouched** |
+
+GPT-4.1 Nano is the same model that, under v2, showed 0% deliberate saving and lost to
+GPT-5.6 Luna. Under v3 it held eco at the head of its queue for six consecutive decisions.
+That is strong evidence the v1/v2 economy description — not model capability — was the
+bottleneck.
+
+The match also produced the **first full counter exchange**: Llama fielded 6 tanks, GPT-4.1
+answered with 12 AT teams at 4x versus armour, and won 600-0.
+
+Worth noting against over-trusting the reasoning metrics: Llama cited concrete quantities in
+48% of its decisions versus GPT-4.1's 13%, and used more distinct queues — it *articulated*
+better and lost decisively. Commitment beat commentary.
 
 ### Known: a mild side bias to Vulcan
 
