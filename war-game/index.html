@@ -508,10 +508,12 @@ body.split #nudge{display:none}
     <div id="lbStand"></div>
     <div id="lbMatches"></div>
     <div class="setrow">
-      <button class="act" id="btnLbExport">Export all</button>
+      <button class="act" id="btnLbCopy">Copy</button>
+      <button class="act" id="btnLbExport">Download</button>
       <button class="act" id="btnLbImport">Import</button>
       <button class="act" id="btnLbClear">Clear local</button>
     </div>
+    <div id="lbCopyOut" class="tout"></div>
     <input type="file" id="lbFile" accept="application/json" style="display:none">
     <div class="warnbox">Finished matches are saved automatically in this browser. The committed
       <code>results.json</code> is the durable record shared across devices — a static page cannot
@@ -1862,16 +1864,49 @@ document.getElementById('btnLbExport').onclick=()=>{
   a.href=URL.createObjectURL(new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}));
   a.download='breach-results.json'; a.click();
 };
+/* Copying beats downloading on a phone — a JSON file is awkward to attach,
+   text pastes straight into a chat. */
+document.getElementById('btnLbCopy').onclick=async()=>{
+  const out=document.getElementById('lbCopyOut');
+  const txt=JSON.stringify({note:'Breach leaderboard export — merge into war-game/results.json',
+    exportedAt:new Date().toISOString(), matches:lbAll()},null,1);
+  try{ await navigator.clipboard.writeText(txt);
+    out.style.color='#74ab7c';
+    out.textContent=`Copied ${lbAll().length} matches (${Math.round(txt.length/1024)} KB). Paste it anywhere to save it permanently.`;
+  }catch(e){ out.style.color='#c9765c';
+    out.textContent='Clipboard blocked by the browser — use Download instead.'; }
+};
+
+/* A saved match log has everything the leaderboard needs, so accept those too
+   rather than forcing a second, separate export. */
+function lbFromMatchLog(j){
+  if(!j||!j.commanders||!j.result) return null;
+  const c=j.commanders, ub=j.unitsBuilt||[];
+  const pick=i=>({name:c[i].side, model:c[i].model||c[i].kind, kind:c[i].kind,
+    calls:c[i].calls, failed:c[i].failed, malformed:c[i].malformed, avgMs:c[i].avgLatencyMs,
+    built:(()=>{ const {side,...b}=ub[i]||{}; return b; })(),
+    peakCoins:(j.peakCoins||[])[i]});
+  const win=j.result.winner==null?null:(j.result.winner===c[0].side?0:j.result.winner===c[1].side?1:null);
+  return {at:j.savedAt||new Date().toISOString(), promptVersion:j.promptVersion||1, seed:j.seed,
+    balance:j.balance, a:pick(0), b:pick(1), winner:win, t:j.result.durationSeconds,
+    hp:j.result.baseHP, eco:j.result.ecoUpgrades};
+}
 document.getElementById('btnLbImport').onclick=()=>document.getElementById('lbFile').click();
 document.getElementById('lbFile').onchange=e=>{
   const f=e.target.files[0]; if(!f) return;
-  const rd=new FileReader();
+  const out=document.getElementById('lbCopyOut'), rd=new FileReader();
   rd.onload=()=>{ try{
-    const j=JSON.parse(rd.result), inc=j.matches||(Array.isArray(j)?j:[]);
-    const have=new Set(lbLoad().map(lbKey)), add=inc.filter(r=>r&&r.a&&r.b&&!have.has(lbKey(r)));
+    const j=JSON.parse(rd.result);
+    let inc = j.matches || (Array.isArray(j)?j:[]);
+    if(!inc.length){ const one=lbFromMatchLog(j); if(one) inc=[one]; }   // a single match log
+    const have=new Set(lbLoad().map(lbKey));
+    const add=inc.filter(r=>r&&r.a&&r.b&&!have.has(lbKey(r)));
     localStorage.setItem(LB_KEY, JSON.stringify([...lbLoad(),...add].slice(-400)));
+    out.style.color=add.length?'#74ab7c':'#c9a227';
+    out.textContent=add.length?`Imported ${add.length} match${add.length===1?'':'es'}.`
+      :'Nothing new — those matches were already recorded.';
     paintRanks();
-  }catch(err){} };
+  }catch(err){ out.style.color='#c9765c'; out.textContent='Could not read that file.'; } };
   rd.readAsText(f); e.target.value='';
 };
 document.getElementById('btnLbClear').onclick=()=>{
