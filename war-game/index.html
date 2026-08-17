@@ -62,9 +62,44 @@ canvas#field{display:block;width:100%;height:100%}
   color:#e8eef5;align-items:center;gap:7px;pointer-events:none;backdrop-filter:blur(6px);
   box-shadow:0 6px 22px rgba(0,0,0,.55);white-space:nowrap;max-width:88%;overflow:hidden}
 
-#banner{position:absolute;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;
-  background:rgba(5,7,10,.72);font-family:"Saira Condensed",sans-serif;font-size:30px;letter-spacing:.09em;
-  text-transform:uppercase;text-align:center;padding:20px;backdrop-filter:blur(3px);z-index:6}
+/* a card, not a full-screen scrim: the results sheet opens underneath it at
+   half height, and both need to be usable at the same time */
+#banner{position:absolute;left:50%;top:11%;transform:translateX(-50%);
+  display:none;align-items:center;justify-content:center;flex-direction:column;gap:13px;
+  background:rgba(6,9,14,.92);border:1px solid rgba(255,255,255,.15);border-radius:13px;
+  font-family:"Saira Condensed",sans-serif;font-size:27px;letter-spacing:.08em;
+  text-transform:uppercase;text-align:center;padding:15px 22px;max-width:94%;
+  backdrop-filter:blur(7px);z-index:25;box-shadow:0 14px 44px rgba(0,0,0,.65)}
+.brow{display:flex;gap:9px;flex-wrap:wrap;justify-content:center}
+.brow .act{font-size:14px;padding:10px 16px}
+
+/* attract screen — no match runs until you ask for one */
+#title{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:14px;text-align:center;padding:22px calc(20px + var(--sr)) 22px calc(20px + var(--sl));z-index:8;
+  background:radial-gradient(ellipse at 50% 52%,rgba(5,8,12,.34),rgba(5,8,12,.8))}
+.tbrand{font-family:"Saira Condensed",sans-serif;font-weight:700;font-size:min(15vw,64px);
+  letter-spacing:.2em;color:#fff;text-transform:uppercase;line-height:1;
+  text-shadow:0 4px 26px rgba(0,0,0,.8);animation:tglow 3.4s ease-in-out infinite}
+@keyframes tglow{0%,100%{text-shadow:0 4px 26px rgba(0,0,0,.8)}
+  50%{text-shadow:0 4px 26px rgba(0,0,0,.8),0 0 26px rgba(224,184,58,.35)}}
+.tsub{font-size:12.5px;color:#c3ccd6;max-width:430px;line-height:1.6;text-shadow:0 2px 8px rgba(0,0,0,.9)}
+.trow{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;margin-top:2px}
+.trow .act{font-size:15px;padding:12px 20px}
+.tnote{font-size:10px;color:#8b95a1;letter-spacing:.03em;text-shadow:0 2px 8px rgba(0,0,0,.9)}
+body.live #title{display:none}
+body:not(.live) #ticker,body:not(.live) #fabs,body:not(.live) .ovcard,
+body:not(.live) #mini,body:not(.live) #hudTop{display:none}
+/* the sheet remembers how far it was open; keep it stowed on the title screen
+   so it can never cover the start buttons */
+body:not(.live) #sheet{transform:translateY(100%);pointer-events:none}
+@media (max-height:400px){
+  .tbrand{font-size:min(11vw,40px)}
+  .tsub{font-size:11px;max-width:360px;line-height:1.45}
+  .trow .act{font-size:13px;padding:9px 15px}
+  #title{gap:9px}
+  .brow .act{font-size:13px;padding:8px 13px}
+  #banner{font-size:22px;gap:11px}
+}
 
 /* decision overlays */
 .ovcard{position:absolute;bottom:calc(var(--peek) + 26px);max-width:min(38%,300px);padding:8px 10px;border-radius:9px;
@@ -312,7 +347,26 @@ body.split #nudge{display:none}
   </div>
 
   <div id="think" style="display:none"></div>
-  <div id="banner" style="display:none"></div>
+
+  <div id="banner" style="display:none">
+    <div id="bannerTxt"></div>
+    <div class="brow">
+      <button class="act primary" id="btnRematch">Rematch</button>
+      <button class="act" id="btnSwap">Swap sides</button>
+      <button class="act" id="btnNewSeed">New seed</button>
+    </div>
+  </div>
+
+  <div id="title">
+    <div class="tbrand">BREACH</div>
+    <div class="tsub">Two language models command opposing armies down one lane.
+      Same map, same economy, no fog of war — whoever reasons better wins.</div>
+    <div class="trow">
+      <button class="act primary" id="btnBegin">Start battle</button>
+      <button class="act" id="btnPickModels">Choose models</button>
+    </div>
+    <div class="tnote">Runs scripted commanders by default. Seat real models in Setup with an OpenRouter key.</div>
+  </div>
 
   <div class="ovcard a" id="ovA"></div>
   <div class="ovcard b" id="ovB"></div>
@@ -646,7 +700,7 @@ async function runDebrief(){
   const box=document.getElementById('debrief');
   box.style.display='block';
   box.innerHTML='<div class="dbh">Debrief</div><div class="empty">Asking both commanders to review the match…</div>';
-  openSheet(true);
+  setSheet(1);
   const [a,b]=await Promise.all([askDebrief(0),askDebrief(1)]);
   DEBRIEF=[a,b];
   box.innerHTML='<div class="dbh">Debrief</div>'+[0,1].map(s=>{
@@ -663,12 +717,12 @@ async function runDebrief(){
 function endGame(){
   RUNNING=false;
   paintSummary();
-  openSheet(true);
+  setSheet(1);
   runDebrief();
-  const b=document.getElementById('banner');
+  const b=document.getElementById('banner'), bt=document.getElementById('bannerTxt');
   b.style.display='flex';
-  b.textContent = S.win===null?'Draw' : `${SIDE[S.win].name} breaks through`;
-  b.style.color = S.win===null?'#fff':SIDE[S.win].col;
+  bt.textContent = S.win===null?'Draw' : `${SIDE[S.win].name} breaks through`;
+  bt.style.color = S.win===null?'#fff':SIDE[S.win].col;
   document.getElementById('btnPlay').textContent='Start';
   SHAKE=Math.max(SHAKE,9);
 }
@@ -789,8 +843,9 @@ async function runDecisions(){
 function haltOnFailure(s,msg){
   RUNNING=false;
   const b=document.getElementById('banner');
-  b.style.display='flex'; b.style.color='#c9765c'; b.style.fontSize='19px';
-  b.innerHTML=`${SIDE[s].name} failed 3 calls in a row — match halted.<br>
+  const bt=document.getElementById('bannerTxt');
+  b.style.display='flex'; bt.style.color='#c9765c'; bt.style.fontSize='19px';
+  bt.innerHTML=`${SIDE[s].name} failed 3 calls in a row — match halted.<br>
     <span style="font-size:12px;font-family:'IBM Plex Mono',monospace;text-transform:none;
     letter-spacing:0;color:#9ba6b2">${String(msg).slice(0,200)}</span>`;
   document.getElementById('btnPlay').textContent='Start';
@@ -863,6 +918,16 @@ const cv=document.getElementById('field'), cx=cv.getContext('2d');
 const HORIZON=.38, ROWS=5, PADF=.06;
 let DIM={w:0,h:0}, BG=document.createElement('canvas'), bgx=BG.getContext('2d'), VIG=null, VIGRED=null;
 let PART=[], DMGN=[], DECAL=[], SHAKE=0, LOWFX=false, LABELS=true;
+let LIVE=false, ATTRACT=[];      // LIVE=false -> attract screen, no match running
+function seedAttract(){
+  // one unit per (row, side) slot so nothing ever stacks on a same-side twin
+  const T=['inf','gun','mob','at','tank','tank','at','mob','gun','inf'];
+  ATTRACT=T.map((type,i)=>{
+    const s=i%2, dir=s===0?1:-1, row=Math.floor(i/2), k=row;
+    return {id:i,type,s,dir,row,spd:UNITS[type].spd*0.34,
+            x: s===0 ? -16-k*13 : LANE+16+k*13};
+  });
+}
 let PREVU=new Map(), ACC=new Map(), PREVBASE=[BASE_HP,BASE_HP], PREVECO=[0,0], LASTRT=0, SMOKET=0;
 
 /* The playable ground is a band, not the whole lower half: the top of the
@@ -1282,6 +1347,37 @@ function draw(now){
     cx.restore();
   });
 
+  // ---- attract parade: decorative only, never touches the sim
+  if(!LIVE){
+    ATTRACT.forEach(u=>{
+      u.x+=u.dir*u.spd*dt;
+      if(u.dir>0&&u.x>LANE+16) u.x=-16;
+      if(u.dir<0&&u.x<-16) u.x=LANE+16;
+      const gy=groundY(h,u.row), sc=rowScale(h,u.row), px=toPixRow(w,u.x,u.row);
+      cx.save(); cx.translate(px,gy);
+      cx.fillStyle='rgba(0,0,0,.34)';
+      cx.beginPath(); cx.ellipse(0,0,(u.type==='tank'?34:14)*sc,(u.type==='tank'?7:4.4)*sc,0,0,7); cx.fill();
+      cx.restore();
+      cx.save(); cx.globalAlpha=0.84+0.16*(u.row/(ROWS-1));
+      cx.translate(px,gy); cx.scale(sc*u.dir,sc);
+      const C=SIDECOL[u.s];
+      PAINT[u.type](cx,C.body,C.dark,rt/1000*UNITS[u.type].spd*.9+u.id*1.7,false);
+      cx.restore();
+      if(!LOWFX&&Math.random()<dt*5) puff(px-u.dir*10*sc,gy,1,'176,166,132',9);
+    });
+    PART=PART.filter(p=>{
+      p.life-=dt; if(p.life<=0) return false;
+      p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=p.g*dt;
+      const a=Math.max(0,p.life/p.max)*p.fade;
+      cx.fillStyle=`rgba(${p.col},${a})`;
+      cx.beginPath(); cx.arc(p.x,p.y,p.r+(p.grow?(1-p.life/p.max)*p.grow:0),0,7); cx.fill();
+      return true;
+    });
+    cx.fillStyle=VIG; cx.fillRect(0,0,w,h);
+    cx.restore();
+    return;
+  }
+
   // ---- units, sorted far→near
   const fire=firingSet();
   const list=[...S.units].sort((a,b)=>rowOf(a)-rowOf(b));
@@ -1498,7 +1594,7 @@ function frame(ts){
       PEAK[0]=Math.max(PEAK[0],S.coins[0]); PEAK[1]=Math.max(PEAK[1],S.coins[1]);
     }
   }
-  draw(ts); paintHUD(); paintThink();
+  draw(ts); if(LIVE) paintHUD(); paintThink();
   if(TAB==='log') drawLog();
   RAF=requestAnimationFrame(frame);
 }
@@ -1605,9 +1701,46 @@ document.addEventListener('fullscreenchange',()=>{
   setTimeout(window.checkNudge,900);
 })();
 
+/* ----- attract screen, rematch, side swap ----- */
+function goLive(){
+  LIVE=true; document.body.classList.add('live');
+  reset(); RUNNING=true; last=0;
+  document.getElementById('btnPlay').textContent='❚❚';
+  fit(); draw(performance.now());
+}
+document.getElementById('btnBegin').onclick=goLive;
+document.getElementById('btnPickModels').onclick=()=>modal('mSetup',true);
+
+/* Swapping sides is the single most useful button here: Vulcan has a measured
+   side advantage, so a pairing is only meaningful once it has been played both
+   ways. This swaps the commanders and replays the same seed. */
+function swapCommanders(){
+  [CMD[0].kind,CMD[1].kind]=[CMD[1].kind,CMD[0].kind];
+  [CMD[0].model,CMD[1].model]=[CMD[1].model,CMD[0].model];
+  const g=id=>document.getElementById(id);
+  [g('kindA').value,g('kindB').value]=[g('kindB').value,g('kindA').value];
+  [g('customA').value,g('customB').value]=[g('customB').value,g('customA').value];
+  ['A','B'].forEach((k,i)=>{ const sel=g('model'+k);
+    if([...sel.options].some(o=>o.value===CMD[i].model)) sel.value=CMD[i].model; });
+  refreshNames();
+}
+function rematch(opts){
+  opts=opts||{};
+  if(opts.swap) swapCommanders();
+  if(opts.newSeed){ const sd=document.getElementById('seed');
+    sd.value=(+sd.value||1)+1; }
+  document.getElementById('banner').style.display='none';
+  goLive();
+  const tl=document.getElementById('tickline');
+  if(tl&&opts.swap) tl.textContent='Sides swapped — '+SIDE[0].name+' now plays Vulcan.';
+}
+document.getElementById('btnRematch').onclick=()=>rematch();
+document.getElementById('btnSwap').onclick=()=>rematch({swap:true});
+document.getElementById('btnNewSeed').onclick=()=>rematch({newSeed:true});
+
 /* ----- transport ----- */
 document.getElementById('btnPlay').onclick=e=>{
-  if(S.over) return;
+  if(S.over){ rematch(); return; }        // used to be a dead button after a win
   RUNNING=!RUNNING; last=0;
   e.target.textContent=RUNNING?'❚❚':'▶';
 };
@@ -1617,7 +1750,7 @@ document.getElementById('btnSpeed').onclick=e=>{
 };
 const reset=()=>{newGame(+document.getElementById('seed').value||1);
   STATS.forEach(x=>{x.calls=0;x.fail=0;x.bad=0;x.ms=0;}); STREAK[0]=STREAK[1]=0;
-  const bb=document.getElementById('banner'); bb.style.fontSize=''; bb.style.color='';
+  const bb=document.getElementById('bannerTxt'); bb.style.fontSize=''; bb.style.color='';
   const f=document.getElementById('feed'); if(f) f.innerHTML='';
   DEBRIEF=[null,null];
   const db=document.getElementById('debrief'); if(db){db.style.display='none';db.innerHTML='';}
@@ -1918,9 +2051,11 @@ setInterval(()=>{
   box.addEventListener('input',save); chk.addEventListener('change',save);
 })();
 
-/* boot */
-buildTable(); refreshNames(); newGame(42); applyMode(); fit(); paintHUD(); drawLog();
-RUNNING=true; document.getElementById('btnPlay').textContent='❚❚';
+/* boot — attract screen only. No match runs until the user starts one, so a
+   configured pairing is never contaminated by scripted opening decisions. */
+buildTable(); refreshNames(); newGame(42); seedAttract(); applyMode();
+fit(); paintHUD(); drawLog();
+RUNNING=false; document.getElementById('btnPlay').textContent='▶';
 RAF=requestAnimationFrame(frame);
 </script>
 </body>
