@@ -174,7 +174,12 @@ body:not(.live) #sheet{transform:translateY(100%);pointer-events:none}
   padding-bottom:var(--sb)}
 #sheet.half{transform:translateY(58%)}
 #sheet.open{transform:translateY(0)}
-#grab{height:var(--peek);display:flex;align-items:center;justify-content:center;flex:none;cursor:grab;touch-action:none}
+#grab{height:var(--peek);display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:2px;flex:none;cursor:grab;touch-action:none}
+.glabel{font-family:"Saira Condensed",sans-serif;font-size:9px;letter-spacing:.13em;
+  text-transform:uppercase;color:#8994a1;display:none;line-height:1}
+#sheet:not(.half):not(.open) .glabel{display:block}
+@media (max-height:360px){ .glabel{display:none!important} }
 #grab::before{content:'';width:44px;height:4px;border-radius:2px;background:rgba(255,255,255,.32)}
 .sheettabs{display:flex;gap:6px;padding:0 12px 8px;flex:none}
 .sheettabs button{flex:1;border:1px solid var(--rule);background:#141a21;color:var(--txt-3);
@@ -378,6 +383,7 @@ body.split #nudge{display:none}
       <button class="act primary" id="btnRematch">Rematch</button>
       <button class="act" id="btnSwap">Swap sides</button>
       <button class="act" id="btnNewSeed">New seed</button>
+      <button class="act" id="btnSeeLog">Results &amp; log</button>
     </div>
   </div>
 
@@ -428,7 +434,7 @@ body.split #nudge{display:none}
 </div>
 
 <div id="sheet">
-  <div id="grab"></div>
+  <div id="grab"><span class="glabel">Thinking &amp; log</span></div>
   <div class="sheettabs">
     <button class="on" data-s="feed">Thinking</button>
     <button data-s="log">Full log</button>
@@ -965,6 +971,7 @@ function pushFeed(e){
 const cv=document.getElementById('field'), cx=cv.getContext('2d');
 const HORIZON=.38, ROWS=5, PADF=.06;
 let DIM={w:0,h:0}, BG=document.createElement('canvas'), bgx=BG.getContext('2d'), VIG=null, VIGRED=null;
+let FABBOX=null;   // where the floating buttons sit, so canvas labels can dodge them
 let PART=[], DMGN=[], DECAL=[], SHAKE=0, LOWFX=false, LABELS=true;
 let LIVE=false, ATTRACT=[];      // LIVE=false -> attract screen, no match running
 function seedAttract(){
@@ -1006,6 +1013,11 @@ function fit(){
   DIM={w,h};
   BG.width=w*d; BG.height=h*d; bgx.setTransform(d,0,0,d,0,0);
   buildScene(w,h);
+  const fb=document.getElementById('fabs'), cr=cv.getBoundingClientRect();
+  if(fb&&getComputedStyle(fb).display!=='none'&&fb.getBoundingClientRect().width){
+    const r=fb.getBoundingClientRect();
+    FABBOX={l:r.left-cr.left, t:r.top-cr.top, b:r.bottom-cr.top};
+  } else FABBOX=null;
   VIG=cx.createRadialGradient(w/2,h*.52,Math.min(w,h)*.46,w/2,h*.52,Math.max(w,h)*.82);
   VIG.addColorStop(0,'rgba(0,0,0,0)'); VIG.addColorStop(1,'rgba(0,0,0,.34)');
   VIGRED=cx.createRadialGradient(w/2,h*.52,Math.min(w,h)*.34,w/2,h*.52,Math.max(w,h)*.72);
@@ -1323,14 +1335,33 @@ function fort(g,w,h,s){
     g.lineWidth=Math.max(.8,sc); g.strokeStyle=owned?'#fff0b8':'rgba(255,255,255,.2)'; g.stroke();
     if(owned){ g.fillStyle='rgba(122,90,12,.6)'; g.fillRect(cxp-pr*.13,py-pr*.5,pr*.26,pr); }
   }
-  if(S.eco[s]>0){                       // live income, so the payoff is visible
-    g.font=`700 ${Math.max(8,9*sc)}px "Saira Condensed",sans-serif`;
+  /* Coins are the whole game and used to live only in the bottom ticker.
+     Put the purse on the base itself, with income alongside once eco exists. */
+  {
+    const coins=Math.floor(S.coins[s]);
+    const label=S.eco[s]>0 ? coins+'  '+(S.inc[s]*RAMP(S.t)).toFixed(1)+'/s' : String(coins);
+    const fs2=Math.max(9,10.5*sc);
+    g.font=`700 ${fs2}px "Saira Condensed",sans-serif`;
     g.textAlign='center'; g.textBaseline='middle';
-    g.fillStyle='rgba(6,10,15,.7)';
-    const tw=Math.max(26,30*sc), th=Math.max(9,11*sc);
-    g.beginPath(); g.roundRect(-tw/2,py-pr-th-2*sc,tw,th,th/2); g.fill();
-    g.fillStyle='#e8c65a';
-    g.fillText((S.inc[s]*RAMP(S.t)).toFixed(1)+'/s',0,py-pr-th/2-2*sc);
+    const dot=Math.max(2.6,3.4*sc);
+    const tw=g.measureText(label).width+dot*4.4, th=Math.max(12,14*sc);
+    const ty=py-pr-th-3*sc;
+    // bases sit at the screen edges — nudge the pill inward so it never clips,
+    // and dodge the floating buttons if they overlap this band
+    let rlim=w-6;
+    if(FABBOX && gy+ty < FABBOX.b && gy+ty+th > FABBOX.t) rlim=Math.min(rlim, FABBOX.l-6);
+    const off=Math.max(6-x+tw/2, Math.min(rlim-x-tw/2, 0));
+    const L=-tw/2+off;
+    g.fillStyle='rgba(6,10,15,.78)';
+    g.beginPath(); g.roundRect(L,ty,tw,th,th/2); g.fill();
+    g.strokeStyle='rgba(224,184,58,.45)'; g.lineWidth=Math.max(.8,sc);
+    g.beginPath(); g.roundRect(L,ty,tw,th,th/2); g.stroke();
+    g.fillStyle='#e0b83a';                                  // coin
+    g.beginPath(); g.arc(L+dot*1.9,ty+th/2,dot,0,7); g.fill();
+    g.fillStyle='rgba(122,90,12,.6)';
+    g.fillRect(L+dot*1.9-dot*.13,ty+th/2-dot*.5,dot*.26,dot);
+    g.fillStyle='#f0dc9a';
+    g.fillText(label,L+tw/2+dot*1.6,ty+th/2+.5*sc);
   }
   g.restore();
   return {x,gy,W,H,frac};
@@ -1950,6 +1981,7 @@ function rematch(opts){
 document.getElementById('btnRematch').onclick=()=>rematch();
 document.getElementById('btnSwap').onclick=()=>rematch({swap:true});
 document.getElementById('btnNewSeed').onclick=()=>rematch({newSeed:true});
+document.getElementById('btnSeeLog').onclick=()=>setSheet(2);   // never strand the log behind a closed drawer
 
 /* ----- transport ----- */
 document.getElementById('btnPlay').onclick=e=>{
