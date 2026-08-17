@@ -656,14 +656,14 @@ body.split #nudge{display:none}
 </div>
 
 <div class="modal" id="mPicker">
-  <div class="mhead"><h3 id="pkTitle">Choose model</h3><button class="act" data-close="mPicker">Done</button></div>
+  <div class="mhead"><h3 id="mpTitle">Choose model</h3><button class="act" data-close="mPicker">Done</button></div>
   <div class="mbody">
-    <input type="text" id="pkSearch" placeholder="Search — try gemini, gpt, haiku…" style="width:100%" autocomplete="off">
+    <input type="text" id="mpSearch" placeholder="Search — try gemini, gpt, haiku…" style="width:100%" autocomplete="off">
     <div class="crow" style="margin-top:8px">
-      <button class="act" id="pkRefresh">Refresh catalogue</button>
-      <span class="tout" id="pkCount" style="margin:0"></span>
+      <button class="act" id="mpRefresh">Refresh catalogue</button>
+      <span class="tout" id="mpCount" style="margin:0"></span>
     </div>
-    <div id="pkList"></div>
+    <div id="mpList"></div>
   </div>
 </div>
 
@@ -2715,7 +2715,7 @@ async function testKey(){
    sorted by price, so finding one Gemini meant scrolling past every provider.
    Grouped by provider, collapsed, searchable, and cached so it opens instantly. */
 const CAT_KEY='breach.catalog';
-let CATALOG=[], PK_SIDE=0, PK_OPEN=new Set();
+let CATALOG=[], MP_SIDE=0, MP_OPEN=new Set();
 
 function catalogFallback(){
   return FREE_MODELS.map(m=>({id:m.id,name:m.label,pin:null,pout:null,free:m.tier==='free',note:m.p}));
@@ -2739,27 +2739,27 @@ function setModel(i,id){
   refreshNames();
 }
 function openModelPicker(i){
-  PK_SIDE=i;
-  document.getElementById('pkTitle').textContent=(i?'Cobalt':'Vulcan')+' — choose model';
-  document.getElementById('pkSearch').value='';
-  PK_OPEN=new Set([providerOf(CMD[i].model)]);      // start on the current provider
-  renderPicker(); modal('mPicker',true);
-  document.getElementById('pkCount').textContent=CATALOG.length+' models cached';
+  MP_SIDE=i;
+  document.getElementById('mpTitle').textContent=(i?'Cobalt':'Vulcan')+' — choose model';
+  document.getElementById('mpSearch').value='';
+  MP_OPEN=new Set([providerOf(CMD[i].model)]);      // start on the current provider
+  renderModelList(); modal('mPicker',true);
+  document.getElementById('mpCount').textContent=CATALOG.length+' models cached';
 }
-function renderPicker(){
-  const q=(document.getElementById('pkSearch').value||'').toLowerCase().trim();
-  const cur=CMD[PK_SIDE].model;
+function renderModelList(){
+  const q=(document.getElementById('mpSearch').value||'').toLowerCase().trim();
+  const cur=CMD[MP_SIDE].model;
   const hits=CATALOG.filter(m=>!q||m.id.toLowerCase().includes(q)||(m.name||'').toLowerCase().includes(q));
   const groups={};
   hits.forEach(m=>(groups[providerOf(m.id)]=groups[providerOf(m.id)]||[]).push(m));
   const names=Object.keys(groups).sort((a,b)=>groups[b].length-groups[a].length||a.localeCompare(b));
-  const box=document.getElementById('pkList');
+  const box=document.getElementById('mpList');
   if(!names.length){ box.innerHTML='<div class="lbempty">Nothing matches. Try a shorter search, or refresh the catalogue.</div>'; return; }
   // a search narrow enough to be useful should just open everything
   const autoOpen = q && hits.length<=40;
   box.innerHTML=names.map(pv=>{
     const list=groups[pv].slice().sort((a,b)=>(a.pin??9e9)-(b.pin??9e9)||a.id.localeCompare(b.id));
-    const open=autoOpen||PK_OPEN.has(pv);
+    const open=autoOpen||MP_OPEN.has(pv);
     return `<div class="pkgrp${open?' open':''}" data-pv="${pv}">
       <div class="pkgh"><span class="caret">${open?'▾':'▸'}</span><b>${pv}</b><span class="n">${list.length}</span></div>
       <div class="pkitems">${list.map(m=>{
@@ -2770,17 +2770,17 @@ function renderPicker(){
   }).join('');
   box.querySelectorAll('.pkgh').forEach(h=>h.onclick=()=>{
     const pv=h.parentElement.dataset.pv;
-    PK_OPEN.has(pv)?PK_OPEN.delete(pv):PK_OPEN.add(pv);
-    renderPicker();
+    MP_OPEN.has(pv)?MP_OPEN.delete(pv):MP_OPEN.add(pv);
+    renderModelList();
   });
   box.querySelectorAll('.pkrow').forEach(r=>r.onclick=()=>{
-    setModel(PK_SIDE,r.dataset.id);
-    document.getElementById('custom'+(PK_SIDE?'B':'A')).value='';
+    setModel(MP_SIDE,r.dataset.id);
+    document.getElementById('custom'+(MP_SIDE?'B':'A')).value='';
     modal('mPicker',false);
     rearmIfStarted();
   });
 }
-document.getElementById('pkSearch').addEventListener('input',renderPicker);
+document.getElementById('mpSearch').addEventListener('input',renderPicker);
 ['A','B'].forEach((k,i)=>{
   document.getElementById('model'+k).onclick=()=>openModelPicker(i);
   document.getElementById('custom'+k).oninput=()=>{
@@ -2830,14 +2830,14 @@ async function refreshCatalog(outEl){
     try{ localStorage.setItem(CAT_KEY, JSON.stringify(live)); }catch(e){}
     const provs=new Set(live.map(m=>providerOf(m.id))).size;
     say(`${live.length} text models from ${provs} providers · ${dropped} non-chat filtered out`,'#74ab7c');
-    const c=document.getElementById('pkCount'); if(c) c.textContent=live.length+' models cached';
-    if(document.getElementById('mPicker').classList.contains('on')) renderPicker();
+    const c=document.getElementById('mpCount'); if(c) c.textContent=live.length+' models cached';
+    if(document.getElementById('mPicker').classList.contains('on')) renderModelList();
   }catch(e){
     say('Could not load ('+String(e.message).slice(0,70)+'). The built-in list still works.','#c9765c');
   }
 }
 document.getElementById('btnModels').onclick=()=>refreshCatalog(document.getElementById('modelsout'));
-document.getElementById('pkRefresh').onclick=()=>refreshCatalog(document.getElementById('pkCount'));
+document.getElementById('mpRefresh').onclick=()=>refreshCatalog(document.getElementById('mpCount'));
 
 setInterval(()=>{
   const any=STATS[0].calls+STATS[1].calls;
