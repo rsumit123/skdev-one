@@ -2109,7 +2109,11 @@ function lbRecord(){
     kind:CMD[s].kind, calls:STATS[s].calls, failed:STATS[s].fail, malformed:STATS[s].bad,
     avgMs:STATS[s].calls?Math.round(STATS[s].ms/STATS[s].calls):0,
     built:{...BUILT[s]}, peakCoins:Math.floor(PEAK[s])});
-  const rec={at:new Date().toISOString(), promptVersion:3, seed:+document.getElementById('seed').value||0,
+  /* The local copy and the uploaded copy must carry the SAME timestamp: the
+     dedup fingerprint is savedAt+seed+models, and two new Date() calls a few
+     milliseconds apart made one match show up twice in the merged view. */
+  const payload=matchPayload();
+  const rec={at:payload.savedAt, promptVersion:3, seed:+document.getElementById('seed').value||0,
     balance:{ecoCost:ECO_COST,ecoPrices:[0,1,2].map(ecoPrice)},
     a:side(0), b:side(1), winner:S.win, t:+S.t.toFixed(1),
     hp:S.hp.map(h=>Math.max(0,Math.round(h))), eco:[...S.eco]};
@@ -2117,7 +2121,7 @@ function lbRecord(){
   try{ localStorage.setItem(LB_KEY, JSON.stringify(rs.slice(-400))); }catch(e){}
   // upload the full log, not this summary: the point of the server is that the
   // per-decision reasoning is retrievable later without anyone copying a file
-  lbPush(matchPayload()).then(res=>{
+  lbPush(payload).then(res=>{
     if(res.skipped) return;
     const tl=document.getElementById('tickline');
     if(!tl) return;
