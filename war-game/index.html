@@ -150,6 +150,8 @@ body:not(.live) #sheet{transform:translateY(100%);pointer-events:none}
 .ovcard.b .ovq{justify-content:flex-end}
 .ovq i{font-style:normal;font-size:10px;font-family:"IBM Plex Mono",monospace;background:rgba(0,0,0,.4);
   border:1px solid rgba(255,255,255,.18);border-radius:4px;padding:1px 5px}
+.ovq i.unreach{opacity:.42;text-decoration:line-through;border-style:dashed}
+.ovdead{font-size:9.5px;color:#e0b83a;margin-top:4px;line-height:1.35;opacity:.92}
 .ovlat{opacity:.6;font-size:10px;margin-left:auto}
 .ovcard.b .ovlat{margin-left:0;margin-right:auto}
 
@@ -262,6 +264,7 @@ body:not(.live) #sheet{transform:translateY(100%);pointer-events:none}
 .ft{font-size:9px;color:var(--txt-3)}
 .fn{font-family:"Saira Condensed",sans-serif;font-size:12px;letter-spacing:.05em;margin-left:5px;font-weight:700}
 .fq{font-size:9.5px;color:#93a0ac;margin-left:5px}
+.fqdead{opacity:.45;text-decoration:line-through}
 .fms{font-size:9px;color:var(--txt-3);margin-left:5px}
 .ffail{font-size:9px;color:#c9765c;margin-left:5px}
 .fw{font-size:10.5px;color:var(--txt);margin-top:3px;line-height:1.45}
@@ -1088,14 +1091,29 @@ let THINK_T0=0;
 /* These stay up permanently and are simply replaced on the next decision —
    they used to fade after 6.5s, which meant looking away lost the reasoning
    entirely. A brief flash marks the update instead. */
+/* A queue is spent strictly in order, so an expensive item parked behind
+   cheaper ones is usually never reached at all — models queue eco third and
+   it silently evaporates. Work out what this cycle can actually buy. */
+function reachability(s,queue){
+  const budget=S.coins[s]+S.inc[s]*RAMP(S.t)*DECIDE;
+  let left=budget, blocked=false;
+  return queue.map(x=>{
+    const c=x==='eco'?ecoPrice(S.eco[s]):(UNITS[x]?UNITS[x].cost:0);
+    if(blocked||left<c){ blocked=true; return {x,c,ok:false,need:Math.ceil(budget<c?c:c+(budget-left))}; }
+    left-=c; return {x,c,ok:true};
+  });
+}
 const OVT=[null,null];
 function showOverlay(e){
   const el=document.getElementById(e.s===0?'ovA':'ovB');
   if(!el) return;
+  const R=reachability(e.s,e.queue);
+  const dead=R.filter(r=>!r.ok);
   el.innerHTML=`<div class="ovh"><span style="color:${SIDE[e.s].col}">${SIDE[e.s].name}</span>
       ${e.ms?`<span class="ovlat">${(e.ms/1000).toFixed(1)}s</span>`:''}</div>
     ${(e.why||'').replace(/</g,'&lt;')}
-    <div class="ovq">${e.queue.map(x=>`<i>${x==='eco'?'eco':x}</i>`).join('')||'<i>holding</i>'}</div>`;
+    <div class="ovq">${R.map(r=>`<i class="${r.ok?'':'unreach'}">${r.x}</i>`).join('')||'<i>holding</i>'}</div>
+    ${dead.length?`<div class="ovdead">${dead.map(r=>r.x).join(', ')} out of reach this cycle — needs ${dead[0].need} coins</div>`:''}`;
   el.classList.add('on');
   el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash');
   const mini=document.getElementById(e.s===0?'miniA':'miniB');
@@ -1113,7 +1131,8 @@ function pushFeed(e){
   d.style.borderLeftColor=SIDE[e.s].col;
   d.innerHTML=`<span class="ft">${m}:${sec}</span>
     <span class="fn" style="color:${SIDE[e.s].col}">${SIDE[e.s].name}</span>
-    <span class="fq">${e.queue.map(q=>q==='eco'?'ECO':UNITS[q].name).join(' · ')||'—'}</span>
+    <span class="fq">${(()=>{const R=reachability(e.s,e.queue);
+      return R.map(r=>`<span class="${r.ok?'':'fqdead'}">${r.x==='eco'?'ECO':UNITS[r.x].name}</span>`).join(' · ')||'—';})()}</span>
     ${e.ms?`<span class="fms">${Math.round(e.ms)}ms</span>`:''}
     ${e.failed?'<span class="ffail">call failed</span>':''}
     ${e.bad&&e.bad.length?`<span class="ffail">dropped: ${e.bad.join(', ')}</span>`:''}
