@@ -423,6 +423,7 @@ body.split #nudge{display:none}
       <button class="act" id="btnSwap">Swap sides</button>
       <button class="act" id="btnNewSeed">New seed</button>
       <button class="act" id="btnSeeLog">Results &amp; log</button>
+      <button class="act" id="btnCopyEnd">Copy log</button>
     </div>
   </div>
 
@@ -504,6 +505,7 @@ body.split #nudge{display:none}
     <button class="act footonly" id="btnRanks2">&#9733;</button>
     <button class="act footonly" id="btnSetupOpen2">&#9881;</button>
     <button class="act footonly" id="btnUnitsOpen2">&#8505;</button>
+    <button class="act" id="btnCopyAnalysis">Copy log</button>
     <button class="act" id="btnExport2">Save</button>
   </div>
 </div>
@@ -2135,6 +2137,37 @@ document.getElementById('btnReset').onclick=reset;
 document.getElementById('btnReset2').onclick=reset;
 document.getElementById('lowfx').onchange=e=>{LOWFX=e.target.checked;};
 document.getElementById('labels').onchange=e=>{LABELS=e.target.checked;draw(performance.now());};
+
+/* A full match log is ~40KB of JSON and a nuisance to move between devices.
+   This is the same information in a compact text form you can copy and paste
+   straight into a chat — everything the analysis actually reads. */
+function analysisText(){
+  const b=n=>Object.entries(BUILT[n]||{}).map(([k,v])=>(UNITS[k]?UNITS[k].g:k)+v).join('')||'none';
+  const st=n=>{const x=STATS[n];
+    return `${x.calls} calls, ${x.fail} fail, ${x.bad} malformed, avg ${(x.calls?x.ms/x.calls/1000:0).toFixed(1)}s`;};
+  const who=n=>`${SIDE[n].name} (${CMD[n].kind==='llm'?CMD[n].model:CMD[n].kind})`;
+  const L=[];
+  L.push(`BREACH MATCH — prompt v3 · seed ${document.getElementById('seed').value} · eco ${[0,1,2].map(ecoPrice).join('/')}`);
+  L.push(`${who(0)}  VS  ${who(1)}`);
+  L.push(`RESULT ${S.win===null?'draw':SIDE[S.win].name+' wins'} · ${S.t.toFixed(1)}s · HP ${Math.max(0,Math.round(S.hp[0]))}/${Math.max(0,Math.round(S.hp[1]))} · eco ${S.eco[0]}/${S.eco[1]}`);
+  L.push(`A ${who(0)} :: ${st(0)} · peak ${Math.floor(PEAK[0])} · built ${b(0)}`);
+  L.push(`B ${who(1)} :: ${st(1)} · peak ${Math.floor(PEAK[1])} · built ${b(1)}`);
+  if(DEBRIEF[0]||DEBRIEF[1]) L.push('DEBRIEF '+[0,1].map(n=>DEBRIEF[n]?`${SIDE[n].name}: ${DEBRIEF[n].verdict||''}`:'').filter(Boolean).join(' | '));
+  L.push('DECISIONS  t|side|queue|latency|why');
+  LOG.forEach(e=>L.push(
+    `${Math.round(e.t)}|${e.s?'B':'A'}|${e.queue.join(',')||'-'}|${e.ms?Math.round(e.ms)+'ms':'-'}|`+
+    String(e.why||'').replace(/\s+/g,' ').slice(0,120)));
+  return L.join('\n');
+}
+async function copyAnalysis(btn){
+  const txt=analysisText();
+  const done=(ok,msg)=>{ if(!btn) return; const t=btn.textContent;
+    btn.textContent=msg; setTimeout(()=>btn.textContent=t,2200); };
+  try{ await navigator.clipboard.writeText(txt); done(true,`Copied ${Math.round(txt.length/1024)}KB`); }
+  catch(e){ done(false,'Copy blocked'); }
+}
+document.getElementById('btnCopyAnalysis').onclick=e=>copyAnalysis(e.target);
+document.getElementById('btnCopyEnd').onclick=e=>copyAnalysis(e.target);
 
 const saveLog=()=>{
   const payload={
