@@ -349,6 +349,26 @@ table.units td.n{text-align:left;display:flex;align-items:center;gap:7px}
 .cw{font-size:10.5px;color:var(--txt-2);line-height:1.6;margin-top:12px}
 .setrow{display:flex;align-items:center;gap:8px;margin-top:13px;flex-wrap:wrap}
 
+/* model picker: the live catalogue is 300+ entries, so a flat select was
+   unusable — group by provider, collapsed, with search */
+.modelbtn{width:100%;text-align:left;text-transform:none;letter-spacing:.01em;font-size:12.5px;
+  font-family:"IBM Plex Mono",monospace;padding:9px 11px}
+.pkgrp{border:1px solid var(--rule);border-radius:7px;margin-top:7px;overflow:hidden;background:#101720}
+.pkgh{display:flex;align-items:center;gap:8px;padding:9px 11px;cursor:pointer;background:#141a21}
+.pkgh b{font-family:"Saira Condensed",sans-serif;font-size:13px;letter-spacing:.07em;text-transform:uppercase;
+  color:#e6ecf3;font-weight:700}
+.pkgh .n{margin-left:auto;font-size:10px;color:var(--txt-3)}
+.pkgh .caret{color:var(--txt-3);font-size:11px;width:10px}
+.pkitems{display:none}
+.pkgrp.open .pkitems{display:block}
+.pkrow{display:flex;align-items:center;gap:9px;padding:8px 11px;border-top:1px solid #1b232b;cursor:pointer}
+.pkrow:active{background:#18212b}
+.pkrow.sel{background:#1d2630}
+.pkrow .nm{font-size:11.5px;color:#dfe6ee;flex:1;word-break:break-word}
+.pkrow .id{display:block;font-size:9px;color:var(--txt-3);margin-top:1px}
+.pkrow .pr{font-size:9.5px;color:var(--txt-2);white-space:nowrap;text-align:right}
+.pkrow .pr.free{color:#74ab7c}
+
 /* leaderboard */
 .lbchip{border:1px solid #39434e;background:#141a21;color:var(--txt-3);border-radius:20px;
   padding:5px 11px;font-family:"Saira Condensed",sans-serif;font-size:11.5px;letter-spacing:.08em;
@@ -587,11 +607,11 @@ body.split #nudge{display:none}
     <div class="grp"><h3>Commanders</h3>
       <div class="crow"><span class="cw2" style="color:var(--A)">Vulcan</span>
         <select id="kindA"><option value="script">Scripted</option><option value="human">You (fair mode)</option><option value="mock">Mock LLM</option><option value="llm">OpenRouter</option></select></div>
-      <div class="crow" style="margin-top:7px"><select id="modelA"></select></div>
+      <div class="crow" style="margin-top:7px"><button class="act modelbtn" id="modelA" data-side="0">Choose model</button></div>
       <div class="crow" style="margin-top:7px"><input type="text" id="customA" placeholder="or paste any model id" style="width:100%"></div>
       <div class="crow" style="margin-top:12px"><span class="cw2" style="color:var(--B)">Cobalt</span>
         <select id="kindB"><option value="script">Scripted</option><option value="human">You (fair mode)</option><option value="mock">Mock LLM</option><option value="llm">OpenRouter</option></select></div>
-      <div class="crow" style="margin-top:7px"><select id="modelB"></select></div>
+      <div class="crow" style="margin-top:7px"><button class="act modelbtn" id="modelB" data-side="1">Choose model</button></div>
       <div class="crow" style="margin-top:7px"><input type="text" id="customB" placeholder="or paste any model id" style="width:100%"></div>
     </div>
     <div class="grp"><h3>OpenRouter key</h3>
@@ -632,6 +652,18 @@ body.split #nudge{display:none}
         <b>4.5 cents</b>.<br><br>
         The <b>:free</b> routes are capped at 20/min and 50/day with no credits — not enough to finish
         one match, which is why Test returns 429. Paid routes have no daily cap.</div></div>
+  </div>
+</div>
+
+<div class="modal" id="mPicker">
+  <div class="mhead"><h3 id="pkTitle">Choose model</h3><button class="act" data-close="mPicker">Done</button></div>
+  <div class="mbody">
+    <input type="text" id="pkSearch" placeholder="Search — try gemini, gpt, haiku…" style="width:100%" autocomplete="off">
+    <div class="crow" style="margin-top:8px">
+      <button class="act" id="pkRefresh">Refresh catalogue</button>
+      <span class="tout" id="pkCount" style="margin:0"></span>
+    </div>
+    <div id="pkList"></div>
   </div>
 </div>
 
@@ -2361,8 +2393,7 @@ function swapCommanders(){
   const g=id=>document.getElementById(id);
   [g('kindA').value,g('kindB').value]=[g('kindB').value,g('kindA').value];
   [g('customA').value,g('customB').value]=[g('customB').value,g('customA').value];
-  ['A','B'].forEach((k,i)=>{ const sel=g('model'+k);
-    if([...sel.options].some(o=>o.value===CMD[i].model)) sel.value=CMD[i].model; });
+  [0,1].forEach(i=>setModel(i,CMD[i].model));
   refreshNames();
 }
 function rematch(opts){
@@ -2679,75 +2710,135 @@ async function testKey(){
     out.innerHTML='FAILED · '+e.message+(LAST_RAW?`<br><span style="color:#5c6772">raw: ${LAST_RAW.replace(/</g,'&lt;').slice(0,220)}</span>`:''); }
 }
 
-['A','B'].forEach((k,i)=>{
-  const sel=document.getElementById('model'+k);
-  const grp=t=>`<optgroup label="${t==='paid'?'Cheap paid — no daily cap':'Free — 50/day cap'}">`+
-    FREE_MODELS.filter(m=>m.tier===t).map(m=>`<option value="${m.id}">${m.label} · ${m.p}</option>`).join('')+'</optgroup>';
-  sel.innerHTML=grp('paid')+grp('free');
-  sel.value=i===0?'openai/gpt-oss-120b':'google/gemini-2.5-flash-lite';
-  const sync=()=>{
-    const custom=document.getElementById('custom'+k).value.trim();
-    const next=custom||sel.value;
-    const changed=CMD[i].model&&CMD[i].model!==next;
-    CMD[i].model=next;
-    refreshNames();
-    if(changed) rearmIfStarted();
-  };
-  sel.onchange=sync;
-  document.getElementById('custom'+k).oninput=sync;
-  document.getElementById('kind'+k).onchange=e=>{CMD[i].kind=e.target.value;refreshNames();rearmIfStarted();};
-  sync();
-});
-/* The page auto-starts a scripted demo so a visitor sees a battle at once.
-   Without this guard, seating real models mid-match leaves the opening
-   seconds played by the scripted agent — which silently corrupts the run.
-   Two saved matches had their first 3-8 decisions played by the wrong
-   commander before this existed. */
-function rearmIfStarted(){
-  if(S.t<=0) return;          // nothing has been played yet, nothing to protect
-  reset();
-  const tl=document.getElementById('tickline');
-  if(tl) tl.textContent='Commander changed — match reset so the whole game is played by the new lineup.';
+/* ---------- model picker ----------
+   The live OpenRouter catalogue is 300+ entries and the old flat select was
+   sorted by price, so finding one Gemini meant scrolling past every provider.
+   Grouped by provider, collapsed, searchable, and cached so it opens instantly. */
+const CAT_KEY='breach.catalog';
+let CATALOG=[], PK_SIDE=0, PK_OPEN=new Set();
+
+function catalogFallback(){
+  return FREE_MODELS.map(m=>({id:m.id,name:m.label,pin:null,pout:null,free:m.tier==='free',note:m.p}));
 }
+function loadCatalog(){
+  try{ const c=JSON.parse(localStorage.getItem(CAT_KEY)||'null');
+    if(c&&c.length){ CATALOG=c; return; } }catch(e){}
+  CATALOG=catalogFallback();
+}
+function providerOf(id){ return (id||'').split('/')[0]||'other'; }
+function priceText(m){
+  if(m.note) return m.note;
+  if(m.pin===null) return '';
+  const f=n=>n===0?'free':(n<1?'$'+n.toFixed(3):'$'+n.toFixed(2));
+  return m.pin===0&&m.pout===0 ? 'free' : `${f(m.pin)}/${f(m.pout)}`;
+}
+function setModel(i,id){
+  CMD[i].model=id;
+  const btn=document.getElementById('model'+(i?'B':'A'));
+  if(btn) btn.textContent=id||'Choose model';
+  refreshNames();
+}
+function openModelPicker(i){
+  PK_SIDE=i;
+  document.getElementById('pkTitle').textContent=(i?'Cobalt':'Vulcan')+' — choose model';
+  document.getElementById('pkSearch').value='';
+  PK_OPEN=new Set([providerOf(CMD[i].model)]);      // start on the current provider
+  renderPicker(); modal('mPicker',true);
+  document.getElementById('pkCount').textContent=CATALOG.length+' models cached';
+}
+function renderPicker(){
+  const q=(document.getElementById('pkSearch').value||'').toLowerCase().trim();
+  const cur=CMD[PK_SIDE].model;
+  const hits=CATALOG.filter(m=>!q||m.id.toLowerCase().includes(q)||(m.name||'').toLowerCase().includes(q));
+  const groups={};
+  hits.forEach(m=>(groups[providerOf(m.id)]=groups[providerOf(m.id)]||[]).push(m));
+  const names=Object.keys(groups).sort((a,b)=>groups[b].length-groups[a].length||a.localeCompare(b));
+  const box=document.getElementById('pkList');
+  if(!names.length){ box.innerHTML='<div class="lbempty">Nothing matches. Try a shorter search, or refresh the catalogue.</div>'; return; }
+  // a search narrow enough to be useful should just open everything
+  const autoOpen = q && hits.length<=40;
+  box.innerHTML=names.map(pv=>{
+    const list=groups[pv].slice().sort((a,b)=>(a.pin??9e9)-(b.pin??9e9)||a.id.localeCompare(b.id));
+    const open=autoOpen||PK_OPEN.has(pv);
+    return `<div class="pkgrp${open?' open':''}" data-pv="${pv}">
+      <div class="pkgh"><span class="caret">${open?'▾':'▸'}</span><b>${pv}</b><span class="n">${list.length}</span></div>
+      <div class="pkitems">${list.map(m=>{
+        const pr=priceText(m);
+        return `<div class="pkrow${m.id===cur?' sel':''}" data-id="${m.id}">
+          <span class="nm">${(m.name||m.id).replace(/</g,'&lt;')}<span class="id">${m.id}</span></span>
+          <span class="pr${/free/.test(pr)?' free':''}">${pr}</span></div>`;}).join('')}</div></div>`;
+  }).join('');
+  box.querySelectorAll('.pkgh').forEach(h=>h.onclick=()=>{
+    const pv=h.parentElement.dataset.pv;
+    PK_OPEN.has(pv)?PK_OPEN.delete(pv):PK_OPEN.add(pv);
+    renderPicker();
+  });
+  box.querySelectorAll('.pkrow').forEach(r=>r.onclick=()=>{
+    setModel(PK_SIDE,r.dataset.id);
+    document.getElementById('custom'+(PK_SIDE?'B':'A')).value='';
+    modal('mPicker',false);
+    rearmIfStarted();
+  });
+}
+document.getElementById('pkSearch').addEventListener('input',renderPicker);
+['A','B'].forEach((k,i)=>{
+  document.getElementById('model'+k).onclick=()=>openModelPicker(i);
+  document.getElementById('custom'+k).oninput=()=>{
+    const v=document.getElementById('custom'+k).value.trim();
+    if(v){ setModel(i,v); rearmIfStarted(); }
+  };
+  document.getElementById('kind'+k).onchange=e=>{CMD[i].kind=e.target.value;refreshNames();rearmIfStarted();};
+});
+loadCatalog();
+setModel(0,'openai/gpt-oss-120b');
+setModel(1,'google/gemini-2.5-flash-lite');
+
 ['mLo','mHi','mFail','mBad'].forEach(id=>document.getElementById(id).onchange=()=>{
   MOCK.lat=[+document.getElementById('mLo').value||500,+document.getElementById('mHi').value||3000];
   MOCK.fail=(+document.getElementById('mFail').value||0)/100;
   MOCK.bad=(+document.getElementById('mBad').value||0)/100;
 });
 document.getElementById('btnTest').onclick=testKey;
-document.getElementById('btnModels').onclick=async()=>{
-  const out=document.getElementById('modelsout');
-  out.style.color='#7b8692'; out.textContent='Fetching live catalogue from OpenRouter…';
+async function refreshCatalog(outEl){
+  const say=(m,c)=>{ if(outEl){ outEl.style.color=c||'#7b8692'; outEl.textContent=m; } };
+  say('Fetching catalogue from OpenRouter…');
   try{
     const r=await fetch('https://openrouter.ai/api/v1/models');
     const j=await r.json();
-    const live=(j.data||[])
-      .filter(m=>{
-        const a=m.architecture||{};
-        const out_=a.output_modalities||['text'], in_=a.input_modalities||['text'];
-        return out_.includes('text') && in_.includes('text') && m.pricing && m.pricing.prompt!=null;
-      })
-      .map(m=>({id:m.id, name:m.name||m.id,
-        pin:parseFloat(m.pricing.prompt)*1e6, pout:parseFloat(m.pricing.completion||0)*1e6}))
-      .filter(m=>isFinite(m.pin))
-      .sort((a,b)=>(a.pin-b.pin)||(a.pout-b.pout));
+    let dropped=0;
+    const live=(j.data||[]).filter(m=>{
+      const a=m.architecture||{};
+      const out=a.output_modalities||['text'], inp=a.input_modalities||['text'];
+      // text in and out only: image/audio-output and embedding models cannot
+      // play this game and were the bulk of the noise in the old flat list
+      const ok = out.includes('text') && out.length===1 && inp.includes('text')
+                 && m.pricing && m.pricing.prompt!=null
+                 && !/embed|moderation|rerank|whisper|tts|guard/i.test(m.id)
+                 // :batch endpoints are asynchronous and queue for minutes — useless
+                 // for a 4s turn loop, and they were 15% of the list
+                 && !/:batch$/.test(m.id);
+      if(!ok) dropped++;
+      return ok;
+    }).map(m=>({
+      id:m.id, name:(m.name||m.id).replace(/^[^:]*:\s*/,''),
+      pin:parseFloat(m.pricing.prompt)*1e6,
+      pout:parseFloat(m.pricing.completion||0)*1e6,
+      free:/:free$/.test(m.id)
+    })).filter(m=>isFinite(m.pin));
     if(!live.length) throw new Error('catalogue empty');
-    const fmt=n=>n===0?'free':(n<1?'$'+n.toFixed(3):'$'+n.toFixed(2));
-    const opts=live.map(m=>`<option value="${m.id}">${m.name} · ${fmt(m.pin)}/${fmt(m.pout)}</option>`).join('');
-    ['A','B'].forEach((k,i)=>{
-      const sel=document.getElementById('model'+k), keep=CMD[i].model;
-      sel.innerHTML=`<optgroup label="Live catalogue — cheapest first">${opts}</optgroup>`;
-      if(live.some(m=>m.id===keep)) sel.value=keep;
-      CMD[i].model=sel.value;
-    });
-    refreshNames();
-    out.style.color='#74ab7c';
-    out.textContent=`Loaded ${live.length} live text models, cheapest first. Deprecated ids are gone.`;
+    CATALOG=live;
+    try{ localStorage.setItem(CAT_KEY, JSON.stringify(live)); }catch(e){}
+    const provs=new Set(live.map(m=>providerOf(m.id))).size;
+    say(`${live.length} text models from ${provs} providers · ${dropped} non-chat filtered out`,'#74ab7c');
+    const c=document.getElementById('pkCount'); if(c) c.textContent=live.length+' models cached';
+    if(document.getElementById('mPicker').classList.contains('on')) renderPicker();
   }catch(e){
-    out.style.color='#c9765c';
-    out.textContent='Could not load catalogue ('+String(e.message).slice(0,90)+'). The built-in list still works.';
+    say('Could not load ('+String(e.message).slice(0,70)+'). The built-in list still works.','#c9765c');
   }
-};
+}
+document.getElementById('btnModels').onclick=()=>refreshCatalog(document.getElementById('modelsout'));
+document.getElementById('pkRefresh').onclick=()=>refreshCatalog(document.getElementById('pkCount'));
+
 setInterval(()=>{
   const any=STATS[0].calls+STATS[1].calls;
   document.getElementById('stats').innerHTML = !any ? 'No calls yet.' :
