@@ -99,6 +99,7 @@ canvas#field{display:block;width:100%;height:100%}
 #bannerX:active{transform:scale(.92)}
 .brow{display:flex;gap:9px;flex-wrap:wrap;justify-content:center}
 .brow .act{font-size:14px;padding:10px 16px}
+.brow2 .act{font-size:12.5px;padding:8px 13px;opacity:.85}
 
 /* attract screen — no match runs until you ask for one */
 #title{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -467,6 +468,9 @@ body.split #nudge{display:none}
       <button class="act primary" id="btnRematch">Rematch</button>
       <button class="act" id="btnSwap">Swap sides</button>
       <button class="act" id="btnNewSeed">New seed</button>
+      <button class="act" id="btnNewModels">Change models</button>
+    </div>
+    <div class="brow brow2">
       <button class="act" id="btnSeeLog">Results &amp; log</button>
       <button class="act" id="btnCopyEnd">Copy log</button>
     </div>
@@ -567,7 +571,9 @@ body.split #nudge{display:none}
 </div>
 
 <div class="modal" id="mSetup">
-  <div class="mhead"><h3>Setup</h3><button class="act" data-close="mSetup">Done</button></div>
+  <div class="mhead"><h3>Setup</h3>
+    <button class="act primary" id="btnSetupStart">Start match</button>
+    <button class="act" data-close="mSetup">Done</button></div>
   <div class="mbody">
     <div class="grp"><h3>Commanders</h3>
       <div class="crow"><span class="cw2" style="color:var(--A)">Vulcan</span>
@@ -1172,7 +1178,36 @@ const cv=document.getElementById('field'), cx=cv.getContext('2d');
 const HORIZON=.38, ROWS=5, PADF=.06;
 let DIM={w:0,h:0}, BG=document.createElement('canvas'), bgx=BG.getContext('2d'), VIG=null, VIGRED=null;
 let FABBOX=null;   // where the floating buttons sit, so canvas labels can dodge them
-let PART=[], DMGN=[], DECAL=[], SHAKE=0, LOWFX=false, LABELS=true;
+let PART=[], DMGN=[], DECAL=[], PROJ=[], SHAKE=0, LOWFX=false, LABELS=true;
+
+/* Each weapon used the same yellow line, so a tank shell and a rifle round were
+   indistinguishable. Now: rifles snap a thin tracer, gunners fire a short burst,
+   AT launches a visible rocket that travels with a smoke trail, and tanks throw a
+   heavy shell with a fat muzzle bloom. */
+const WEAPON={
+  inf : {kind:'tracer', rate:8,  w:1.4, col:'255,233,168', flash:8},
+  mob : {kind:'tracer', rate:11, w:1.2, col:'255,233,168', flash:7},
+  gun : {kind:'burst',  rate:5,  w:1.5, col:'255,240,190', flash:11, n:3},
+  at  : {kind:'rocket', rate:1.1,w:3.2, col:'171,153,234', flash:13, speed:1.7},
+  tank: {kind:'shell',  rate:1.4,w:4.2, col:'255,196,110', flash:18, speed:3.4},
+};
+function fireAt(u,px,py,ex,ey,sc){
+  const W=WEAPON[u.type]||WEAPON.inf;
+  if(W.kind==='tracer'||W.kind==='burst'){
+    const n=W.kind==='burst'?W.n:1;
+    for(let i=0;i<n;i++){
+      const j=i?(i-1)*3.5*sc:0;
+      cx.strokeStyle=`rgba(${W.col},${0.9-i*0.22})`; cx.lineWidth=W.w*sc; cx.lineCap='round';
+      cx.beginPath(); cx.moveTo(px,py+j*0.4); cx.lineTo(ex,ey+j); cx.stroke();
+    }
+    spark(ex,ey,W.kind==='burst'?3:2,W.col,60,.22);
+    return;
+  }
+  if(PROJ.length<40) PROJ.push({x:px,y:py,ex,ey,t:0,
+    dur:Math.max(.12,Math.hypot(ex-px,ey-py)/(W.speed*260)),
+    kind:W.kind,col:W.col,w:W.w*sc,sc});
+  if(W.kind==='shell'){ SHAKE=Math.min(11,SHAKE+2.2); puff(px,py,3,'168,150,120',20); }
+}
 let LIVE=false, ATTRACT=[];      // LIVE=false -> attract screen, no match running
 function seedAttract(){
   // one unit per (row, side) slot so nothing ever stacks on a same-side twin
@@ -1482,7 +1517,11 @@ const SIDECOL=[{body:'#a83f26',dark:'#6d2515'},{body:'#1f5390',dark:'#123152'}];
 /* ---------- fort ---------- */
 function fort(g,w,h,s){
   const b=band(h), x=toPix(w,s===0?0:LANE), gy=groundY(h,ROWS-1)+b.ht*.03;
-  const H=Math.max(64,Math.min(206,b.ht*.62)), sc=H/76, W=H*.58;
+  /* It used to top out at 62% of the ground band, so it read as a small tower
+     standing in a field rather than a fortification closing off the lane. Now it
+     rises to about the skyline, capped so the HUD above it stays clear. */
+  const roof=Math.max(90, gy-h*0.30);
+  const H=Math.max(80,Math.min(roof, b.ht*1.12)), sc=H/110, W=H*.46;
   const frac=Math.max(0,S.hp[s]/BASE_HP);
   g.save(); g.translate(x,gy);
   g.fillStyle='rgba(0,0,0,.34)';
@@ -1584,7 +1623,7 @@ function firingSet(){
 function draw(now){
   const {w,h}=DIM; if(!w) return;
   const rt=now||performance.now();
-  let dt=Math.min(.05,(rt-(LASTRT||rt))/1000); LASTRT=rt;
+  let dt=Math.max(0,Math.min(.05,(rt-(LASTRT||rt))/1000)); LASTRT=rt;
 
   cx.save();
   if(SHAKE>.2){
@@ -1625,7 +1664,7 @@ function draw(now){
   }
 
   // ---- decals (corpses) under everything living
-  DECAL=DECAL.filter(d=>(d.life-=dt)>0);
+  DECAL=DECAL.filter(d=>(d.life-=(AWAIT?0:dt))>0);
   DECAL.forEach(d=>{
     const a=Math.min(1,d.life/3), y=groundY(h,d.row), sc=rowScale(h,d.row);
     cx.save(); cx.globalAlpha=a*.6; cx.translate(toPixRow(w,d.x,d.row),y); cx.scale(sc,sc);
@@ -1657,7 +1696,8 @@ function draw(now){
       p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=p.g*dt;
       const a=Math.max(0,p.life/p.max)*p.fade;
       cx.fillStyle=`rgba(${p.col},${a})`;
-      cx.beginPath(); cx.arc(p.x,p.y,p.r+(p.grow?(1-p.life/p.max)*p.grow:0),0,7); cx.fill();
+      const pr=Math.max(.1,p.r+(p.grow?Math.max(0,1-p.life/p.max)*p.grow:0));
+    cx.beginPath(); cx.arc(p.x,p.y,pr,0,7); cx.fill();
       return true;
     });
     cx.fillStyle=VIG; cx.fillRect(0,0,w,h);
@@ -1694,7 +1734,7 @@ function draw(now){
     else PAINT[u.type](cx,C.body,C.dark,ph,firing);
     cx.restore();
     // dust while walking
-    if(moving&&!LOWFX&&Math.random()<dt*7)
+    if(moving&&!LOWFX&&!AWAIT&&Math.random()<dt*7)
       puff(px-dir*10*sc,gy,1,'176,166,132',9);
     // hp pip
     const hf=Math.max(0,u.hp/u.mx), topy=TOPY[u.type]||40;
@@ -1717,17 +1757,17 @@ function draw(now){
       cx.textAlign='center'; cx.textBaseline='middle';
       cx.fillText(U.g,px,by+bh/2+.6*sc);
     }
-    // tracer
-    if(firing&&!LOWFX&&Math.random()<dt*(u.type==='tank'?4:9)){
-      const tx=px+dir*(u.type==='tank'?54:24)*sc, ty=gy-(u.type==='tank'?32:20)*sc;
+    // weapon fire — suppressed while the sim is frozen for a decision
+    const Wp=WEAPON[u.type]||WEAPON.inf;
+    if(firing&&!LOWFX&&!AWAIT&&Math.random()<dt*Wp.rate){
+      const muz=u.type==='tank'?54:u.type==='at'?31:u.type==='gun'?33:24;
+      const muy=u.type==='tank'?32:u.type==='at'?17:u.type==='gun'?15:20;
+      const tx=px+dir*muz*sc, ty=gy-muy*sc;
       let tgt=null,best=1e9;
       for(const e of S.units){ if(e.s===u.s)continue; const d=(e.x-u.x)*dir; if(d>=0&&d<best){best=d;tgt=e;} }
       const ex = tgt?toPixRow(w,tgt.x,rowOf(tgt)):toPixRow(w,u.s===0?LANE:0,r);
       const ey = tgt?groundY(h,rowOf(tgt))-18*rowScale(h,rowOf(tgt)):gy-40*sc;
-      cx.strokeStyle='rgba(255,233,168,.85)'; cx.lineWidth=1.6*sc; cx.lineCap='round';
-      cx.beginPath(); cx.moveTo(tx,ty); cx.lineTo(ex,ey); cx.stroke();
-      spark(ex,ey,2,'255,224,150',60,.22);
-      if(u.type==='tank') SHAKE=Math.min(9,SHAKE+1.6);
+      fireAt(u,tx,ty,ex,ey,sc);
     }
   }
 
@@ -1747,20 +1787,51 @@ function draw(now){
   });
   S.units.forEach(u=>DEADPOS.set(u.id,{x:u.x,row:rowOf(u),s:u.s,type:u.type}));
 
+  // ---- projectiles: rockets and shells actually travel, so you can see them coming
+  const mdt = AWAIT ? 0 : dt;          // a frozen sim must look frozen
+  PROJ=PROJ.filter(q=>{
+    q.t+=mdt;
+    const k=Math.min(1,q.t/q.dur), X=q.x+(q.ex-q.x)*k, Y=q.y+(q.ey-q.y)*k;
+    const ang=Math.atan2(q.ey-q.y,q.ex-q.x);
+    if(q.kind==='rocket'){
+      if(!LOWFX&&mdt&&Math.random()<.7) puff(X,Y,1,'150,140,150',6);
+      cx.save(); cx.translate(X,Y); cx.rotate(ang);
+      cx.fillStyle='#2b2b2b'; cx.fillRect(-q.w*2.2,-q.w/2,q.w*3.4,q.w);
+      cx.fillStyle=`rgb(${q.col})`; cx.beginPath();
+      cx.moveTo(q.w*1.6,0); cx.lineTo(q.w*.2,-q.w*.7); cx.lineTo(q.w*.2,q.w*.7); cx.fill();
+      cx.restore();
+    }else{
+      cx.save(); cx.translate(X,Y); cx.rotate(ang);
+      const g2=cx.createLinearGradient(-q.w*3,0,q.w,0);
+      g2.addColorStop(0,`rgba(${q.col},0)`); g2.addColorStop(1,`rgba(${q.col},.95)`);
+      cx.fillStyle=g2; cx.fillRect(-q.w*3,-q.w*.34,q.w*4,q.w*.68);
+      cx.restore();
+    }
+    if(k>=1){
+      const heavy=q.kind==='shell';
+      spark(q.ex,q.ey,LOWFX?0:(heavy?16:11),q.col,heavy?190:150,heavy?.5:.4);
+      puff(q.ex,q.ey,LOWFX?0:(heavy?4:3),'110,100,92',26);
+      if(heavy) SHAKE=Math.min(12,SHAKE+3);
+      return false;
+    }
+    return true;
+  });
+
   // ---- particles
   PART=PART.filter(p=>{
-    p.life-=dt; if(p.life<=0) return false;
-    p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=p.g*dt;
+    p.life-=mdt; if(p.life<=0) return false;
+    p.x+=p.vx*mdt; p.y+=p.vy*mdt; p.vy+=p.g*mdt;
     const a=Math.max(0,p.life/p.max)*p.fade;
     cx.fillStyle=`rgba(${p.col},${a})`;
-    cx.beginPath(); cx.arc(p.x,p.y,p.r+(p.grow?(1-p.life/p.max)*p.grow:0),0,7); cx.fill();
+    const pr=Math.max(.1,p.r+(p.grow?Math.max(0,1-p.life/p.max)*p.grow:0));
+    cx.beginPath(); cx.arc(p.x,p.y,pr,0,7); cx.fill();
     return true;
   });
 
   // ---- damage numbers
   DMGN=DMGN.filter(d=>{
-    d.life-=dt; if(d.life<=0) return false;
-    d.y-=(d.txt?14:26)*dt;
+    d.life-=mdt; if(d.life<=0) return false;
+    d.y-=(d.txt?14:26)*mdt;
     const a=Math.min(1,d.life*2.2), label=d.txt||('-'+d.v);
     cx.save(); cx.globalAlpha=a;
     cx.font=`800 ${Math.max(d.txt?11:13,h*(d.txt?.034:.042))}px "Saira Condensed",sans-serif`;
@@ -2291,6 +2362,17 @@ function rematch(opts){
 document.getElementById('btnRematch').onclick=()=>rematch();
 document.getElementById('btnSwap').onclick=()=>rematch({swap:true});
 document.getElementById('btnNewSeed').onclick=()=>rematch({newSeed:true});
+document.getElementById('btnNewModels').onclick=()=>{
+  document.getElementById('banner').style.display='none';
+  modal('mSetup',true);            // pick opponents, then Start match from in there
+};
+/* Configure-then-play used to require closing Setup, finding the transport and
+   guessing which button restarted. This is the single obvious action. */
+document.getElementById('btnSetupStart').onclick=()=>{
+  modal('mSetup',false);
+  document.getElementById('banner').style.display='none';
+  goLive();
+};
 document.getElementById('btnSeeLog').onclick=()=>{
   document.getElementById('banner').style.display='none';   // get the card out of the way of the log
   setSheet(2);
@@ -2330,7 +2412,7 @@ const reset=()=>{newGame(+document.getElementById('seed').value||1);
   DEBRIEF=[null,null];
   const db=document.getElementById('debrief'); if(db){db.style.display='none';db.innerHTML='';}
   if(PICK){ const r=PICK.resolve; closePicker(); r({queue:[],why:'match reset'}); }
-  PART=[];DMGN=[];DECAL=[];SHAKE=0;PREVU.clear();ACC.clear();DEADPOS.clear();
+  PART=[];DMGN=[];DECAL=[];PROJ=[];SHAKE=0;PREVU.clear();ACC.clear();DEADPOS.clear();
   PREVBASE=[BASE_HP,BASE_HP]; PREVECO=[0,0]; BACC=[0,0]; BUILT=[{},{}]; PEAK=[0,0]; LASTQ=[[],[]]; SINCE=[{},{}];
   const sm=document.getElementById('summary'); if(sm){sm.style.display='none';sm.innerHTML='';}
   ['ovA','ovB'].forEach(i=>{const e=document.getElementById(i);e.classList.remove('on','flash');e.innerHTML='';});
