@@ -741,6 +741,18 @@ const BASE_HW=4, LANE=80+BASE_HW*2, WALL=[BASE_HW, LANE-BASE_HW], FIELD=LANE-BAS
    the first upgrade strong, makes the third a real commitment, and lands that
    heuristic at 55% — a choice rather than an answer. */
 const ecoPrice=n=>Math.round(ECO_COST*(1+ECO_ESC*n));
+/* TRENCHES — the defensive axis. Until now every coin in the game bought
+   offense, so a commander who fell behind had no move except more of what was
+   already losing, and comebacks were near-impossible.
+   Deliberately they add NO base HP and NO repair: the win at the time cap goes
+   to whoever has more HP, so anything that padded HP directly would turn
+   turtling into a way to win on the clock. Trenches only kill attackers
+   faster, which converts coins into tempo rather than into a stalling
+   advantage. Costs and steps swept against a turtle archetype — see HANDOFF. */
+const FORT_COST=28, FORT_ESC=0.9, FORT_MAX=2, FORT_DPS=7, FORT_RNG=1.5;
+const fortPrice=n=>Math.round(FORT_COST*(1+FORT_ESC*n));
+const baseDps=s=>BASE_DPS+FORT_DPS*S.fort[s];
+const baseRng=s=>BASE_RNG+FORT_RNG*S.fort[s];
 const RAMP=t=>1+t/55;   // war economy escalates hard — doubles by ~1min
 const SIDE=[{name:'Vulcan',col:'#c25a3a'},{name:'Cobalt',col:'#3f83ad'}];
 // prices per million tokens (in/out), read from OpenRouter Aug 2026
@@ -806,7 +818,7 @@ let S, R, LOG, RUNNING=false, SPEED=1, TAB='battle', RAF=null, FX=[];
 
 function newGame(seed){
   R=mulberry32(seed);
-  S={t:0,coins:[20,20],inc:[1,1],eco:[0,0],hp:[BASE_HP,BASE_HP],units:[],q:[[],[]],
+  S={t:0,coins:[20,20],inc:[1,1],eco:[0,0],fort:[0,0],hp:[BASE_HP,BASE_HP],units:[],q:[[],[]],
      over:false,win:null,nid:0,next:0};
   LOG=[]; FX=[]; RUNNING=false;
   document.getElementById('banner').style.display='none';
@@ -821,6 +833,13 @@ function step(dt){
   for(let s=0;s<2;s++){
     while(S.q[s].length){
       const it=S.q[s][0];
+      if(it==='fort'){
+        if(S.fort[s]>=FORT_MAX){S.q[s].shift();continue;}
+        const fp=fortPrice(S.fort[s]);
+        if(S.coins[s]>=fp){S.coins[s]-=fp;S.fort[s]++;S.q[s].shift();}
+        else break;
+        continue;
+      }
       if(it==='eco'){
         if(S.eco[s]>=ECO_MAX){S.q[s].shift();continue;}
         const ep=ecoPrice(S.eco[s]);
@@ -863,8 +882,8 @@ function step(dt){
   for(let s=0;s<2;s++){
     const bx=s===0?WALL[0]:WALL[1]; let tgt=null,best=1e9;
     for(const e of S.units){ if(e.s===s||e.hp<=0)continue;
-      const d=Math.abs(e.x-bx); if(d<=BASE_RNG&&d<best){best=d;tgt=e;} }
-    if(tgt){tgt.hp-=BASE_DPS*dt;tgt.fl=.18;}
+      const d=Math.abs(e.x-bx); if(d<=baseRng(s)&&d<best){best=d;tgt=e;} }
+    if(tgt){tgt.hp-=baseDps(s)*dt;tgt.fl=.18;}
   }
   S.units.filter(u=>u.hp<=0).forEach(u=>FX.push({x:u.x,s:u.s,life:.45}));
   S.units=S.units.filter(u=>u.hp>0);
@@ -993,7 +1012,7 @@ let AWAIT=false, THINK=[false,false];
 const STATS=[{calls:0,fail:0,bad:0,ms:0},{calls:0,fail:0,bad:0,ms:0}];
 const STREAK=[0,0];
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-const VALID=['eco',...Object.keys(UNITS)];
+const VALID=['eco','fort',...Object.keys(UNITS)];
 const CALLS=[];                       // free tier allows 20 req/min — stay under it
 let GATED=false;
 async function rateGate(isFree){
@@ -1048,7 +1067,7 @@ function humanTurn(s){
 function renderPicker(){
   if(!PICK) return;
   const s=PICK.s, coins=Math.floor(S.coins[s]);
-  const cost=k=>k==='eco'?ecoPrice(S.eco[s]):UNITS[k].cost;
+  const cost=k=>k==='eco'?ecoPrice(S.eco[s]):k==='fort'?fortPrice(S.fort[s]):UNITS[k].cost;
   const cls=side=>{const o={light:0,support:0,armor:0};
     S.units.filter(u=>u.s===side).forEach(u=>o[UNITS[u.type].cls]++);return o;};
   const foe=cls(1-s), mine=cls(s);
@@ -1186,7 +1205,7 @@ function reachability(s,queue){
   const budget=S.coins[s]+S.inc[s]*RAMP(S.t)*DECIDE;
   let left=budget, blocked=false;
   return queue.map(x=>{
-    const c=x==='eco'?ecoPrice(S.eco[s]):(UNITS[x]?UNITS[x].cost:0);
+    const c=x==='eco'?ecoPrice(S.eco[s]):x==='fort'?fortPrice(S.fort[s]):(UNITS[x]?UNITS[x].cost:0);
     if(blocked||left<c){ blocked=true; return {x,c,ok:false,need:Math.ceil(budget<c?c:c+(budget-left))}; }
     left-=c; return {x,c,ok:true};
   });
@@ -1950,7 +1969,7 @@ function paintHUD(){
        it — a model that queues eco early can build nothing for half a minute.
        That was invisible before; say it out loud. */
     const sub=document.getElementById('sub'+k), head=S.q[s]&&S.q[s][0];
-    const cost=head==='eco'?ecoPrice(S.eco[s]):(head&&UNITS[head]?UNITS[head].cost:0);
+    const cost=head==='eco'?ecoPrice(S.eco[s]):head==='fort'?fortPrice(S.fort[s]):(head&&UNITS[head]?UNITS[head].cost:0);
     if(head&&S.coins[s]<cost){
       sub.textContent=`saving ${Math.floor(S.coins[s])}/${cost} for ${head==='eco'?'ECO':UNITS[head].name}`;
       sub.style.color='#e0b83a';
