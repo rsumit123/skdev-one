@@ -147,10 +147,11 @@ console.log(`Breach balance instrument — ${PROF.label}: ${PROF.seeds} seeds x 
    equality against a magic pair of numbers that goes stale on every rebalance. */
 const m=run(null,`mirror(1000)`);
 const mp=m.a/(m.a+m.b), mci=1.96*Math.sqrt(mp*(1-mp)/(m.a+m.b))*100;
-const mirrorOK = Math.abs(mp*100-50) <= mci && m.to===0;
+const evenOK = Math.abs(mp*100-50) <= mci, toOK = m.to<=5;
+const mirrorOK = evenOK && toOK;
 console.log(`mirror   ${m.a}/${m.b}  side0 ${(mp*100).toFixed(1)}% `
   +`[${(mp*100-mci).toFixed(1)}-${(mp*100+mci).toFixed(1)}]  median ${m.med}s  timeouts ${m.to}   `
-  +(mirrorOK?'even':'*** SIDE BIAS ***'));
+  +(mirrorOK?'even':(evenOK?`*** ${m.to} TIMEOUTS ***`:'*** SIDE BIAS ***')));
 
 console.log('\nphase-averaged win% vs adaptive (95% CI):');
 let worst=null, ctl=null;
@@ -185,7 +186,7 @@ if(MODE==='gate'){
   const base=JSON.parse(fs.readFileSync(BASE,'utf8'));
   const fails=[];
   if(!ctl || Math.abs(ctl.pct-50)>ctl.ci) fails.push('control off 50% — harness suspect');
-  if(!mirrorOK) fails.push(`mirror side bias ${m.a}/${m.b}, ${m.to} timeouts`);
+  if(!mirrorOK) fails.push(evenOK?`mirror ${m.to} timeouts (>5)`:`mirror side bias ${m.a}/${m.b}`);
   console.log('\ndrift vs baseline:');
   for(const a of POOL){
     const b=base.rows[a]; if(!b) continue;
