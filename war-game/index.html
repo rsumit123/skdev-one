@@ -2277,13 +2277,12 @@ function lbUnpaired(rows){
   return out;
 }
 function paintRanks(){
-  const rows0=lbAll();
-  const vers=[...new Set(rows0.map(r=>r.promptVersion||1))].sort((a,b)=>b-a);
+  /* One consolidated leaderboard across every prompt version -- the owner's
+     call. Games from v1-v4 ran on different balance, so the note below still
+     flags that, but there is a single set of standings, no version tabs. */
+  const rows=lbAll();
   const f=document.getElementById('lbFilter');
-  f.innerHTML=['all',...vers].map(v=>
-    `<span class="lbchip${LB_FILTER===String(v)?' on':''}" data-v="${v}">${v==='all'?'All':'Prompt v'+v}</span>`).join('');
-  f.querySelectorAll('.lbchip').forEach(c=>c.onclick=()=>{LB_FILTER=c.dataset.v;paintRanks();});
-  const rows=LB_FILTER==='all'?rows0:rows0.filter(r=>String(r.promptVersion||1)===LB_FILTER);
+  if(f) f.innerHTML='';
 
   const warn=document.getElementById('lbWarn');
   const unp=lbUnpaired(rows);
@@ -2291,7 +2290,6 @@ function paintRanks(){
     `<b>Read these standings carefully.</b> ${rows.length} match${rows.length===1?'':'es'}.
      Vulcan (the left seat) has a measured ~55.7% side advantage, so a pairing only means
      something once it has been played both ways — use <b>Swap sides</b> after a match.
-     ${LB_FILTER==='all'&&vers.length>1?'You are mixing prompt versions, which changed what the models were told. Filter to one version to compare fairly.':''}
      ${unp.length?`<br><br><b>Not yet played both ways:</b> ${unp.map(u=>u.a+' vs '+u.b).join(' · ')}`:''}`;
 
   const st=lbStandings(rows), box=document.getElementById('lbStand');
