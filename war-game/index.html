@@ -725,7 +725,14 @@ const MULT=(a,t)=>{
   if(a==='at' &&UNITS[t].cls==='armor') return 4.0;
   return 1.0;
 };
-const LANE=80, BASE_HP=600, BASE_DPS=6, BASE_RNG=7,
+/* The fort has a physical footprint. It used to be a point at x=0 / x=LANE with
+   a sprite drawn around it, so attackers walked into the wall and fired from
+   inside the stonework. BASE_HW is that footprint's half-width in metres; WALL
+   is the face units actually stop at, and FIELD is the open ground between the
+   two faces. LANE grew by exactly 2*BASE_HW so FIELD stays 80m and every
+   distance a commander sees, plus the whole balance, is unchanged. */
+const BASE_HW=4, LANE=80+BASE_HW*2, WALL=[BASE_HW, LANE-BASE_HW], FIELD=LANE-BASE_HW*2,
+      BASE_HP=600, BASE_DPS=6, BASE_RNG=7,
       ECO_COST=45, ECO_STEP=0.5, ECO_MAX=3, ECO_ESC=0.75, DECIDE=4, TIME_CAP=300;
 /* Economy was the dominant strategy at every flat price tested (45 through 80):
    a trivial "buy eco whenever the lane is clear" heuristic beat the adaptive
@@ -824,7 +831,7 @@ function step(dt){
         if(S.coins[s]>=u.cost){
           S.coins[s]-=u.cost;
           const jx=R()*1.6, jh=u.hp*(0.96+0.08*R());   // seeded variance so the seed actually matters
-          S.units.push({id:S.nid++,s,type:it,x:s===0?jx:LANE-jx,hp:jh,mx:jh,fl:0});
+          S.units.push({id:S.nid++,s,type:it,x:s===0?WALL[0]+jx:WALL[1]-jx,hp:jh,mx:jh,fl:0});
           S.q[s].shift();
         } else break;
       }
@@ -836,7 +843,7 @@ function step(dt){
     let tgt=null,best=1e9;
     for(const e of S.units){ if(e.s===u.s||e.hp<=0)continue;
       const d=(e.x-u.x)*dir; if(d>=0&&d<best){best=d;tgt=e;} }
-    const baseX=u.s===0?LANE:0, dBase=(baseX-u.x)*dir;
+    const baseX=u.s===0?WALL[1]:WALL[0], dBase=(baseX-u.x)*dir;
     // Reaching the base is the win condition, so it outranks shooting units.
     // Otherwise defenders spawning AT the base are always "in front" of an
     // attacker standing on it, and the base never takes a single point.
@@ -854,7 +861,7 @@ function step(dt){
     if(u.fl>0)u.fl-=dt;
   }
   for(let s=0;s<2;s++){
-    const bx=s===0?0:LANE; let tgt=null,best=1e9;
+    const bx=s===0?WALL[0]:WALL[1]; let tgt=null,best=1e9;
     for(const e of S.units){ if(e.s===s||e.hp<=0)continue;
       const d=Math.abs(e.x-bx); if(d<=BASE_RNG&&d<best){best=d;tgt=e;} }
     if(tgt){tgt.hp-=BASE_DPS*dt;tgt.fl=.18;}
@@ -954,7 +961,7 @@ function agent(St,s){
   const eLight=cnt(e,u=>UNITS[u.type].cls==='light');
   const eSup=cnt(e,u=>UNITS[u.type].cls==='support');
   const myFront=St.units.filter(u=>u.s===s).length;
-  const pressure=St.units.filter(u=>u.s===e&&Math.abs(u.x-(s===0?0:LANE))<25).length;
+  const pressure=St.units.filter(u=>u.s===e&&Math.abs(u.x-(s===0?WALL[0]:WALL[1]))<25).length;
 
   if(pressure>=3 && myFront<pressure)
     return {queue:eArm?['at','inf','inf']:['gun','inf','inf'],
@@ -1569,12 +1576,17 @@ const SIDECOL=[{body:'#a83f26',dark:'#6d2515'},{body:'#1f5390',dark:'#123152'}];
 
 /* ---------- fort ---------- */
 function fort(g,w,h,s){
-  const b=band(h), x=toPix(w,s===0?0:LANE), gy=groundY(h,ROWS-1)+b.ht*.03;
+  const b=band(h), gy=groundY(h,ROWS-1)+b.ht*.03;
   /* It used to top out at 62% of the ground band, so it read as a small tower
      standing in a field rather than a fortification closing off the lane. Now it
      rises to about the skyline, capped so the HUD above it stays clear. */
   const roof=Math.max(90, gy-h*0.30);
   const H=Math.max(80,Math.min(roof, b.ht*1.12)), sc=H/110, W=H*.46;
+  /* Anchor the inner face on the wall line rather than centring on the lane end,
+     so troops halt against the stonework at every screen size instead of
+     standing inside it. The outer half runs off the edge of the field, which is
+     what makes the fort read as closing the lane. */
+  const x=toPix(w,WALL[s]) + (s===0 ? -W/2 : W/2);
   const frac=Math.max(0,S.hp[s]/BASE_HP);
   g.save(); g.translate(x,gy);
   g.fillStyle='rgba(0,0,0,.34)';
@@ -1667,7 +1679,7 @@ function firingSet(){
     let best=1e9;
     for(const e of S.units){ if(e.s===u.s)continue;
       const d=(e.x-u.x)*dir; if(d>=0&&d<best)best=d; }
-    const dBase=((u.s===0?LANE:0)-u.x)*dir;
+    const dBase=((u.s===0?WALL[1]:WALL[0])-u.x)*dir;
     if(dBase<=U.rng||best<=U.rng) set.add(u.id);
   }
   return set;
@@ -1821,7 +1833,7 @@ function draw(now){
       const tx=px+dir*muz*sc, ty=gy-muy*sc;
       let tgt=null,best=1e9;
       for(const e of S.units){ if(e.s===u.s)continue; const d=(e.x-u.x)*dir; if(d>=0&&d<best){best=d;tgt=e;} }
-      const ex = tgt?toPixRow(w,tgt.x,rowOf(tgt)):toPixRow(w,u.s===0?LANE:0,r);
+      const ex = tgt?toPixRow(w,tgt.x,rowOf(tgt)):toPixRow(w,u.s===0?WALL[1]:WALL[0],r);
       const ey = tgt?groundY(h,rowOf(tgt))-18*rowScale(h,rowOf(tgt)):gy-40*sc;
       fireAt(u,tx,ty,ex,ey,sc);
     }
@@ -2525,7 +2537,7 @@ function matchPayload(){
     game:'breach', promptVersion:3,   // v3 fixed the economy description; v1/v2 runs are not comparable
     // balance is stamped into every log so a tuning change can never silently
     // invalidate a comparison between two saved matches
-    balance:{ecoCost:ECO_COST,ecoEscalation:ECO_ESC,ecoPrices:[0,1,2].map(ecoPrice),ecoStep:ECO_STEP,ecoMax:ECO_MAX,lane:LANE,baseHP:BASE_HP,
+    balance:{ecoCost:ECO_COST,ecoEscalation:ECO_ESC,ecoPrices:[0,1,2].map(ecoPrice),ecoStep:ECO_STEP,ecoMax:ECO_MAX,lane:FIELD,baseHP:BASE_HP,
       decideEvery:DECIDE,timeCap:TIME_CAP,
       unitCosts:Object.fromEntries(Object.entries(UNITS).map(([k,u])=>[k,u.cost]))},
     seed:+document.getElementById('seed').value, savedAt:new Date().toISOString(),
@@ -2565,7 +2577,7 @@ document.getElementById('btnExport2').onclick=saveLog;
    It is called once every 4 seconds of battle time — roughly
    35-75 calls per side per game.
    ============================================================ */
-const RULES=`You command one side of a two-base lane battle. Lane is ${LANE}m. Both bases start at ${BASE_HP} HP.
+const RULES=`You command one side of a two-base lane battle. Lane is ${FIELD}m. Both bases start at ${BASE_HP} HP.
 You earn coins per second and spend them on units, which walk toward the enemy base and fight what they meet.
 Reaching the enemy base means damaging it at your unit's DPS. First base to 0 loses.
 
@@ -2619,16 +2631,16 @@ async function llmAgent(St,s,model){
   const cls=side=>{const o={light:0,support:0,armor:0};
     St.units.filter(u=>u.s===side).forEach(u=>o[UNITS[u.type].cls]++);return o;};
   const eList=St.units.filter(u=>u.s!==s);
-  const nearest=eList.length?Math.min(...eList.map(u=>s===0?u.x:LANE-u.x)):null;
+  const nearest=eList.length?Math.min(...eList.map(u=>s===0?u.x-WALL[0]:WALL[1]-u.x)):null;
   const view={
     time:+St.t.toFixed(1), secondsLeft:Math.round(TIME_CAP-St.t),
     me:SIDE[s].name, myCoins:Math.floor(St.coins[s]),
     myIncome:+(St.inc[s]*RAMP(St.t)).toFixed(2), myEco:St.eco[s], ecoMax:ECO_MAX,
     myBaseHP:Math.round(St.hp[s]), enemyBaseHP:Math.round(St.hp[1-s]),
     myUnits:St.units.filter(u=>u.s===s).map(u=>({type:u.type,hp:Math.round(u.hp),
-      metresFromEnemyBase:+(s===0?LANE-u.x:u.x).toFixed(1)})),
+      metresFromEnemyBase:+(s===0?WALL[1]-u.x:u.x-WALL[0]).toFixed(1)})),
     enemyUnits:eList.map(u=>({type:u.type,hp:Math.round(u.hp),
-      metresFromMyBase:+(s===0?u.x:LANE-u.x).toFixed(1)})),
+      metresFromMyBase:+(s===0?u.x-WALL[0]:WALL[1]-u.x).toFixed(1)})),
     myComposition:cls(s), enemyComposition:cls(1-s),
     enemyNearestToMyBaseMetres:nearest,
     threat: nearest!==null&&nearest<25 ? 'ENEMY IS PUSHING YOUR BASE' : 'lane contested or quiet',
