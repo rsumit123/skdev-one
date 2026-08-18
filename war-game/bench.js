@@ -67,7 +67,11 @@ const ARCH={
   ecorush:(St,s)=> St.eco[s]<ECO_MAX ? ['eco'] : ['inf','gun','inf'],
   spam:()=>['inf','inf','inf'],
   noeco:(St,s)=>agent(St,s).queue.filter(x=>x!=='eco'&&x!=='fort'),
-  rush:()=>['inf','inf','mob'],
+  rush:()=>['inf','inf','air'],
+  airrush:()=>['air'],                                  // can air alone win?
+  airspam:(St,s)=>St.units.filter(u=>u.s===s&&UNITS[u.type].cls==='air').length<3?['air']:['air','inf'],
+  noAT:(St,s)=>agent(St,s).queue.filter(x=>x!=='at'),   // is air an unanswerable lock?
+  noAir:(St,s)=>agent(St,s).queue.filter(x=>x!=='air'), // is air mandatory?
   stall:(St,s)=> St.t<30 ? [] : agent(St,s).queue,   // the exploit, kept as a probe
 };
 
@@ -130,7 +134,7 @@ const PROF={
 }[MODE];
 if(!PROF){ console.error('usage: bench.js [quick|full|gate]'); process.exit(2); }
 
-const POOL=['control','ecogreedy','ecorush','spam','noeco','rush','stall','turtle'];
+const POOL=['control','ecogreedy','ecorush','spam','noeco','rush','stall','turtle','airrush','airspam','noAT','noAir'];
 const OFFS=JSON.stringify(PROF.offs);
 
 console.log(`Breach balance instrument — ${PROF.label}: ${PROF.seeds} seeds x `
