@@ -732,8 +732,8 @@ const MULT=(a,t)=>{
    two faces. LANE grew by exactly 2*BASE_HW so FIELD stays 80m and every
    distance a commander sees, plus the whole balance, is unchanged. */
 const BASE_HW=4, LANE=80+BASE_HW*2, WALL=[BASE_HW, LANE-BASE_HW], FIELD=LANE-BASE_HW*2,
-      BASE_HP=600, BASE_DPS=6, BASE_RNG=7,
-      ECO_COST=45, ECO_STEP=0.5, ECO_MAX=3, ECO_ESC=0.75, DECIDE=4, TIME_CAP=300;
+      BASE_HP=600, BASE_DPS=2, BASE_RNG=7,
+      ECO_COST=36, ECO_STEP=0.5, ECO_MAX=3, ECO_ESC=0.75, DECIDE=4, TIME_CAP=300;
 /* Economy was the dominant strategy at every flat price tested (45 through 80):
    a trivial "buy eco whenever the lane is clear" heuristic beat the adaptive
    control 88-98% of the time. A flat price plus a ramped payout means the first
@@ -806,7 +806,7 @@ let S, R, LOG, RUNNING=false, SPEED=1, TAB='battle', RAF=null, FX=[];
 
 function newGame(seed){
   R=mulberry32(seed);
-  S={t:0,coins:[20,20],inc:[1,1],eco:[0,0],hp:[BASE_HP,BASE_HP],units:[],q:[[],[]],
+  S={t:0,coins:[20,20],inc:[1,1],eco:[0,0],bf:[null,null],hp:[BASE_HP,BASE_HP],units:[],q:[[],[]],
      over:false,win:null,nid:0,next:0};
   LOG=[]; FX=[]; RUNNING=false;
   document.getElementById('banner').style.display='none';
@@ -864,6 +864,7 @@ function step(dt){
     const bx=s===0?WALL[0]:WALL[1]; let tgt=null,best=1e9;
     for(const e of S.units){ if(e.s===s||e.hp<=0)continue;
       const d=Math.abs(e.x-bx); if(d<=BASE_RNG&&d<best){best=d;tgt=e;} }
+    S.bf[s]=tgt?tgt.id:null;          // so the renderer can draw the base gun firing
     if(tgt){tgt.hp-=BASE_DPS*dt;tgt.fl=.18;}
   }
   S.units.filter(u=>u.hp<=0).forEach(u=>FX.push({x:u.x,s:u.s,life:.45}));
@@ -1597,6 +1598,19 @@ function fort(g,w,h,s){
   g.fillStyle='#cdc2ab'; g.fillRect(-W/2,-H,W,H*.06);
   g.fillStyle='#4a4335';
   for(let i=0;i<4;i++) g.fillRect(-W/2+i*(W/4),-H-H*.1,W/7,H*.1);
+  /* THE BASE GUN. It has always been shooting — BASE_DPS every tick at anything
+     inside BASE_RNG — but nothing on screen said so, so the fort read as a
+     passive wall being chewed on. Now it carries a visible turret, mounted on
+     the inner corner and trained down the lane. */
+  const bd=s===0?1:-1, tux=bd*W*.30, tuy=-H*1.02;
+  g.fillStyle='#39424d';
+  g.beginPath(); g.roundRect(tux-W*.15,tuy-H*.05,W*.30,H*.075,H*.018); g.fill();
+  g.fillStyle='#5a6470';
+  g.beginPath(); g.roundRect(tux-W*.075,tuy-H*.10,W*.15,H*.06,H*.014); g.fill();
+  g.fillStyle='#2a313a';
+  g.fillRect(tux-W*.075,tuy-H*.10,W*.15,H*.014);
+  g.strokeStyle='#333c46'; g.lineWidth=Math.max(1.7,H*.026); g.lineCap='round';
+  g.beginPath(); g.moveTo(tux,tuy-H*.072); g.lineTo(tux+bd*W*.34,tuy-H*.082); g.stroke();
   g.fillStyle='#2e2a22';
   g.fillRect(-W*.16,-H*.42,W*.32,H*.42);
   g.beginPath(); g.arc(0,-H*.42,W*.16,Math.PI,0); g.fill();
@@ -1668,7 +1682,7 @@ function fort(g,w,h,s){
     g.fillText(label,L+tw/2+dot*1.6,ty+th/2+.5*sc);
   }
   g.restore();
-  return {x,gy,W,H,frac};
+  return {x,gy,W,H,frac,mx:x+bd*W*.64,my:gy-H*1.10};
 }
 
 /* ---------- firing detection (renderer-only; sim untouched) ---------- */
@@ -1707,6 +1721,21 @@ function draw(now){
   });
   const mdt = (AWAIT||S.over) ? 0 : dt;   // frozen while thinking, and once the match is decided
   const forts=[fort(cx,w,h,0),fort(cx,w,h,1)];
+  [0,1].forEach(s=>{                      // the base gun engaging its target
+    const id=S.bf[s];
+    if(id==null||AWAIT||S.over) return;
+    const t=S.units.find(u=>u.id===id); if(!t) return;
+    const f=forts[s], r=rowOf(t), fsc=f.H/110;
+    const ex=toPixRow(w,t.x,r), ey=groundY(h,r)-16*rowScale(h,r);
+    const gl=cx.createRadialGradient(f.mx,f.my,0,f.mx,f.my,13*fsc);
+    gl.addColorStop(0,'rgba(255,228,150,.85)'); gl.addColorStop(1,'rgba(255,228,150,0)');
+    cx.fillStyle=gl; cx.beginPath(); cx.arc(f.mx,f.my,13*fsc,0,7); cx.fill();
+    if(!LOWFX && Math.random()<mdt*10){
+      cx.strokeStyle='rgba(255,232,168,.9)'; cx.lineWidth=Math.max(1,1.8*fsc); cx.lineCap='round';
+      cx.beginPath(); cx.moveTo(f.mx,f.my); cx.lineTo(ex,ey); cx.stroke();
+      spark(ex,ey,2,'255,232,168',60,.2);
+    }
+  });
   [0,1].forEach(s=>{                      // base damage was previously invisible
     if(BACC[s]>=10 && !S.over){
       DMGN.push({x:forts[s].x, y:forts[s].gy-forts[s].H*.55, v:Math.round(BACC[s]),
@@ -2169,7 +2198,7 @@ function lbRecord(){
      dedup fingerprint is savedAt+seed+models, and two new Date() calls a few
      milliseconds apart made one match show up twice in the merged view. */
   const payload=matchPayload();
-  const rec={at:payload.savedAt, promptVersion:3, seed:+document.getElementById('seed').value||0,
+  const rec={at:payload.savedAt, promptVersion:4, seed:+document.getElementById('seed').value||0,
     balance:{ecoCost:ECO_COST,ecoPrices:[0,1,2].map(ecoPrice)},
     a:side(0), b:side(1), winner:S.win, t:+S.t.toFixed(1),
     hp:S.hp.map(h=>Math.max(0,Math.round(h))), eco:[...S.eco]};
@@ -2534,7 +2563,7 @@ document.getElementById('btnCopyEnd').onclick=e=>copyAnalysis(e.target);
 
 function matchPayload(){
   return {
-    game:'breach', promptVersion:3,   // v3 fixed the economy description; v1/v2 runs are not comparable
+    game:'breach', promptVersion:4,   // v4: eco repriced 45->36 and base gun 6->2 dps; v1-v3 runs are not comparable
     // balance is stamped into every log so a tuning change can never silently
     // invalidate a comparison between two saved matches
     balance:{ecoCost:ECO_COST,ecoEscalation:ECO_ESC,ecoPrices:[0,1,2].map(ecoPrice),ecoStep:ECO_STEP,ecoMax:ECO_MAX,lane:FIELD,baseHP:BASE_HP,
