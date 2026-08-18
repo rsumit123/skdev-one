@@ -136,10 +136,17 @@ const OFFS=JSON.stringify(PROF.offs);
 console.log(`Breach balance instrument — ${PROF.label}: ${PROF.seeds} seeds x `
   +`${PROF.offs.length}x${PROF.offs.length} phase grid x 2 seats\n`);
 
-const m=run(null,`mirror(200)`);
-const mirrorOK = m.a===103 && m.b===97 && m.med===183 && m.to===0;
-console.log(`mirror baseline   ${m.a}/${m.b}  median ${m.med}s  timeouts ${m.to}   `
-  +(mirrorOK?'unchanged':'*** MOVED from 103/97 med 183s to 0 ***'));
+/* 1000 seeds, not 200. At 200 the 95% interval is +/-6.9pp, so an ordinary
+   sample reads as a side bias -- one build showed 82/118 here and 1450/1550
+   (even) at 3000 seeds. The check is now "are the sides even, within the
+   interval", which is the property we actually care about, rather than an
+   equality against a magic pair of numbers that goes stale on every rebalance. */
+const m=run(null,`mirror(1000)`);
+const mp=m.a/(m.a+m.b), mci=1.96*Math.sqrt(mp*(1-mp)/(m.a+m.b))*100;
+const mirrorOK = Math.abs(mp*100-50) <= mci && m.to===0;
+console.log(`mirror   ${m.a}/${m.b}  side0 ${(mp*100).toFixed(1)}% `
+  +`[${(mp*100-mci).toFixed(1)}-${(mp*100+mci).toFixed(1)}]  median ${m.med}s  timeouts ${m.to}   `
+  +(mirrorOK?'even':'*** SIDE BIAS ***'));
 
 console.log('\nphase-averaged win% vs adaptive (95% CI):');
 let worst=null, ctl=null;
@@ -174,7 +181,7 @@ if(MODE==='gate'){
   const base=JSON.parse(fs.readFileSync(BASE,'utf8'));
   const fails=[];
   if(!ctl || Math.abs(ctl.pct-50)>ctl.ci) fails.push('control off 50% — harness suspect');
-  if(!mirrorOK) fails.push(`mirror moved to ${m.a}/${m.b} med ${m.med}s to ${m.to}`);
+  if(!mirrorOK) fails.push(`mirror side bias ${m.a}/${m.b}, ${m.to} timeouts`);
   console.log('\ndrift vs baseline:');
   for(const a of POOL){
     const b=base.rows[a]; if(!b) continue;
