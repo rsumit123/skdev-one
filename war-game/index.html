@@ -716,11 +716,19 @@ body.split #nudge{display:none}
 const UNITS = {
   inf: {name:'Infantry', cost:8,  hp:70,  dps:8,  spd:7.0,  rng:2, cls:'light',   g:'I', col:'#6b7280'},
   gun: {name:'Gunner',   cost:18, hp:80,  dps:14, spd:5.0,  rng:6, cls:'support', g:'G', col:'#4a7c59'},
-  mob: {name:'Raider',   cost:20, hp:120, dps:10, spd:11.0, rng:2, cls:'light',   g:'R', col:'#a17c3a'},
+  air: {name:'Chopper',  cost:40, hp:200, dps:26, spd:9.0,  rng:4, cls:'air',     g:'H', col:'#4a7c8a'},
   tank:{name:'Tank',     cost:45, hp:400, dps:16, spd:3.5,  rng:5, cls:'armor',   g:'T', col:'#8a4b3c', splash:true},
   at:  {name:'AT Team',  cost:30, hp:90,  dps:12, spd:5.0,  rng:8, cls:'support', g:'A', col:'#5b5a8a'},
 };
+/* AIR_GUN / AIR_AT are swept by bench.js — see HANDOFF. A chopper that only
+   AT could touch was a hard lock, not a counter: with 4s decisions an opponent
+   holding no AT has no answer on the board at all, which is a coinflip on
+   preparation rather than a test of reasoning. The Gunner is the soft answer
+   and the AT Team the hard one, so being unprepared is punished without being
+   unrecoverable. */
+const AIR_GUN=0.6, AIR_AT=3.0, AIR_BASE=0.35;
 const MULT=(a,t)=>{
+  if(UNITS[t].cls==='air') return a==='at'?AIR_AT : a==='gun'?AIR_GUN : 0;
   if(a==='gun'&&UNITS[t].cls==='light') return 2.0;
   if(a==='at' &&UNITS[t].cls==='armor') return 4.0;
   return 1.0;
@@ -841,19 +849,25 @@ function step(dt){
   for(const u of S.units){
     const U=UNITS[u.type], dir=u.s===0?1:-1;
     let tgt=null,best=1e9;
-    for(const e of S.units){ if(e.s===u.s||e.hp<=0)continue;
+    for(const e of S.units){ if(e.s===u.s||e.hp<=0||MULT(u.type,e.type)<=0)continue;
       const d=(e.x-u.x)*dir; if(d>=0&&d<best){best=d;tgt=e;} }
     const baseX=u.s===0?WALL[1]:WALL[0], dBase=(baseX-u.x)*dir;
     // Reaching the base is the win condition, so it outranks shooting units.
     // Otherwise defenders spawning AT the base are always "in front" of an
     // attacker standing on it, and the base never takes a single point.
     if(dBase<=U.rng){
-      S.hp[1-u.s]-=U.dps*dt;
-      if(U.splash&&tgt&&best<=U.rng){ for(const e of S.units){ if(e.s===u.s||e.hp<=0)continue;
+      /* Choppers are an anti-unit weapon, not a base-cracker. Full base damage
+         made air the perfect punish for anyone investing in economy: they have
+         no units, therefore no AT or Gunners, therefore no answer, and the
+         chopper simply flew to an undefended base. That took eco archetypes
+         from 39.8%/45.3% to 0%. Blunting air against structures means an
+         unprepared opponent loses their army, not the match. */
+      S.hp[1-u.s]-=U.dps*(U.cls==='air'?AIR_BASE:1)*dt;
+      if(U.splash&&tgt&&best<=U.rng){ for(const e of S.units){ if(e.s===u.s||e.hp<=0||MULT(u.type,e.type)<=0)continue;
         if(Math.abs(e.x-u.x)<=U.rng){e.hp-=U.dps*MULT(u.type,e.type)*dt;e.fl=.18;} } }
     }
     else if(tgt&&best<=U.rng){
-      if(U.splash){ for(const e of S.units){ if(e.s===u.s||e.hp<=0)continue;
+      if(U.splash){ for(const e of S.units){ if(e.s===u.s||e.hp<=0||MULT(u.type,e.type)<=0)continue;
         if(Math.abs(e.x-u.x)<=U.rng){e.hp-=U.dps*MULT(u.type,e.type)*dt;e.fl=.18;} } }
       else {tgt.hp-=U.dps*MULT(u.type,tgt.type)*dt;tgt.fl=.18;}
     }
@@ -959,6 +973,7 @@ const cnt=(s,f)=>S.units.filter(u=>u.s===s&&f(u)).length;
 function agent(St,s){
   const e=1-s, coins=St.coins[s];
   const eArm=cnt(e,u=>UNITS[u.type].cls==='armor');
+  const eAir=cnt(e,u=>UNITS[u.type].cls==='air');
   const eLight=cnt(e,u=>UNITS[u.type].cls==='light');
   const eSup=cnt(e,u=>UNITS[u.type].cls==='support');
   const myFront=St.units.filter(u=>u.s===s).length;
@@ -967,12 +982,24 @@ function agent(St,s){
   if(pressure>=3 && myFront<pressure)
     return {queue:eArm?['at','inf','inf']:['gun','inf','inf'],
       why:`${pressure} hostiles inside my half and I am outnumbered — emergency ${eArm?'AT':'gunners'}.`};
+  /* Air outranks armour here: inf and tank do literally nothing to a chopper,
+     so an unanswered one is unstoppable, whereas armour is merely dangerous. */
+  if(eAir>0)
+    return {queue:eArm>0?['at','at','inf']:['at','gun','inf'],
+      why:`${eAir} chopper(s) up. Only AT (${AIR_AT}x) and Gunners (${AIR_GUN}x) can touch air.`};
   if(eArm>0)
     return {queue:['at','inf','inf'], why:`${eArm} armour on the field. AT Teams do 4x to armour.`};
   if(eSup>=2)
     return {queue:['tank','inf'], why:`They massed ${eSup} support units. Tank splash answers that.`};
   if(eLight>=3)
     return {queue:['gun','inf'], why:`${eLight} light infantry pushing — Gunners do double to light.`};
+  /* Exploit air superiority: if they have nothing that can shoot a chopper,
+     one is unanswerable until they build a counter. Without this branch the
+     scripted baseline never buys air at all, which makes it blind to the whole
+     unit -- and makes any "is air worth it" measurement against it meaningless. */
+  const eAA=cnt(e,u=>u.type==='at'||u.type==='gun');
+  if(eAA===0 && eAir===0 && coins>=UNITS.air.cost && St.t>20)
+    return {queue:['air','inf'], why:`They have no AT and no Gunners — nothing they own can touch a chopper.`};
   if(St.eco[s]<2 && St.t<110 && myFront>=1)
     return {queue:['eco','inf'], why:`Lane is quiet. Buying income while it is cheap to do so.`};
   if(myFront===0 && coins<20)
@@ -1247,7 +1274,7 @@ let PART=[], DMGN=[], DECAL=[], PROJ=[], SHAKE=0, LOWFX=false, LABELS=true;
    heavy shell with a fat muzzle bloom. */
 const WEAPON={
   inf : {kind:'tracer', rate:8,  w:1.4, col:'255,233,168', flash:8},
-  mob : {kind:'tracer', rate:11, w:1.2, col:'255,233,168', flash:7},
+  air : {kind:'burst',  rate:7,  w:1.3, col:'186,232,255', flash:9, n:2},
   gun : {kind:'burst',  rate:5,  w:1.5, col:'255,240,190', flash:11, n:3},
   at  : {kind:'rocket', rate:1.1,w:3.2, col:'171,153,234', flash:13, speed:1.7},
   tank: {kind:'shell',  rate:1.4,w:4.2, col:'255,196,110', flash:18, speed:3.4},
@@ -1272,7 +1299,7 @@ function fireAt(u,px,py,ex,ey,sc){
 let LIVE=false, ATTRACT=[];      // LIVE=false -> attract screen, no match running
 function seedAttract(){
   // one unit per (row, side) slot so nothing ever stacks on a same-side twin
-  const T=['inf','gun','mob','at','tank','tank','at','mob','gun','inf'];
+  const T=['inf','gun','air','at','tank','tank','at','air','gun','inf'];
   ATTRACT=T.map((type,i)=>{
     const s=i%2, dir=s===0?1:-1, row=Math.floor(i/2), k=row;
     return {id:i,type,s,dir,row,spd:UNITS[type].spd*0.34,
@@ -1440,9 +1467,9 @@ function shade(g,x,y,wd,ht,top,bot){
 }
 /* Each type needs a silhouette you can read at phone scale, not just a
    different gun. Rifleman stands tall, gunner is squat behind a drum-fed
-   MG, raider leans hard forward, AT kneels with a tube angled skyward.
+   MG, the chopper flies with its rotor spinning, AT kneels with a tube angled skyward.
    Gear also carries a fixed per-type accent colour. */
-const TYPEACC={inf:'#e3e8ee',gun:'#5fd07a',mob:'#f0b93f',at:'#ab99ea',tank:'#e8916a'};
+const TYPEACC={inf:'#e3e8ee',gun:'#5fd07a',air:'#7fd4f0',at:'#ab99ea',tank:'#e8916a'};
 
 function muzzle(g,mx,my,r){
   const fg=g.createRadialGradient(mx,my,0,mx,my,r);
@@ -1496,25 +1523,6 @@ function gunner(g,col,dark,ph,firing){
   if(firing) muzzle(g,33+rec,-15.2,11);
 }
 
-function raider(g,col,dark,ph,firing){
-  g.save(); g.rotate(-.30); g.translate(2,1);                     // hard forward lean
-  const sw=Math.sin(ph)*5.2;
-  g.fillStyle='#2f2a20';
-  g.beginPath(); g.moveTo(-2.5,-9); g.lineTo(-4+sw,1); g.lineTo(0+sw,1); g.lineTo(1,-9); g.fill();
-  g.beginPath(); g.moveTo(1.5,-9); g.lineTo(3-sw,1); g.lineTo(7-sw,1); g.lineTo(4,-9); g.fill();
-  shade(g,-6,-23,12,15,col,dark);
-  g.fillStyle='rgba(0,0,0,.26)'; g.fillRect(-6,-23,4,15);
-  head(g,dark,TYPEACC.mob,-28,5.2);
-  g.fillStyle=TYPEACC.mob;                                        // trailing scarf
-  g.beginPath(); g.moveTo(-4,-25); g.lineTo(-15-sw*.6,-27+sw*.4); g.lineTo(-14-sw*.6,-23+sw*.4);
-  g.lineTo(-4,-21); g.closePath(); g.fill();
-  const rec=firing?-2:0;
-  g.fillStyle='#2b2b2b'; g.fillRect(2+rec,-19,12,2.6);            // stubby SMG
-  if(firing) muzzle(g,16+rec,-19,7);
-  g.restore();
-  g.fillStyle='rgba(210,200,170,.3)';                             // speed streaks
-  for(let i=0;i<3;i++) g.fillRect(-16-i*7,-16+i*5,6,1.6);
-}
 
 function atTeam(g,col,dark,ph,firing){
   g.fillStyle='#2f2a20';                                          // kneeling
@@ -1568,11 +1576,42 @@ function tank(g,col,dark,ph,firing){
     g.fillStyle=fg; g.beginPath(); g.arc(mx,my,15,0,7); g.fill();
   }
 }
+/* The Chopper flies, so it is drawn well above the feet line the ground units
+   share (see TOPY.air). Everything else in the painter system assumes feet at
+   0,0 facing +x, so the altitude is a translate rather than a special case. */
+function chopper(g,col,dark,ph,firing){
+  g.save();
+  const bob=Math.sin(ph*.9)*2.2;
+  g.translate(0,-52+bob);
+  g.save(); g.rotate(-.12);
+  g.fillStyle='rgba(0,0,0,.20)';                                   // rotor disc
+  g.beginPath(); g.ellipse(2,-13,30,3.2,0,0,7); g.fill();
+  const spin=Math.sin(ph*3.4)*30;
+  g.strokeStyle='rgba(226,238,246,.75)'; g.lineWidth=1.6; g.lineCap='round';
+  g.beginPath(); g.moveTo(2-spin,-13.5); g.lineTo(2+spin,-12.5); g.stroke();
+  g.fillStyle='#2b3138'; g.fillRect(0,-13,3.4,5);                  // mast
+  shade(g,-11,-8,26,13,col,dark);                                  // fuselage
+  g.fillStyle='rgba(0,0,0,.24)'; g.fillRect(-11,-8,5,13);
+  g.fillStyle='#0f1a22';                                           // canopy
+  g.beginPath(); g.moveTo(7,-7.5); g.lineTo(15,-3.5); g.lineTo(15,1); g.lineTo(7,1); g.fill();
+  g.fillStyle=dark; g.fillRect(-24,-6.5,14,4);                     // tail boom
+  g.fillStyle=TYPEACC.air; g.fillRect(-27,-11,3.4,9);              // tail fin
+  const tsp=Math.sin(ph*5.1)*5;
+  g.strokeStyle='rgba(226,238,246,.6)'; g.lineWidth=1.2;
+  g.beginPath(); g.moveTo(-25.5,-7-tsp); g.lineTo(-25.5,-7+tsp); g.stroke();
+  g.strokeStyle='#39424b'; g.lineWidth=1.8; g.lineCap='round';     // skids
+  g.beginPath(); g.moveTo(-8,6.5); g.lineTo(12,6.5); g.stroke();
+  g.beginPath(); g.moveTo(-4,5); g.lineTo(-6,6.5); g.moveTo(8,5); g.lineTo(10,6.5); g.stroke();
+  const rec=firing?-1.6:0;
+  g.fillStyle='#2b2b2b'; g.fillRect(6+rec,2.5,11,2.4);             // chin gun
+  if(firing) muzzle(g,19+rec,3.7,7);
+  g.restore(); g.restore();
+}
 const PAINT={
   inf:rifleman, gun:gunner, at:atTeam, tank:tank,
-  mob:(g,c,d,p,f)=>raider(g,c,d,p*1.7,f),
+  air:(g,c,d,p,f)=>chopper(g,c,d,p*1.7,f),
 };
-const TOPY={inf:40,gun:32,mob:38,at:34,tank:46};   // where the HP pip sits per type
+const TOPY={inf:40,gun:32,air:78,at:34,tank:46};   // where the HP pip sits per type
 const SIDECOL=[{body:'#a83f26',dark:'#6d2515'},{body:'#1f5390',dark:'#123152'}];
 
 /* ---------- fort ---------- */
@@ -2613,6 +2652,10 @@ Reaching the enemy base means damaging it at your unit's DPS. First base to 0 lo
 UNITS: ${Object.entries(UNITS).map(([k,u])=>`${k} (cost ${u.cost}, hp ${u.hp}, dps ${u.dps}${u.splash?' SPLASH':''}, speed ${u.spd}, range ${u.rng}, class ${u.cls})`).join('; ')}
 
 COUNTERS: gun does 2x to light class. at does 4x to armor class. tank hits every enemy in range at once.
+AIR: the Chopper is class "air". Only two things can shoot it: at (${AIR_AT}x, the hard counter) and
+gun (${AIR_GUN}x, a partial answer). inf and tank do ZERO to it and will ignore it entirely.
+A chopper with no at or gun opposing it cannot be stopped, so do not let one operate unanswered.
+Equally, at and gun are wasted if the enemy has no air, so do not buy them on speculation.
 The cycle is tank > gun > at > tank. Infantry is a cheap generalist. Raider is fast but weak — use it to
 punish an empty lane, not to win fights.
 
