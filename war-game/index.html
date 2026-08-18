@@ -732,7 +732,7 @@ const MULT=(a,t)=>{
    two faces. LANE grew by exactly 2*BASE_HW so FIELD stays 80m and every
    distance a commander sees, plus the whole balance, is unchanged. */
 const BASE_HW=4, LANE=80+BASE_HW*2, WALL=[BASE_HW, LANE-BASE_HW], FIELD=LANE-BASE_HW*2,
-      BASE_HP=600, BASE_DPS=6, BASE_RNG=7,
+      BASE_HP=600, BASE_DPS=2, BASE_RNG=7,
       ECO_COST=45, ECO_STEP=0.5, ECO_MAX=3, ECO_ESC=0.75, DECIDE=4, TIME_CAP=300;
 /* Economy was the dominant strategy at every flat price tested (45 through 80):
    a trivial "buy eco whenever the lane is clear" heuristic beat the adaptive
@@ -740,6 +740,7 @@ const BASE_HW=4, LANE=80+BASE_HW*2, WALL=[BASE_HW, LANE-BASE_HW], FIELD=LANE-BAS
    upgrade is always correct and the game is solved. Escalating the price keeps
    the first upgrade strong, makes the third a real commitment, and lands that
    heuristic at 55% — a choice rather than an answer. */
+const FIELD_BONUS=0.35;   // coins/sec to whichever side has more units alive
 const ecoPrice=n=>Math.round(ECO_COST*(1+ECO_ESC*n));
 const RAMP=t=>1+t/55;   // war economy escalates hard — doubles by ~1min
 const SIDE=[{name:'Vulcan',col:'#c25a3a'},{name:'Cobalt',col:'#3f83ad'}];
@@ -806,7 +807,7 @@ let S, R, LOG, RUNNING=false, SPEED=1, TAB='battle', RAF=null, FX=[];
 
 function newGame(seed){
   R=mulberry32(seed);
-  S={t:0,coins:[20,20],inc:[1,1],eco:[0,0],hp:[BASE_HP,BASE_HP],units:[],q:[[],[]],
+  S={t:0,coins:[20,20],inc:[1,1],eco:[0,0],adv:null,hp:[BASE_HP,BASE_HP],units:[],q:[[],[]],
      over:false,win:null,nid:0,next:0};
   LOG=[]; FX=[]; RUNNING=false;
   document.getElementById('banner').style.display='none';
@@ -817,6 +818,19 @@ function step(dt){
   if(S.over) return;
   const rp=RAMP(S.t);
   S.coins[0]+=S.inc[0]*rp*dt; S.coins[1]+=S.inc[1]*rp*dt;
+  /* FIELD ADVANTAGE — the side with more living units earns a bonus.
+     Stalling is the strongest opening in the game (77.2% +/- 1.9 phase-averaged)
+     because holding coins is free: early units die piecemeal to the enemy base
+     gun and buy nothing back, so the correct opening is to buy nothing at all.
+     This attaches a price to that. It rewards the only lever a commander has --
+     what to buy -- rather than position, which they cannot control.
+     Flat and deliberately NOT multiplied by RAMP: base income roughly doubles
+     by 60s, so a fixed bonus is worth ~40% of income early and ~10% late. It
+     bites exactly in the window where stalling currently wins, and cannot
+     become a runaway once someone is ahead. */
+  const n0=S.units.reduce((a,u)=>a+(u.s===0?1:0),0), n1=S.units.length-n0;
+  S.adv = n0>n1 ? 0 : n1>n0 ? 1 : null;
+  if(S.adv!==null) S.coins[S.adv]+=FIELD_BONUS*dt;
 
   for(let s=0;s<2;s++){
     while(S.q[s].length){
