@@ -1000,11 +1000,21 @@ async function rateGate(isFree){
   }
 }
 
+/* A model that returns {"queue":"inf, gun"} instead of an array used to yield a
+   silent empty queue and count as neither failed nor malformed — so Granite 4.0
+   sent 25 empty queues across 28 turns while its reasoning said "buy a gun now",
+   and the logs showed a clean run. Parse tolerantly, and when output really is
+   unusable, say so instead of pretending the model chose to hold. */
 function sanitize(raw){
-  let q=Array.isArray(raw&&raw.queue)?raw.queue:[];
-  const bad=q.filter(x=>!VALID.includes(x));
+  let q = raw && raw.queue, shape='ok';
+  if(typeof q==='string'){ q=q.split(/[^a-z]+/i).filter(Boolean); shape='coerced'; }
+  else if(q && !Array.isArray(q) && typeof q==='object'){ q=Object.values(q); shape='coerced'; }
+  if(!Array.isArray(q)){ shape = (raw && 'queue' in raw) ? 'unusable' : 'missing'; q=[]; }
+  q=q.map(x=>typeof x==='string'?x:(x&&(x.unit||x.type||x.id))||'')
+     .map(x=>String(x).trim().toLowerCase());
+  const bad=q.filter(x=>x&&!VALID.includes(x));
   q=q.filter(x=>VALID.includes(x)).slice(0,6);
-  return {queue:q, why:String((raw&&raw.why)||'').slice(0,240), bad};
+  return {queue:q, why:String((raw&&raw.why)||'').slice(0,240), bad, shape};
 }
 
 async function mockAgent(St,s){
@@ -1102,7 +1112,9 @@ async function decide(s){
       why:`call failed — ${String(err&&err.message).slice(0,160)}`, bad:[], ms, failed:true}; }
   STREAK[s]=0;
   const out=sanitize(raw);
-  if(out.bad.length) STATS[s].bad++;
+  if(out.bad.length || out.shape==='unusable' || out.shape==='missing') STATS[s].bad++;
+  // when nothing was buildable, keep a slice of the raw reply so the log can be diagnosed
+  if(!out.queue.length) out.raw=String(LAST_RAW||'').replace(/\s+/g,' ').slice(0,160);
   return {...out, ms};
 }
 
@@ -1119,7 +1131,7 @@ async function runDecisions(){
   [a,b].forEach((d,s)=>{
     S.q[s]=d.queue;
     LASTQ[s]=[...d.queue]; SINCE[s]={};   // reset the window after the view was read
-    const e={t:S.t,s,queue:[...d.queue],why:d.why,ms:d.ms,bad:d.bad,failed:d.failed};
+    const e={t:S.t,s,queue:[...d.queue],why:d.why,ms:d.ms,bad:d.bad,failed:d.failed,shape:d.shape,raw:d.raw};
     LOG.push(e); pushFeed(e);
   });
   S.next+=DECIDE; AWAIT=false; acc=0; last=0; paintThink();
@@ -2531,7 +2543,9 @@ function matchPayload(){
     debrief:[0,1].map(s=>({side:SIDE[s].name,...(DEBRIEF[s]||{})})),
     decisions:LOG.map(e=>({tSeconds:+e.t.toFixed(1),side:SIDE[e.s].name,queue:e.queue,
       reasoning:e.why,latencyMs:e.ms?Math.round(e.ms):undefined,
-      invalidTokens:e.bad&&e.bad.length?e.bad:undefined,failed:e.failed||undefined})),
+      invalidTokens:e.bad&&e.bad.length?e.bad:undefined,failed:e.failed||undefined,
+      outputShape:e.shape&&e.shape!=='ok'?e.shape:undefined,
+      rawSample:e.raw||undefined})),
   };
 }
 
