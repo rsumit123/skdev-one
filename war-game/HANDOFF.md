@@ -251,7 +251,65 @@ price tested, from 45 all the way up to 80.** Economy was not merely strong, it 
 answer to the game. Neither the mirror check nor any LLM match surfaced it, because no model
 ever bought economy at all.
 
-**Mandatory after any balance change**, 150 seeds each way with sides swapped:
+### ...but a single-phase round-robin cannot be trusted either (Aug 2026)
+
+The round-robin above was itself unsound, and its numbers should not be quoted. A strategy's
+win rate depends chaotically on **which 4-second decision tick it first commits on**:
+
+| stall until | vs adaptive | vs ecogreedy |
+|---|---|---|
+| 0s | 50% | 100% |
+| 8s | 70% | **15%** |
+| 12s | 24% | **100%** |
+| 30s | **84%** | 21% |
+
+400 games per cell, standard error ~2.5pp — so these swings are structural, not noise. A
+4-second shift takes ecogreedy from 15% to 100%. Archetypes differ in when they commit, so
+every archetype number measured at a single phase was reading that resonance.
+
+Two hypotheses were tested and **both are dead**: coin upkeep (idle coins decaying) does not
+flatten the curve, and raising `BASE_DPS` to strengthen the stabilising base fire makes it
+*worse* — spread 61pp -> 88pp with a new side bias (103/97 -> 110/90). Defensive strength is
+not the fix, which also means trenches would not have fixed it.
+
+**Use `bench.js` instead.** It marginalises over commit phase by running each pairing across
+a grid of per-side decision-clock offsets and reporting the mean. The offsets are applied by
+the driver, never by the game, so it measures the shipping build.
+
+```
+node war-game/bench.js quick     # 25 seeds x 2x2 phase grid, ~10s
+node war-game/bench.js full      # 60 seeds x 4x4, ~36s, 13k games
+node war-game/bench.js gate      # diffs vs bench.baseline.json, exit 1 on drift
+node war-game/bench.js record    # re-record the baseline after an INTENDED change
+```
+
+`control` is an archetype identical to `adaptive` and must land on 50% — it is the harness
+checking its own win-attribution and side-flip bookkeeping. If it drifts, distrust everything
+else in the run.
+
+Phase-averaged truth for the current build (1920 games each, full profile):
+
+| archetype | win% vs adaptive |
+|---|---|
+| `control` | 50.0% ± 2.2 (sanity) |
+| `stall` | **77.2% ± 1.9 — the open exploit** |
+| `ecorush` | 18.1% |
+| `noeco` | 8.5% |
+| `ecogreedy` | 7.9% |
+| `spam`, `rush` | 0% |
+
+**The open problem: `stall` — buy nothing for 30s, then play normally — wins 77%.** Delaying
+commitment is genuinely the strongest strategy in the game, phase-averaged. Note this is also
+what Granite 4.0 accidentally did when its queues failed to parse. Unfixed as of this writing.
+
+The gate diffs against `bench.baseline.json` rather than enforcing an absolute band, because an
+absolute band would fail forever on `stall` and be ignored within a week. It fails on drift
+beyond the combined CIs, on the control leaving 50%, on the mirror moving, or on anything *new*
+crossing 65%. Verified to catch the historical `ECO_COST=40` regression (ecogreedy +56.3pp).
+
+### Legacy single-phase table (superseded — kept only to explain old numbers)
+
+150 seeds each way with sides swapped:
 
 | archetype | meaning | must be |
 |---|---|---|
