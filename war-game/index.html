@@ -729,6 +729,7 @@ const UNITS = {
   air: {name:'Chopper',  cost:40, hp:200, dps:26, spd:9.0,  rng:4, cls:'air',     g:'H', col:'#4a7c8a'},
   tank:{name:'Tank',     cost:45, hp:400, dps:16, spd:3.5,  rng:5, cls:'armor',   g:'T', col:'#8a4b3c', splash:true},
   at:  {name:'AT Team',  cost:30, hp:90,  dps:12, spd:5.0,  rng:8, cls:'support', g:'A', col:'#5b5a8a'},
+  med: {name:'Medic',    cost:22, hp:70,  dps:8,  spd:6.0,  rng:2, cls:'support', g:'M', col:'#5a9b86', heal:20, healRng:8},
 };
 /* AIR_GUN / AIR_AT are swept by bench.js — see HANDOFF. A chopper that only
    AT could touch was a hard lock, not a counter: with 4s decisions an opponent
@@ -893,6 +894,16 @@ function step(dt){
     S.bf[s]=tgt?tgt.id:null;          // so the renderer can draw the base gun firing
     if(tgt){tgt.hp-=BASE_DPS*dt;tgt.fl=.18;}
   }
+  /* MEDIC healing — applied after combat, before deaths are resolved so a unit
+     that just dropped low can be saved. Guards against the two failure modes a
+     healer invites in this game: it heals UNITS only (never the base, so it
+     can't turtle a base forever), and one medic's heal (6/s) is below one
+     attacker's DPS (inf 8/s), so a single medic slows losses without reversing
+     them. Whether stacked medics out-heal damage — the stalemate risk — is what
+     the sweep measures. */
+  for(const m of S.units){ const M=UNITS[m.type]; if(!M.heal||m.hp<=0) continue;
+    for(const e of S.units){ if(e.s!==m.s||e===m||e.hp<=0||e.hp>=e.mx) continue;
+      if(Math.abs(e.x-m.x)<=M.healRng){ e.hp=Math.min(e.mx, e.hp+M.heal*dt); e.fl=Math.max(e.fl,0); } } }
   S.units.filter(u=>u.hp<=0).forEach(u=>FX.push({x:u.x,s:u.s,life:.45}));
   S.units=S.units.filter(u=>u.hp>0);
   FX.forEach(f=>f.life-=dt); FX=FX.filter(f=>f.life>0);
