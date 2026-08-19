@@ -2761,22 +2761,29 @@ async function llmAgent(St,s,model){
     counterHint: counterHint(cls(1-s)),
   };
   await rateGate(/:free$/.test(model));
-  // NOTE: no AbortController here. Sandboxed webviews proxy fetch over postMessage,
-  // which structured-clones the options object, and AbortSignal is not cloneable.
-  const timeout=new Promise((_,rej)=>setTimeout(()=>rej(new Error('timed out after 20s')),20000));
-  try{
-    const r=await Promise.race([fetch('https://openrouter.ai/api/v1/chat/completions',{
-      method:'POST',
+  /* The timeout MUST cover the whole call, not just fetch(). fetch() settles the
+     instant the response HEADERS arrive — under a second — and the model then
+     STREAMS its answer body for as long as it keeps generating tokens, inside
+     r.json(). The old code raced only fetch() against the timeout, so a model
+     streaming for 500s (DeepSeek did exactly this) sailed past the 20s limit:
+     the headers came back immediately and won the race, then r.json() blocked
+     unbounded. We now race the entire fetch+parse, and abort the request when
+     the timer fires so the abandoned stream stops billing tokens we discard. */
+  let ctrl=null; try{ ctrl=new AbortController(); }catch(e){}
+  let killer=null;
+  const timeout=new Promise((_,rej)=>{ killer=setTimeout(()=>{
+    try{ ctrl&&ctrl.abort(); }catch(e){} rej(new Error('timed out after 20s')); },20000); });
+  const call=(async()=>{
+    const r=await fetch('https://openrouter.ai/api/v1/chat/completions',{
+      method:'POST', signal:ctrl?ctrl.signal:undefined,
       headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`,
         'HTTP-Referer':location.origin||'https://localhost','X-Title':'Breach'},
       body:JSON.stringify({model,messages:[{role:'system',content:RULES},
-        {role:'user',content:JSON.stringify(view)}],temperature:0.7,max_tokens:6000,   // headroom: z-ai/glm-5.2 sometimes ignores the reasoning cap and needs room to still emit the JSON
+        {role:'user',content:JSON.stringify(view)}],temperature:0.7,max_tokens:6000,
         // max_tokens, NOT effort: GLM 5.2 (and likely others) silently ignore
-        // reasoning.effort and think ~600 tokens regardless, but honour a token
-        // cap exactly. 400 keeps most of the depth at roughly half the latency
-        // and cost, and stops slow models blowing past the 25s retry timeout.
+        // reasoning.effort and think ~600 tokens regardless, but honour a token cap.
         ...(NO_REASON_PARAM?{}:{reasoning:{max_tokens:400}})})
-    }),timeout]);
+    });
     if(r.status===429){ await sleep(6000); throw new Error('rate limited (429) — retrying'); }
     if(r.status===400){
       const body=await r.text();
@@ -2795,9 +2802,13 @@ async function llmAgent(St,s,model){
     LAST_RAW=cands[0].slice(0,300);
     for(const c of cands){ try{ return extractJSON(c); }catch(e){} }
     throw new Error(`no JSON · finish_reason=${ch&&ch.finish_reason}`
-      +(ch&&ch.finish_reason==='length'?' (truncated mid-thought — raise max_tokens)':'')
+      +(ch&&ch.finish_reason==='length'?' (truncated mid-thought)':'')
       +` · ${cands[0].slice(0,110)}`);
+  })();
+  try{
+    return await Promise.race([call, timeout]);
   } catch(e){ throw new Error(hintFor(e)); }
+  finally{ if(killer) clearTimeout(killer); }
 }
 
 let LAST_RAW='';
