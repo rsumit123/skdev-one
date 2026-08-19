@@ -706,6 +706,7 @@ body.split #nudge{display:none}
       <button class="act" id="btnReset">Reset</button><button class="act" id="btnExport">Save log</button></div>
     <label class="chk"><input type="checkbox" id="labels" checked> Show unit type badges (I / G / R / A / T)</label>
     <label class="chk"><input type="checkbox" id="lowfx"> Reduce effects (helps older phones)</label>
+    <label class="chk"><input type="checkbox" id="memory" checked> Conversation memory — models remember their own turns (prompt-cached, low cost)</label>
   </div>
 </div>
 
@@ -816,7 +817,7 @@ function newGame(seed){
   R=mulberry32(seed);
   S={t:0,coins:[20,20],inc:[1,1],eco:[0,0],bf:[null,null],hp:[BASE_HP,BASE_HP],units:[],q:[[],[]],
      over:false,win:null,nid:0,next:0};
-  LOG=[]; FX=[]; RUNNING=false;
+  LOG=[]; FX=[]; RUNNING=false; CONV=[[],[]];
   document.getElementById('banner').style.display='none';
   document.getElementById('btnPlay').textContent='Start';
 }
@@ -1018,6 +1019,8 @@ const CMD=[{kind:'script',model:''},{kind:'script',model:''}];
 // what each side submitted last time, and what actually spawned since — fed
 // back into the next prompt so a model can notice its tank never appeared
 let LASTQ=[[],[]], SINCE=[{},{}], LASTTO=[false,false];   // was the last order auto-played after a timeout?
+let CONV=[[],[]];   // per-side append-only conversation (user state / assistant decision) for memory + caching
+let MEMORY_ON=true, MEM_TURNS=10;   // replay each side's own last N turns so it keeps its chain of thought
 const MOCK={lat:[900,5000],fail:0.06,bad:0.10};
 let AWAIT=false, THINK=[false,false];
 const STATS=[{calls:0,fail:0,bad:0,ms:0},{calls:0,fail:0,bad:0,ms:0}];
@@ -2255,7 +2258,7 @@ function lbRecord(){
      dedup fingerprint is savedAt+seed+models, and two new Date() calls a few
      milliseconds apart made one match show up twice in the merged view. */
   const payload=matchPayload();
-  const rec={at:payload.savedAt, promptVersion:6, seed:+document.getElementById('seed').value||0,
+  const rec={at:payload.savedAt, promptVersion:7, seed:+document.getElementById('seed').value||0,
     balance:{ecoCost:ECO_COST,ecoPrices:[0,1,2].map(ecoPrice)},
     a:side(0), b:side(1), winner:S.win, t:+S.t.toFixed(1),
     hp:S.hp.map(h=>Math.max(0,Math.round(h))), eco:[...S.eco]};
@@ -2565,14 +2568,14 @@ document.getElementById('btnSpeed').onclick=e=>{
   e.target.textContent=SPEED+'×'; document.getElementById('spdTag').textContent=SPEED+'×';
 };
 const reset=()=>{newGame(+document.getElementById('seed').value||1);
-  STATS.forEach(x=>{x.calls=0;x.fail=0;x.bad=0;x.ms=0;x.slow=0;}); STREAK[0]=STREAK[1]=0;
+  STATS.forEach(x=>{x.calls=0;x.fail=0;x.bad=0;x.ms=0;x.slow=0;x.ptok=0;x.ctok=0;}); STREAK[0]=STREAK[1]=0;
   const bb=document.getElementById('bannerTxt'); bb.style.fontSize=''; bb.style.color='';
   const f=document.getElementById('feed'); if(f) f.innerHTML='';
   DEBRIEF=[null,null];
   const db=document.getElementById('debrief'); if(db){db.style.display='none';db.innerHTML='';}
   if(PICK){ const r=PICK.resolve; closePicker(); r({queue:[],why:'match reset'}); }
   PART=[];DMGN=[];DECAL=[];PROJ=[];SHAKE=0;PREVU.clear();ACC.clear();DEADPOS.clear();
-  PREVBASE=[BASE_HP,BASE_HP]; PREVECO=[0,0]; BACC=[0,0]; BUILT=[{},{}]; PEAK=[0,0]; LASTQ=[[],[]]; SINCE=[{},{}]; BLOCKED=[null,null]; LASTTO=[false,false];
+  PREVBASE=[BASE_HP,BASE_HP]; PREVECO=[0,0]; BACC=[0,0]; BUILT=[{},{}]; PEAK=[0,0]; LASTQ=[[],[]]; SINCE=[{},{}]; BLOCKED=[null,null]; LASTTO=[false,false]; CONV=[[],[]];
   const sm=document.getElementById('summary'); if(sm){sm.style.display='none';sm.innerHTML='';}
   showResults(false);
   ['ovA','ovB'].forEach(i=>{const e=document.getElementById(i);e.classList.remove('on','flash');e.innerHTML='';});
@@ -2583,6 +2586,7 @@ const reset=()=>{newGame(+document.getElementById('seed').value||1);
 document.getElementById('btnReset').onclick=reset;
 document.getElementById('btnReset2').onclick=reset;
 document.getElementById('lowfx').onchange=e=>{LOWFX=e.target.checked;};
+const memEl=document.getElementById('memory'); if(memEl) memEl.onchange=e=>{MEMORY_ON=e.target.checked;};
 document.getElementById('labels').onchange=e=>{LABELS=e.target.checked;draw(performance.now());};
 
 /* A full match log is ~40KB of JSON and a nuisance to move between devices.
@@ -2618,7 +2622,7 @@ document.getElementById('btnCopyEnd').onclick=e=>copyAnalysis(e.target);
 
 function matchPayload(){
   return {
-    game:'breach', promptVersion:6,   // v6: explicit purchaseBlocked feedback; v1-v5 runs are not comparable
+    game:'breach', promptVersion:7, memory:MEMORY_ON,   // v7: per-side conversation memory (cached); stateless v1-v6 runs are not comparable
     // balance is stamped into every log so a tuning change can never silently
     // invalidate a comparison between two saved matches
     balance:{ecoCost:ECO_COST,ecoEscalation:ECO_ESC,ecoPrices:[0,1,2].map(ecoPrice),ecoStep:ECO_STEP,ecoMax:ECO_MAX,lane:FIELD,baseHP:BASE_HP,
@@ -2632,6 +2636,7 @@ function matchPayload(){
     commanders:[0,1].map(s=>({side:SIDE[s].name,kind:CMD[s].kind,
       model:CMD[s].kind==='llm'?CMD[s].model:CMD[s].kind,
       calls:STATS[s].calls,failed:STATS[s].fail,timedOut:STATS[s].slow||0,malformed:STATS[s].bad,
+      promptTokens:STATS[s].ptok||0,cachedTokens:STATS[s].ctok||0,
       avgLatencyMs:STATS[s].calls?Math.round(STATS[s].ms/STATS[s].calls):0})),
     result:{winner:S.win===null?'draw':SIDE[S.win].name, over:S.over,
       durationSeconds:+S.t.toFixed(1), baseHP:S.hp.map(h=>Math.max(0,Math.round(h))),
@@ -2765,6 +2770,25 @@ async function llmAgent(St,s,model){
       : 'your last order went through fine',
     counterHint: counterHint(cls(1-s)),
   };
+  /* CONVERSATION MEMORY (bounded window).
+     Stateless calls (system + current state only) are why models lose their own
+     chain of thought — each turn they re-derive from scratch and "forget" they
+     were, say, saving for eco. With memory on we replay this side's own last
+     MEM_TURNS turns as real user/assistant messages so it sees its own plan
+     continue. The plan was to send the FULL history and lean on prompt caching
+     to make it cheap, but OpenRouter does not fire incremental caching for a
+     GROWING conversation — verified 0 cache reads across turns on both Gemini
+     3.7 and Haiku 4.5, even above their size thresholds (a FIXED prefix does
+     cache 100%, but that is not this shape). So a window is what actually bounds
+     the cost; ~10 turns is plenty to carry an eco-save's worth of intent. The
+     system still carries a cache_control marker — harmless, and it pays off if
+     OpenRouter's incremental caching improves or a provider supports it. */
+  const viewStr=JSON.stringify(view);
+  const sys={role:'system',content:[{type:'text',text:RULES,cache_control:{type:'ephemeral'}}]};
+  let hist=[];
+  if(MEMORY_ON && CONV[s].length)
+    hist=CONV[s].slice(-MEM_TURNS*2).map(m=>({role:m.role,content:m.content}));
+  const messages=[sys,...hist,{role:'user',content:viewStr}];
   await rateGate(/:free$/.test(model));
   /* The timeout MUST cover the whole call, not just fetch(). fetch() settles the
      instant the response HEADERS arrive — under a second — and the model then
@@ -2783,8 +2807,7 @@ async function llmAgent(St,s,model){
       method:'POST', signal:ctrl?ctrl.signal:undefined,
       headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`,
         'HTTP-Referer':location.origin||'https://localhost','X-Title':'Breach'},
-      body:JSON.stringify({model,messages:[{role:'system',content:RULES},
-        {role:'user',content:JSON.stringify(view)}],temperature:0.7,max_tokens:6000,
+      body:JSON.stringify({model,messages,temperature:0.7,max_tokens:6000,usage:{include:true},
         // max_tokens, NOT effort: GLM 5.2 (and likely others) silently ignore
         // reasoning.effort and think ~600 tokens regardless, but honour a token cap.
         ...(NO_REASON_PARAM?{}:{reasoning:{max_tokens:400}})})
@@ -2799,13 +2822,20 @@ async function llmAgent(St,s,model){
     if(!r.ok) throw new Error(`HTTP ${r.status} ${(await r.text()).slice(0,120)}`);
     const j=await r.json();
     if(j.error) throw new Error(j.error.message||JSON.stringify(j.error).slice(0,160));
+    const u=j.usage||{};   // track caching so the log can prove reads are firing
+    STATS[s].ptok=(STATS[s].ptok||0)+(u.prompt_tokens||0);
+    STATS[s].ctok=(STATS[s].ctok||0)+((u.prompt_tokens_details&&u.prompt_tokens_details.cached_tokens)||0);
     const ch=j.choices&&j.choices[0], msg=ch&&ch.message;
     const flat=v=>Array.isArray(v)?v.map(x=>(x&&x.text)||'').join(''):(v||'');
     const cands=[flat(msg&&msg.content), flat(msg&&msg.reasoning)].filter(t=>t&&t.trim());
     if(!cands.length)
       throw new Error(`empty content · finish_reason=${ch&&ch.finish_reason} · usage=${JSON.stringify(j.usage||{})}`);
     LAST_RAW=cands[0].slice(0,300);
-    for(const c of cands){ try{ return extractJSON(c); }catch(e){} }
+    for(const c of cands){ try{ const parsed=extractJSON(c);
+      if(MEMORY_ON){   // append this turn to the append-only history (keeps the cache warm)
+        CONV[s].push({role:'user',content:viewStr});
+        CONV[s].push({role:'assistant',content:JSON.stringify({queue:parsed.queue||[],why:String(parsed.why||'').slice(0,240)})}); }
+      return parsed; }catch(e){} }
     throw new Error(`no JSON · finish_reason=${ch&&ch.finish_reason}`
       +(ch&&ch.finish_reason==='length'?' (truncated mid-thought)':'')
       +` · ${cands[0].slice(0,110)}`);
