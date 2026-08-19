@@ -1017,7 +1017,7 @@ function agent(St,s){
 const CMD=[{kind:'script',model:''},{kind:'script',model:''}];
 // what each side submitted last time, and what actually spawned since — fed
 // back into the next prompt so a model can notice its tank never appeared
-let LASTQ=[[],[]], SINCE=[{},{}];
+let LASTQ=[[],[]], SINCE=[{},{}], LASTTO=[false,false];   // was the last order auto-played after a timeout?
 const MOCK={lat:[900,5000],fail:0.06,bad:0.10};
 let AWAIT=false, THINK=[false,false];
 const STATS=[{calls:0,fail:0,bad:0,ms:0},{calls:0,fail:0,bad:0,ms:0}];
@@ -1139,7 +1139,7 @@ async function decide(s){
   for(let attempt=0;attempt<2&&!raw;attempt++){
     try{ raw = c.kind==='mock' ? await mockAgent(S,s) : await llmAgent(S,s,c.model); }
     catch(e){ err=e;
-      if(/timed out/i.test(String(e.message))) break;   // slow model: don't spend another 20s, auto-order now
+      if(/timed out/i.test(String(e.message))) break;   // slow model: don't spend another 30s, auto-order now
       if(attempt===0) await sleep(400); }
   }
   const ms=performance.now()-t0;
@@ -1153,7 +1153,7 @@ async function decide(s){
     const auto=sanitize(agent(S,s)).queue, q=auto.length?auto:(S.q[s].length?[...S.q[s]]:['inf','inf']);
     if(/timed out/i.test(String(err&&err.message))){
       STATS[s].slow=(STATS[s].slow||0)+1; STREAK[s]=0;
-      return {queue:q, why:`no reply in 20s — auto-order ${q.join(',')}`, bad:[], ms, failed:true, timedOut:true}; }
+      return {queue:q, why:`no reply in 30s — auto-order ${q.join(',')}`, bad:[], ms, failed:true, timedOut:true}; }
     STATS[s].fail++; STREAK[s]++;
     if(STREAK[s]>=3) haltOnFailure(s, err&&err.message);
     return {queue:q, why:`call failed — ${String(err&&err.message).slice(0,160)}`, bad:[], ms, failed:true}; }
@@ -1169,7 +1169,7 @@ async function runDecisions(){
   const need = CMD.some(c=>c.kind!=='script');
   if(!need){
     for(let s=0;s<2;s++){const d=sanitize(agent(S,s));S.q[s]=d.queue;
-      LASTQ[s]=[...d.queue]; SINCE[s]={};
+      LASTQ[s]=[...d.queue]; SINCE[s]={}; LASTTO[s]=false;
       const e={t:S.t,s,queue:[...d.queue],why:d.why}; LOG.push(e); pushFeed(e);}
     S.next+=DECIDE; return;
   }
@@ -1177,7 +1177,7 @@ async function runDecisions(){
   const [a,b]=await Promise.all([decide(0),decide(1)]);
   [a,b].forEach((d,s)=>{
     S.q[s]=d.queue;
-    LASTQ[s]=[...d.queue]; SINCE[s]={};   // reset the window after the view was read
+    LASTQ[s]=[...d.queue]; SINCE[s]={}; LASTTO[s]=!!d.timedOut;   // reset the window after the view was read
     const e={t:S.t,s,queue:[...d.queue],why:d.why,ms:d.ms,bad:d.bad,failed:d.failed,shape:d.shape,raw:d.raw};
     LOG.push(e); pushFeed(e);
   });
@@ -2572,7 +2572,7 @@ const reset=()=>{newGame(+document.getElementById('seed').value||1);
   const db=document.getElementById('debrief'); if(db){db.style.display='none';db.innerHTML='';}
   if(PICK){ const r=PICK.resolve; closePicker(); r({queue:[],why:'match reset'}); }
   PART=[];DMGN=[];DECAL=[];PROJ=[];SHAKE=0;PREVU.clear();ACC.clear();DEADPOS.clear();
-  PREVBASE=[BASE_HP,BASE_HP]; PREVECO=[0,0]; BACC=[0,0]; BUILT=[{},{}]; PEAK=[0,0]; LASTQ=[[],[]]; SINCE=[{},{}]; BLOCKED=[null,null];
+  PREVBASE=[BASE_HP,BASE_HP]; PREVECO=[0,0]; BACC=[0,0]; BUILT=[{},{}]; PEAK=[0,0]; LASTQ=[[],[]]; SINCE=[{},{}]; BLOCKED=[null,null]; LASTTO=[false,false];
   const sm=document.getElementById('summary'); if(sm){sm.style.display='none';sm.innerHTML='';}
   showResults(false);
   ['ovA','ovB'].forEach(i=>{const e=document.getElementById(i);e.classList.remove('on','flash');e.innerHTML='';});
@@ -2752,6 +2752,11 @@ async function llmAgent(St,s,model){
     yourLastQueue: LASTQ[s].length?LASTQ[s]:'(none yet)',
     builtSinceYourLastDecision: Object.keys(SINCE[s]).length?SINCE[s]:'nothing was built',
     unspentFromLastQueue: St.q[s].length?[...St.q[s]]:'queue fully spent',
+    // A timed-out turn is played by a fallback, not by the model. Say so plainly,
+    // and only here — nagging every turn would just slow the fast models down too.
+    lastTurnAutoPlayed: LASTTO[s]
+      ? `Your previous turn TIMED OUT — you did not answer within 30 seconds, so this order was auto-played for you: [${LASTQ[s].join(', ')||'hold'}]. That was NOT your decision. To keep command of your army, answer faster and with less deliberation this turn.`
+      : false,
     // The single most-misread thing: models queue eco, cannot afford it, and
     // then believe they own it. Spell the failure out in plain language.
     purchaseBlocked: BLOCKED[s]
@@ -2765,14 +2770,14 @@ async function llmAgent(St,s,model){
      instant the response HEADERS arrive — under a second — and the model then
      STREAMS its answer body for as long as it keeps generating tokens, inside
      r.json(). The old code raced only fetch() against the timeout, so a model
-     streaming for 500s (DeepSeek did exactly this) sailed past the 20s limit:
+     streaming for 500s (DeepSeek did exactly this) sailed past the 30s limit:
      the headers came back immediately and won the race, then r.json() blocked
      unbounded. We now race the entire fetch+parse, and abort the request when
      the timer fires so the abandoned stream stops billing tokens we discard. */
   let ctrl=null; try{ ctrl=new AbortController(); }catch(e){}
   let killer=null;
   const timeout=new Promise((_,rej)=>{ killer=setTimeout(()=>{
-    try{ ctrl&&ctrl.abort(); }catch(e){} rej(new Error('timed out after 20s')); },20000); });
+    try{ ctrl&&ctrl.abort(); }catch(e){} rej(new Error('timed out after 30s')); },30000); });
   const call=(async()=>{
     const r=await fetch('https://openrouter.ai/api/v1/chat/completions',{
       method:'POST', signal:ctrl?ctrl.signal:undefined,
