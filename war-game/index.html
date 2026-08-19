@@ -821,19 +821,21 @@ function newGame(seed){
   document.getElementById('btnPlay').textContent='Start';
 }
 
+let BLOCKED=[null,null];   // per-side: a queued item the sim refused for lack of coins (declared here, in the sim slice, because step() reads it)
 function step(dt){
   if(S.over) return;
   const rp=RAMP(S.t);
   S.coins[0]+=S.inc[0]*rp*dt; S.coins[1]+=S.inc[1]*rp*dt;
 
   for(let s=0;s<2;s++){
+    BLOCKED[s]=null;   // an unaffordable head item is the #1 thing models misread as a completed buy
     while(S.q[s].length){
       const it=S.q[s][0];
       if(it==='eco'){
         if(S.eco[s]>=ECO_MAX){S.q[s].shift();continue;}
         const ep=ecoPrice(S.eco[s]);
         if(S.coins[s]>=ep){S.coins[s]-=ep;S.eco[s]++;S.inc[s]+=ECO_STEP;S.q[s].shift();}
-        else break;
+        else {BLOCKED[s]={item:'eco',cost:ep};break;}
       }else{
         const u=UNITS[it]; if(!u){S.q[s].shift();continue;}
         if(S.coins[s]>=u.cost){
@@ -841,7 +843,7 @@ function step(dt){
           const jx=R()*1.6, jh=u.hp*(0.96+0.08*R());   // seeded variance so the seed actually matters
           S.units.push({id:S.nid++,s,type:it,x:s===0?WALL[0]+jx:WALL[1]-jx,hp:jh,mx:jh,fl:0});
           S.q[s].shift();
-        } else break;
+        } else {BLOCKED[s]={item:it,cost:u.cost};break;}
       }
     }
   }
@@ -2243,7 +2245,7 @@ function lbRecord(){
      dedup fingerprint is savedAt+seed+models, and two new Date() calls a few
      milliseconds apart made one match show up twice in the merged view. */
   const payload=matchPayload();
-  const rec={at:payload.savedAt, promptVersion:5, seed:+document.getElementById('seed').value||0,
+  const rec={at:payload.savedAt, promptVersion:6, seed:+document.getElementById('seed').value||0,
     balance:{ecoCost:ECO_COST,ecoPrices:[0,1,2].map(ecoPrice)},
     a:side(0), b:side(1), winner:S.win, t:+S.t.toFixed(1),
     hp:S.hp.map(h=>Math.max(0,Math.round(h))), eco:[...S.eco]};
@@ -2560,7 +2562,7 @@ const reset=()=>{newGame(+document.getElementById('seed').value||1);
   const db=document.getElementById('debrief'); if(db){db.style.display='none';db.innerHTML='';}
   if(PICK){ const r=PICK.resolve; closePicker(); r({queue:[],why:'match reset'}); }
   PART=[];DMGN=[];DECAL=[];PROJ=[];SHAKE=0;PREVU.clear();ACC.clear();DEADPOS.clear();
-  PREVBASE=[BASE_HP,BASE_HP]; PREVECO=[0,0]; BACC=[0,0]; BUILT=[{},{}]; PEAK=[0,0]; LASTQ=[[],[]]; SINCE=[{},{}];
+  PREVBASE=[BASE_HP,BASE_HP]; PREVECO=[0,0]; BACC=[0,0]; BUILT=[{},{}]; PEAK=[0,0]; LASTQ=[[],[]]; SINCE=[{},{}]; BLOCKED=[null,null];
   const sm=document.getElementById('summary'); if(sm){sm.style.display='none';sm.innerHTML='';}
   showResults(false);
   ['ovA','ovB'].forEach(i=>{const e=document.getElementById(i);e.classList.remove('on','flash');e.innerHTML='';});
@@ -2606,7 +2608,7 @@ document.getElementById('btnCopyEnd').onclick=e=>copyAnalysis(e.target);
 
 function matchPayload(){
   return {
-    game:'breach', promptVersion:5,   // v5: Raider replaced by the Chopper (air); v1-v4 runs are not comparable
+    game:'breach', promptVersion:6,   // v6: explicit purchaseBlocked feedback; v1-v5 runs are not comparable
     // balance is stamped into every log so a tuning change can never silently
     // invalidate a comparison between two saved matches
     balance:{ecoCost:ECO_COST,ecoEscalation:ECO_ESC,ecoPrices:[0,1,2].map(ecoPrice),ecoStep:ECO_STEP,ecoMax:ECO_MAX,lane:FIELD,baseHP:BASE_HP,
@@ -2687,6 +2689,8 @@ HOW THE QUEUE ACTUALLY WORKS — read this carefully, it decides most games:
   accept building nothing meanwhile. If you switch to cheap units, you spend the savings and
   never reach the expensive one.
 - "affordableNow" in the state tells you exactly what you can buy this instant.
+- "purchaseBlocked" reports whether your LAST order failed for want of coins. If it
+  names eco, your eco did NOT complete and myEco is unchanged — do not assume you own it.
 
 You are called every ${DECIDE} seconds. Queue 2-4 items, not more.
 
@@ -2738,6 +2742,12 @@ async function llmAgent(St,s,model){
     yourLastQueue: LASTQ[s].length?LASTQ[s]:'(none yet)',
     builtSinceYourLastDecision: Object.keys(SINCE[s]).length?SINCE[s]:'nothing was built',
     unspentFromLastQueue: St.q[s].length?[...St.q[s]]:'queue fully spent',
+    // The single most-misread thing: models queue eco, cannot afford it, and
+    // then believe they own it. Spell the failure out in plain language.
+    purchaseBlocked: BLOCKED[s]
+      ? `Your order for "${BLOCKED[s].item}" did NOT go through: it costs ${BLOCKED[s].cost} and you had ${Math.floor(St.coins[s])} coins. An item you cannot afford blocks everything behind it, so NOTHING was built this cycle.`
+        + (BLOCKED[s].item==='eco' ? ` Your eco is still ${St.eco[s]} of ${ECO_MAX} — queuing eco is NOT owning it. To actually buy it, keep it first for enough turns to bank ${BLOCKED[s].cost} coins, or drop it and build what you can afford.` : ` Either save for it across turns or lead with something you can afford now.`)
+      : 'your last order went through fine',
     counterHint: counterHint(cls(1-s)),
   };
   await rateGate(/:free$/.test(model));
@@ -2750,7 +2760,7 @@ async function llmAgent(St,s,model){
       headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`,
         'HTTP-Referer':location.origin||'https://localhost','X-Title':'Breach'},
       body:JSON.stringify({model,messages:[{role:'system',content:RULES},
-        {role:'user',content:JSON.stringify(view)}],temperature:0.7,max_tokens:3000,
+        {role:'user',content:JSON.stringify(view)}],temperature:0.7,max_tokens:6000,   // headroom: z-ai/glm-5.2 sometimes ignores the reasoning cap and needs room to still emit the JSON
         // max_tokens, NOT effort: GLM 5.2 (and likely others) silently ignore
         // reasoning.effort and think ~600 tokens regardless, but honour a token
         // cap exactly. 400 keeps most of the depth at roughly half the latency
