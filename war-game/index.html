@@ -1582,7 +1582,7 @@ function tank(g,col,dark,ph,firing){
 function chopper(g,col,dark,ph,firing){
   g.save();
   const bob=Math.sin(ph*.9)*2.2;
-  g.translate(0,-52+bob);
+  g.translate(0,bob);   // altitude is set by the draw loop (bodyY); this is just hover
   g.save(); g.rotate(-.12);
   g.fillStyle='rgba(0,0,0,.20)';                                   // rotor disc
   g.beginPath(); g.ellipse(2,-13,30,3.2,0,0,7); g.fill();
@@ -1611,7 +1611,7 @@ const PAINT={
   inf:rifleman, gun:gunner, at:atTeam, tank:tank,
   air:(g,c,d,p,f)=>chopper(g,c,d,p*1.7,f),
 };
-const TOPY={inf:40,gun:32,air:78,at:34,tank:46};   // where the HP pip sits per type
+const TOPY={inf:40,gun:32,air:34,at:34,tank:46};   // where the HP pip sits per type
 const SIDECOL=[{body:'#a83f26',dark:'#6d2515'},{body:'#1f5390',dark:'#123152'}];
 
 /* ---------- fort ---------- */
@@ -1816,16 +1816,17 @@ function draw(now){
       if(u.dir>0&&u.x>LANE+16) u.x=-16;
       if(u.dir<0&&u.x<-16) u.x=LANE+16;
       const gy=groundY(h,u.row), sc=rowScale(h,u.row), px=toPixRow(w,u.x,u.row);
+      const isAir=UNITS[u.type].cls==='air', bodyY=isAir?groundY(h,0)-band(h).ht*0.34:gy;
       cx.save(); cx.translate(px,gy);
-      cx.fillStyle='rgba(0,0,0,.34)';
-      cx.beginPath(); cx.ellipse(0,0,(u.type==='tank'?34:14)*sc,(u.type==='tank'?7:4.4)*sc,0,0,7); cx.fill();
+      cx.fillStyle=isAir?'rgba(0,0,0,.20)':'rgba(0,0,0,.34)';
+      cx.beginPath(); cx.ellipse(0,0,(isAir?9:u.type==='tank'?34:14)*sc,(isAir?2.6:u.type==='tank'?7:4.4)*sc,0,0,7); cx.fill();
       cx.restore();
       cx.save(); cx.globalAlpha=0.84+0.16*(u.row/(ROWS-1));
-      cx.translate(px,gy); cx.scale(sc*u.dir,sc);
+      cx.translate(px,bodyY); cx.scale(sc*u.dir,sc);
       const C=SIDECOL[u.s];
       PAINT[u.type](cx,C.body,C.dark,rt/1000*UNITS[u.type].spd*.9+u.id*1.7,false);
       cx.restore();
-      if(!LOWFX&&Math.random()<dt*5) puff(px-u.dir*10*sc,gy,1,'176,166,132',9);
+      if(!isAir&&!LOWFX&&Math.random()<dt*5) puff(px-u.dir*10*sc,gy,1,'176,166,132',9);
     });
     PART=PART.filter(p=>{
       p.life-=dt; if(p.life<=0) return false;
@@ -1849,20 +1850,25 @@ function draw(now){
     seen.add(u.id);
     const U=UNITS[u.type], r=rowOf(u), gy=groundY(h,r), sc=rowScale(h,r), px=toPixRow(w,u.x,r);
     const dir=u.s===0?1:-1, firing=!S.over&&fire.has(u.id), haze=0.84+0.16*(r/(ROWS-1));
+    // Flyers ride a fixed altitude up in the sky rather than their depth-row
+    // ground line — otherwise a chopper in a near row sits down in the
+    // foreground grass, level with the infantry. The shadow stays on the ground
+    // far below, which is what reads as "flying".
+    const isAir=U.cls==='air', bodyY=isAir?groundY(h,0)-band(h).ht*0.34:gy;
     // damage accumulation → floating numbers
     const prev=PREVU.get(u.id);
     if(prev!==undefined&&prev>u.hp){
       const a=(ACC.get(u.id)||0)+(prev-u.hp);
-      if(a>=7){ dmgNum(px,gy-34*sc,a); ACC.set(u.id,0); } else ACC.set(u.id,a);
+      if(a>=7){ dmgNum(px,bodyY-34*sc,a); ACC.set(u.id,0); } else ACC.set(u.id,a);
     }
     PREVU.set(u.id,u.hp);
     // shadow
     cx.save(); cx.translate(px,gy);
-    cx.fillStyle='rgba(0,0,0,.36)';
-    cx.beginPath(); cx.ellipse(0,0,(u.type==='tank'?34:14)*sc,(u.type==='tank'?7:4.4)*sc,0,0,7); cx.fill();
+    cx.fillStyle=isAir?'rgba(0,0,0,.20)':'rgba(0,0,0,.36)';
+    cx.beginPath(); cx.ellipse(0,0,(isAir?9:u.type==='tank'?34:14)*sc,(isAir?2.6:u.type==='tank'?7:4.4)*sc,0,0,7); cx.fill();
     cx.restore();
     // body
-    cx.save(); cx.globalAlpha=haze; cx.translate(px,gy); cx.scale(sc*dir,sc);
+    cx.save(); cx.globalAlpha=haze; cx.translate(px,bodyY); cx.scale(sc*dir,sc);
     const moving = !firing;
     const ph = moving ? (S.t*U.spd*.9+u.id*1.7) : 0;
     const C=SIDECOL[u.s];
@@ -1870,12 +1876,12 @@ function draw(now){
     else PAINT[u.type](cx,C.body,C.dark,ph,firing);
     cx.restore();
     // dust while walking
-    if(moving&&!LOWFX&&!AWAIT&&!S.over&&Math.random()<dt*7)
+    if(moving&&!isAir&&!LOWFX&&!AWAIT&&!S.over&&Math.random()<dt*7)
       puff(px-dir*10*sc,gy,1,'176,166,132',9);
     // hp pip
     const hf=Math.max(0,u.hp/u.mx), topy=TOPY[u.type]||40;
     if(hf<1){
-      const bw=(u.type==='tank'?36:18)*sc, by=gy-topy*sc;
+      const bw=(u.type==='tank'?36:18)*sc, by=bodyY-topy*sc;
       cx.fillStyle='rgba(4,7,11,.66)';
       cx.beginPath(); cx.roundRect(px-bw/2,by,bw,3.4*sc,1.7*sc); cx.fill();
       cx.fillStyle=hf>.5?'#5fbf6a':hf>.25?'#d9a72e':'#c9543a';
@@ -1883,7 +1889,7 @@ function draw(now){
     }
     // type badge — the reliable way to tell a rifleman from a gunner at speed
     if(LABELS&&sc>.62){
-      const bw=13.5*sc, bh=11*sc, by=gy-(topy+13)*sc;
+      const bw=13.5*sc, bh=11*sc, by=bodyY-(topy+13)*sc;
       cx.fillStyle='rgba(6,9,13,.85)';
       cx.beginPath(); cx.roundRect(px-bw/2,by,bw,bh,3*sc); cx.fill();
       cx.strokeStyle=TYPEACC[u.type]; cx.lineWidth=1.1*sc;
@@ -1898,7 +1904,7 @@ function draw(now){
     if(firing&&!LOWFX&&!AWAIT&&!S.over&&Math.random()<dt*Wp.rate){
       const muz=u.type==='tank'?54:u.type==='at'?31:u.type==='gun'?33:24;
       const muy=u.type==='tank'?32:u.type==='at'?17:u.type==='gun'?15:20;
-      const tx=px+dir*muz*sc, ty=gy-muy*sc;
+      const tx=px+dir*muz*sc, ty=bodyY-muy*sc;
       let tgt=null,best=1e9;
       for(const e of S.units){ if(e.s===u.s)continue; const d=(e.x-u.x)*dir; if(d>=0&&d<best){best=d;tgt=e;} }
       const ex = tgt?toPixRow(w,tgt.x,rowOf(tgt)):toPixRow(w,u.s===0?WALL[1]:WALL[0],r);
