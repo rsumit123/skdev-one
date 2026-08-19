@@ -2745,7 +2745,11 @@ async function llmAgent(St,s,model){
         'HTTP-Referer':location.origin||'https://localhost','X-Title':'Breach'},
       body:JSON.stringify({model,messages:[{role:'system',content:RULES},
         {role:'user',content:JSON.stringify(view)}],temperature:0.7,max_tokens:3000,
-        ...(NO_REASON_PARAM?{}:{reasoning:{effort:'low'}})})
+        // max_tokens, NOT effort: GLM 5.2 (and likely others) silently ignore
+        // reasoning.effort and think ~600 tokens regardless, but honour a token
+        // cap exactly. 400 keeps most of the depth at roughly half the latency
+        // and cost, and stops slow models blowing past the 25s retry timeout.
+        ...(NO_REASON_PARAM?{}:{reasoning:{max_tokens:400}})})
     }),timeout]);
     if(r.status===429){ await sleep(6000); throw new Error('rate limited (429) — retrying'); }
     if(r.status===400){
