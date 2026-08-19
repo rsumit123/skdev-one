@@ -826,7 +826,7 @@ function newGame(seed){
   R=mulberry32(seed);
   S={t:0,coins:[20,20],inc:[1,1],eco:[0,0],bf:[null,null],hp:[BASE_HP,BASE_HP],units:[],q:[[],[]],
      over:false,win:null,nid:0,next:0};
-  LOG=[]; FX=[]; RUNNING=false; CONV=[[],[]];
+  LOG=[]; FX=[]; RUNNING=false; CONV=[[],[]]; DOSSIER_USED=[false,false];
   document.getElementById('banner').style.display='none';
   document.getElementById('btnPlay').textContent='Start';
 }
@@ -1096,6 +1096,7 @@ const CMD=[{kind:'script',model:''},{kind:'script',model:''}];
 // back into the next prompt so a model can notice its tank never appeared
 let LASTQ=[[],[]], SINCE=[{},{}], LASTTO=[false,false];   // was the last order auto-played after a timeout?
 let CONV=[[],[]];   // per-side append-only conversation (user state / assistant decision) for memory + caching
+let DOSSIER_USED=[false,false];   // did this side play with a scouting report injected?
 let MEMORY_ON=true, MEM_TURNS=10;   // replay each side's own last N turns so it keeps its chain of thought
 const MOCK={lat:[900,5000],fail:0.06,bad:0.10};
 let AWAIT=false, THINK=[false,false];
@@ -2699,7 +2700,7 @@ document.getElementById('btnCopyEnd').onclick=e=>copyAnalysis(e.target);
 
 function matchPayload(){
   return {
-    game:'breach', promptVersion:7, memory:MEMORY_ON,   // v7: per-side conversation memory (cached); stateless v1-v6 runs are not comparable
+    game:'breach', promptVersion:7, memory:MEMORY_ON, dossierUsed:[...DOSSIER_USED],   // v7: per-side conversation memory (cached); stateless v1-v6 runs are not comparable
     // balance is stamped into every log so a tuning change can never silently
     // invalidate a comparison between two saved matches
     balance:{ecoCost:ECO_COST,ecoEscalation:ECO_ESC,ecoPrices:[0,1,2].map(ecoPrice),ecoStep:ECO_STEP,ecoMax:ECO_MAX,lane:FIELD,baseHP:BASE_HP,
@@ -2866,8 +2867,10 @@ async function llmAgent(St,s,model){
   let sysText=RULES;
   if(CMD[1-s]&&CMD[1-s].kind==='human'){
     const dos=dossierGet(model);
-    if(dos&&dos.games>0&&(dos.read||dos.plan))
-      sysText=RULES+`\n\nSCOUTING REPORT — you have played this HUMAN opponent ${dos.games} time(s); your record against them is ${dos.modelWins}-${dos.humanWins}.\nHow they play: ${dos.read||'?'}\nYour plan to beat them: ${dos.plan||'?'}\nAnticipate and counter their known habits this game.`;
+    if(dos&&dos.games>0&&(dos.read||dos.plan)){
+      sysText=RULES+`\n\nSCOUTING REPORT — you have played this HUMAN opponent ${dos.games} time(s); your record against them is ${dos.modelWins}-${dos.humanWins}.\nHow they play: ${dos.read||'?'}\nYour plan to beat them: ${dos.plan||'?'}\nAnticipate and counter their known habits this game. When this report shapes a decision, say so briefly in your "why" (e.g. "expecting their usual gunner rush, opening AT early").`;
+      DOSSIER_USED[s]=true;   // so the match log can confirm the report was actually in the prompt
+    }
   }
   const sys={role:'system',content:[{type:'text',text:sysText,cache_control:{type:'ephemeral'}}]};
   let hist=[];
