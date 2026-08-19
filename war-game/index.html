@@ -221,6 +221,10 @@ body:not(.live) #sheet{transform:translateY(100%);pointer-events:none}
   font-family:"Saira Condensed",sans-serif;font-size:16px;font-weight:700;color:#f0dc9a}
 .pkcoins small{font-size:9.5px;font-family:"IBM Plex Mono",monospace;color:var(--txt-3);font-weight:400}
 .pkdot{width:9px;height:9px;border-radius:50%;background:#e0b83a;flex:none}
+.pkstance{display:flex;gap:8px;margin:8px 0}
+.pkstance .stbtn{flex:1;padding:9px 6px;font-size:12px;font-weight:700;border-radius:7px;cursor:pointer;
+  background:#161d26;color:#8b97a5;border:1.5px solid #29333f;transition:all .12s}
+.pkstance .stbtn.on{background:#243447;color:#eaf0f6;border-color:#3f83ad;box-shadow:0 0 0 1px #3f83ad inset}
 .pkhint{font-size:10px;color:#9aa5b1;line-height:1.45}
 .pkgrid{display:flex;gap:5px;flex-wrap:wrap}
 .pku{flex:1 1 78px;min-width:70px;border:1px solid #333d47;background:#141a21;border-radius:7px;
@@ -508,6 +512,10 @@ body.split #nudge{display:none}
       <span class="pkcoins"><span class="pkdot"></span><b id="pkCoins">0</b><small id="pkInc"></small></span>
     </div>
     <div class="pkhint" id="pkHint"></div>
+    <div class="pkstance" id="pkStance">
+      <button class="stbtn on" data-st="push">&#9876;&#65039; Push their base</button>
+      <button class="stbtn" data-st="hold">&#128737;&#65039; Hold the tower</button>
+    </div>
     <div class="pkgrid" id="pkGrid"></div>
     <div class="pkq" id="pkQueue"></div>
     <div class="pkwarn" id="pkWarn"></div>
@@ -749,6 +757,12 @@ const MULT=(a,t)=>{
    is the face units actually stop at, and FIELD is the open ground between the
    two faces. LANE grew by exactly 2*BASE_HW so FIELD stays 80m and every
    distance a commander sees, plus the whole balance, is unchanged. */
+/* NEUTRAL TOWER — a contested midfield objective. A side controls it by having
+   more units in its zone than the enemy (empty or tied = nobody). Control pays
+   escalating eco and, every BOLT_PERIOD of unbroken hold, fires a bolt at the
+   enemy base — so the tower cannot be held forever without ending the game, and
+   sitting on it leaves your own base exposed. All values are swept before UI. */
+const TOWER_X=(80+4*2)/2, TOWER_R=10, TOWER_ECO=0.4, TOWER_ESC=30, BOLT_PERIOD=20, BOLT_DMG=120;
 const BASE_HW=4, LANE=80+BASE_HW*2, WALL=[BASE_HW, LANE-BASE_HW], FIELD=LANE-BASE_HW*2,
       BASE_HP=600, BASE_DPS=2, BASE_RNG=7,
       ECO_COST=36, ECO_STEP=0.5, ECO_MAX=3, ECO_ESC=0.75, DECIDE=4, TIME_CAP=300;
@@ -825,6 +839,7 @@ let S, R, LOG, RUNNING=false, SPEED=1, TAB='battle', RAF=null, FX=[];
 function newGame(seed){
   R=mulberry32(seed);
   S={t:0,coins:[20,20],inc:[1,1],eco:[0,0],bf:[null,null],hp:[BASE_HP,BASE_HP],units:[],q:[[],[]],
+     stance:[0,0],tower:{holder:null,holdT:0,boltT:BOLT_PERIOD,flash:0},
      over:false,win:null,nid:0,next:0};
   LOG=[]; FX=[]; RUNNING=false; CONV=[[],[]]; DOSSIER_USED=[false,false];
   document.getElementById('banner').style.display='none';
@@ -883,8 +898,26 @@ function step(dt){
         if(Math.abs(e.x-u.x)<=U.rng){e.hp-=U.dps*MULT(u.type,e.type)*dt;e.fl=.18;} } }
       else {tgt.hp-=U.dps*MULT(u.type,tgt.type)*dt;tgt.fl=.18;}
     }
-    else u.x+=dir*U.spd*dt;
+    else {
+      // stance decides the goal: push marches to the enemy base, hold advances to
+      // the tower and stops there. A unit already past its goal just holds ground.
+      const goal = S.stance[u.s]===1 ? TOWER_X : baseX;
+      if((goal-u.x)*dir > 0.15) u.x+=dir*U.spd*dt;
+    }
     if(u.fl>0)u.fl-=dt;
+  }
+  // ---- neutral tower: control by presence, escalating eco, periodic lightning ----
+  { const c0=S.units.reduce((a,u)=>a+(u.s===0&&Math.abs(u.x-TOWER_X)<=TOWER_R?1:0),0);
+    const c1=S.units.reduce((a,u)=>a+(u.s===1&&Math.abs(u.x-TOWER_X)<=TOWER_R?1:0),0);
+    // sticky: an equal-and-CONTESTED tower keeps its current holder, so matching the
+    // enemy is not enough — you must win a majority to flip it, and the loser keeps
+    // eating bolts until they do. An EMPTY tower clears (you must keep units there).
+    const T=S.tower, h = c0>c1?0 : c1>c0?1 : (c0>0 ? T.holder : null);
+    if(h!==T.holder){ T.holder=h; T.holdT=0; T.boltT=BOLT_PERIOD; }
+    else if(h!==null){ T.holdT+=dt; T.boltT-=dt;
+      if(T.boltT<=0){ S.hp[1-h]-=BOLT_DMG; T.boltT=BOLT_PERIOD; T.flash=.5; } }
+    if(h!==null) S.coins[h]+=(T.holdT>=TOWER_ESC?TOWER_ECO*2:TOWER_ECO)*dt;
+    if(T.flash>0)T.flash-=dt;
   }
   for(let s=0;s<2;s++){
     const bx=s===0?WALL[0]:WALL[1]; let tgt=null,best=1e9;
@@ -1049,7 +1082,16 @@ function endGame(){
    3. AGENT  — scripted adaptive commander
    ============================================================ */
 const cnt=(s,f)=>S.units.filter(u=>u.s===s&&f(u)).length;
-function agent(St,s){
+// stance: push to march at the enemy base, hold to fight for the neutral tower.
+// Default heuristic: hold the middle unless you clearly dominate it or the enemy
+// base is nearly down (then push through to finish).
+function stanceFor(St,s){ const e=1-s;
+  const mine=St.units.filter(u=>u.s===s&&Math.abs(u.x-TOWER_X)<=TOWER_R).length;
+  const foe =St.units.filter(u=>u.s===e&&Math.abs(u.x-TOWER_X)<=TOWER_R).length;
+  return (mine>foe+3 || St.hp[e]<200) ? 'push' : 'hold';
+}
+function agent(St,s){ const r=baseAgent(St,s); r.stance=stanceFor(St,s); return r; }
+function baseAgent(St,s){
   const e=1-s, coins=St.coins[s];
   const eArm=cnt(e,u=>UNITS[u.type].cls==='armor');
   const eAir=cnt(e,u=>UNITS[u.type].cls==='air');
@@ -1131,7 +1173,8 @@ function sanitize(raw){
      .map(x=>String(x).trim().toLowerCase());
   const bad=q.filter(x=>x&&!VALID.includes(x));
   q=q.filter(x=>VALID.includes(x)).slice(0,6);
-  return {queue:q, why:String((raw&&raw.why)||'').slice(0,240), bad, shape};
+  const stance = (raw && typeof raw.stance==='string' && /hold/i.test(raw.stance)) ? 'hold' : 'push';
+  return {queue:q, why:String((raw&&raw.why)||'').slice(0,240), stance, bad, shape};
 }
 
 async function mockAgent(St,s){
@@ -1150,7 +1193,8 @@ async function mockAgent(St,s){
 let PICK=null;
 function humanTurn(s){
   return new Promise(resolve=>{
-    PICK={s,queue:[],resolve};
+    PICK={s,queue:[],stance:'push',resolve};
+    document.querySelectorAll('#pkStance .stbtn').forEach(x=>x.classList.toggle('on',x.dataset.st==='push'));
     renderPicker();
     document.getElementById('picker').classList.add('on');
   });
@@ -1196,10 +1240,14 @@ function closePicker(){
   PICK=null;
 }
 document.getElementById('pkClear').onclick=()=>{ if(PICK){PICK.queue=[];renderPicker();} };
+document.querySelectorAll('#pkStance .stbtn').forEach(b=>b.onclick=()=>{
+  if(!PICK) return; PICK.stance=b.dataset.st;
+  document.querySelectorAll('#pkStance .stbtn').forEach(x=>x.classList.toggle('on',x.dataset.st===PICK.stance));
+});
 document.getElementById('pkGo').onclick=()=>{
   if(!PICK) return;
-  const {queue,resolve}=PICK; closePicker();
-  resolve({queue,why:queue.length?'Your orders: '+queue.join(', '):'Holding — no orders this cycle.'});
+  const {queue,stance,resolve}=PICK; closePicker();
+  resolve({queue,stance,why:(stance==='hold'?'[HOLD] ':'[PUSH] ')+(queue.length?'Your orders: '+queue.join(', '):'no build this cycle')});
 };
 
 async function decide(s){
@@ -1230,13 +1278,13 @@ async function decide(s){
     // ADAPTIVE order (not a dumb infantry spam) and play on. Only real errors —
     // bad key, HTTP, unparseable — count toward the 3-strike halt; a model that
     // is merely slow resets the streak and the game always runs to completion.
-    const auto=sanitize(agent(S,s)).queue, q=auto.length?auto:(S.q[s].length?[...S.q[s]]:['inf','inf']);
+    const ad=sanitize(agent(S,s)), auto=ad.queue, q=auto.length?auto:(S.q[s].length?[...S.q[s]]:['inf','inf']);
     if(/timed out/i.test(String(err&&err.message))){
       STATS[s].slow=(STATS[s].slow||0)+1; STREAK[s]=0;
-      return {queue:q, why:`no reply in 30s — auto-order ${q.join(',')}`, bad:[], ms, failed:true, timedOut:true}; }
+      return {queue:q, stance:ad.stance, why:`no reply in 30s — auto-order ${q.join(',')}`, bad:[], ms, failed:true, timedOut:true}; }
     STATS[s].fail++; STREAK[s]++;
     if(STREAK[s]>=3) haltOnFailure(s, err&&err.message);
-    return {queue:q, why:`call failed — ${String(err&&err.message).slice(0,160)}`, bad:[], ms, failed:true}; }
+    return {queue:q, stance:ad.stance, why:`call failed — ${String(err&&err.message).slice(0,160)}`, bad:[], ms, failed:true}; }
   STREAK[s]=0;
   const out=sanitize(raw);
   if(out.bad.length || out.shape==='unusable' || out.shape==='missing') STATS[s].bad++;
@@ -1249,6 +1297,7 @@ async function runDecisions(){
   const need = CMD.some(c=>c.kind!=='script');
   if(!need){
     for(let s=0;s<2;s++){const d=sanitize(agent(S,s));S.q[s]=d.queue;
+      S.stance[s]=d.stance==='hold'?1:0;
       LASTQ[s]=[...d.queue]; SINCE[s]={}; LASTTO[s]=false;
       const e={t:S.t,s,queue:[...d.queue],why:d.why}; LOG.push(e); pushFeed(e);}
     S.next+=DECIDE; return;
@@ -1257,6 +1306,7 @@ async function runDecisions(){
   const [a,b]=await Promise.all([decide(0),decide(1)]);
   [a,b].forEach((d,s)=>{
     S.q[s]=d.queue;
+    S.stance[s]=d.stance==='hold'?1:0;
     LASTQ[s]=[...d.queue]; SINCE[s]={}; LASTTO[s]=!!d.timedOut;   // reset the window after the view was read
     const e={t:S.t,s,queue:[...d.queue],why:d.why,ms:d.ms,bad:d.bad,failed:d.failed,shape:d.shape,raw:d.raw};
     LOG.push(e); pushFeed(e);
@@ -1816,6 +1866,49 @@ function fort(g,w,h,s){
   return {x,gy,W,H,frac,mx:x+bd*W*.64,my:gy-H*1.10};
 }
 
+/* ---------- neutral tower ---------- */
+function drawTower(g,w,h,forts){
+  const T=S.tower, r=ROWS-2, gy=groundY(h,r), sc=rowScale(h,r), x=toPix(w,TOWER_X);
+  const held = T.holder!==null;
+  const col  = T.holder===0?SIDECOL[0].body : T.holder===1?SIDECOL[1].body : '#cfd4db';
+  const dark = T.holder===0?SIDECOL[0].dark : T.holder===1?SIDECOL[1].dark : '#8b929c';
+  const H=58*sc, W=15*sc;
+  g.save(); g.translate(x,gy);
+  g.fillStyle='rgba(0,0,0,.30)'; g.beginPath(); g.ellipse(0,0,W*.95,W*.3,0,0,7); g.fill();
+  const gr=g.createLinearGradient(0,-H,0,0); gr.addColorStop(0,col); gr.addColorStop(1,dark);
+  g.fillStyle=gr; g.fillRect(-W/2,-H,W,H);
+  g.fillStyle='rgba(255,255,255,.10)'; g.fillRect(-W/2,-H,W*.34,H);       // light edge
+  g.fillStyle=dark; for(let i=0;i<3;i++) g.fillRect(-W/2+i*(W/3.1),-H-4*sc,W/4,5*sc);  // crenellations
+  g.fillStyle='#2b2b30'; g.fillRect(-W*.22,-H*.55,W*.44,H*.55);          // doorway
+  // pennant in the holder's colour (grey when neutral)
+  const fh=-H-6*sc;
+  g.strokeStyle=dark; g.lineWidth=Math.max(1,1.4*sc); g.beginPath(); g.moveTo(0,fh); g.lineTo(0,fh-16*sc); g.stroke();
+  g.fillStyle=col; g.beginPath(); g.moveTo(0,fh-16*sc); g.lineTo(13*sc,fh-12*sc); g.lineTo(0,fh-8*sc); g.fill();
+  g.restore();
+  // label above the tower
+  const label = held ? (SIDE[T.holder].name+(T.holdT>=TOWER_ESC?' holds (2x)':' holds')) : 'NEUTRAL';
+  g.save(); g.font=`700 ${Math.max(9,11*sc)}px "Saira Condensed",sans-serif`;
+  g.textAlign='center'; g.textBaseline='middle';
+  const ty=gy-H-30*sc, tw=g.measureText(label).width+14*sc;
+  g.fillStyle='rgba(6,10,15,.72)'; g.beginPath(); g.roundRect(x-tw/2,ty-8*sc,tw,16*sc,8*sc); g.fill();
+  g.fillStyle=held?col:'#e6e9ee'; g.fillText(label,x,ty);
+  g.restore();
+  // AIRSTRIKE — a bright bomb streak onto the loser's base when a strike just fired
+  if(T.flash>0 && held && forts){
+    const f=forts[1-T.holder]; if(f){
+      const a=Math.min(1,T.flash/0.5);
+      g.save(); g.globalAlpha=a;
+      g.strokeStyle='rgba(255,210,120,.95)'; g.lineWidth=3.5; g.lineCap='round';
+      g.beginPath(); g.moveTo(f.x+18, f.my-160); g.lineTo(f.x, f.my); g.stroke();
+      const fg=g.createRadialGradient(f.x,f.my,0,f.x,f.my,46);
+      fg.addColorStop(0,'rgba(255,240,190,.95)'); fg.addColorStop(.4,'rgba(255,150,60,.6)'); fg.addColorStop(1,'rgba(255,120,40,0)');
+      g.fillStyle=fg; g.beginPath(); g.arc(f.x,f.my,46,0,7); g.fill();
+      g.restore();
+      if(!LOWFX&&Math.random()<0.6) spark(f.x,f.my,5,'255,190,110',180,.5);
+    }
+  }
+}
+
 /* ---------- firing detection (renderer-only; sim untouched) ---------- */
 function firingSet(){
   const set=new Set();
@@ -1852,6 +1945,7 @@ function draw(now){
   });
   const mdt = (AWAIT||S.over) ? 0 : dt;   // frozen while thinking, and once the match is decided
   const forts=[fort(cx,w,h,0),fort(cx,w,h,1)];
+  drawTower(cx,w,h,forts);
   [0,1].forEach(s=>{                      // the base gun engaging its target
     const id=S.bf[s];
     if(id==null||AWAIT||S.over) return;
@@ -2335,7 +2429,7 @@ function lbRecord(){
      dedup fingerprint is savedAt+seed+models, and two new Date() calls a few
      milliseconds apart made one match show up twice in the merged view. */
   const payload=matchPayload();
-  const rec={at:payload.savedAt, promptVersion:7, seed:+document.getElementById('seed').value||0,
+  const rec={at:payload.savedAt, promptVersion:8, seed:+document.getElementById('seed').value||0,
     balance:{ecoCost:ECO_COST,ecoPrices:[0,1,2].map(ecoPrice)},
     a:side(0), b:side(1), winner:S.win, t:+S.t.toFixed(1),
     hp:S.hp.map(h=>Math.max(0,Math.round(h))), eco:[...S.eco]};
@@ -2651,7 +2745,7 @@ const reset=()=>{newGame(+document.getElementById('seed').value||1);
   const f=document.getElementById('feed'); if(f) f.innerHTML='';
   DEBRIEF=[null,null];
   const db=document.getElementById('debrief'); if(db){db.style.display='none';db.innerHTML='';}
-  if(PICK){ const r=PICK.resolve; closePicker(); r({queue:[],why:'match reset'}); }
+  if(PICK){ const r=PICK.resolve; closePicker(); r({queue:[],stance:'push',why:'match reset'}); }
   PART=[];DMGN=[];DECAL=[];PROJ=[];SHAKE=0;PREVU.clear();ACC.clear();DEADPOS.clear();
   PREVBASE=[BASE_HP,BASE_HP]; PREVECO=[0,0]; BACC=[0,0]; BUILT=[{},{}]; PEAK=[0,0]; LASTQ=[[],[]]; SINCE=[{},{}]; BLOCKED=[null,null]; LASTTO=[false,false]; CONV=[[],[]];
   const sm=document.getElementById('summary'); if(sm){sm.style.display='none';sm.innerHTML='';}
@@ -2700,7 +2794,7 @@ document.getElementById('btnCopyEnd').onclick=e=>copyAnalysis(e.target);
 
 function matchPayload(){
   return {
-    game:'breach', promptVersion:7, memory:MEMORY_ON, dossierUsed:[...DOSSIER_USED],   // v7: per-side conversation memory (cached); stateless v1-v6 runs are not comparable
+    game:'breach', promptVersion:8, memory:MEMORY_ON, dossierUsed:[...DOSSIER_USED],   // v8: neutral tower + push/hold stance; v1-v7 runs are not comparable
     // balance is stamped into every log so a tuning change can never silently
     // invalidate a comparison between two saved matches
     balance:{ecoCost:ECO_COST,ecoEscalation:ECO_ESC,ecoPrices:[0,1,2].map(ecoPrice),ecoStep:ECO_STEP,ecoMax:ECO_MAX,lane:FIELD,baseHP:BASE_HP,
@@ -2760,6 +2854,22 @@ wins fights and clears the lane but cannot close out a game on its own — you s
 break the base. Its job is to shred the enemy's expensive units (tanks, gunners, AT) that your infantry
 would lose to.
 The counter cycle is tank > gun > at > tank. Infantry is a cheap generalist.
+
+THE NEUTRAL TOWER — the biggest strategic decision in the game:
+A tower stands at the exact middle of the lane. Every decision you also choose a STANCE:
+- "push": your units march all the way to the enemy base to destroy it (the direct win).
+- "hold": your units advance to the TOWER and STOP there, fighting for it instead of over-extending.
+You CONTROL the tower when you have MORE units in its zone than the enemy (see "tower" in the state).
+Controlling it does two things:
+1. It pays you bonus income (${TOWER_ECO}/sec, doubling to ${TOWER_ECO*2}/sec after ${TOWER_ESC}s of unbroken hold).
+2. Every ${BOLT_PERIOD}s you hold it, it calls an AIRSTRIKE on the enemy base for ${BOLT_DMG} damage — a second way to win.
+Because the tower sits in the middle, holding it also BLOCKS the enemy: they cannot reach your base
+without fighting through your units at the tower. So "hold" is both economy AND defense.
+The tension: hold to grind them down with income + airstrikes, or push to break through and crack their
+base directly. If you sit and hold, the enemy can mass units and PUSH through your tower position — so
+holding only works if you win the fight there. A player who does nothing loses the tower, gets out-
+produced, AND gets airstruck. Read "tower" and "yourStance" every turn and set stance deliberately.
+Respond with "stance":"push" or "stance":"hold" alongside your queue (default is push).
 
 ECONOMY — the most commonly misplayed part of this game:
 "eco" is permanent and can be bought ${ECO_MAX} times. The price ESCALATES: ${[0,1,2].map(n=>ecoPrice(n)).join(', then ')}.
@@ -2847,6 +2957,16 @@ async function llmAgent(St,s,model){
         + (BLOCKED[s].item==='eco' ? ` Your eco is still ${St.eco[s]} of ${ECO_MAX} — queuing eco is NOT owning it. To actually buy it, keep it first for enough turns to bank ${BLOCKED[s].cost} coins, or drop it and build what you can afford.` : ` Either save for it across turns or lead with something you can afford now.`)
       : 'your last order went through fine',
     counterHint: counterHint(cls(1-s)),
+    // NEUTRAL TOWER — the midfield objective and your push/hold choice
+    yourStance: St.stance[s]===1 ? 'hold' : 'push',
+    tower:(()=>{ const T=St.tower,
+        mine=St.units.filter(u=>u.s===s&&Math.abs(u.x-TOWER_X)<=TOWER_R).length,
+        foe =St.units.filter(u=>u.s!==s&&Math.abs(u.x-TOWER_X)<=TOWER_R).length;
+      return { heldBy: T.holder===s?'you':T.holder===null?'neutral':'enemy',
+        yourUnitsOnTower:mine, enemyUnitsOnTower:foe,
+        ecoBonusPerSecToHolder:+((T.holder!==null&&T.holdT>=TOWER_ESC?TOWER_ECO*2:TOWER_ECO)).toFixed(2),
+        holderIncomeEscalated: T.holder!==null && T.holdT>=TOWER_ESC,
+        secondsUntilAirstrikeOnTheLoser: T.holder!==null ? Math.max(0,Math.round(T.boltT)) : null }; })(),
   };
   /* CONVERSATION MEMORY (bounded window).
      Stateless calls (system + current state only) are why models lose their own
