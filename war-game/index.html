@@ -527,6 +527,7 @@ body.split #nudge{display:none}
       <button class="act primary" id="btnBegin">Start battle</button>
       <button class="act" id="btnPickModels">Choose models</button>
       <button class="act" id="btnRanksOpen">Leaderboard</button>
+      <button class="act" id="btnRivalsOpen">Rivals</button>
     </div>
     <div class="tnote">Runs scripted commanders by default. Seat real models in Setup with an OpenRouter key.</div>
   </div>
@@ -664,6 +665,14 @@ body.split #nudge{display:none}
       <span class="tout" id="mpCount" style="margin:0"></span>
     </div>
     <div id="mpList"></div>
+  </div>
+</div>
+
+<div class="modal" id="mRivals">
+  <div class="mhead"><h3>Rival dossiers</h3><button class="act" data-close="mRivals">Done</button></div>
+  <div class="mbody">
+    <div class="tnote" style="margin-bottom:10px">Every model you play keeps its own scouting report on you and uses it to plan the next game. Here's what each one has figured out.</div>
+    <div id="rivalBody"></div>
   </div>
 </div>
 
@@ -935,6 +944,72 @@ async function askDebrief(s){
   }catch(e){ return {verdict:'debrief failed — '+String(e.message).slice(0,110)}; }
 }
 
+/* ---------- RIVAL DOSSIERS ------------------------------------------------
+   Each model keeps a private, persistent scouting report on the HUMAN it
+   plays. After every human-vs-model game the model reflects on how the human
+   played and updates its notes + plan; on the next game against that human the
+   notes are injected into its system prompt. Stored per model in localStorage,
+   so different models build independent reads of you. This is a play feature,
+   not part of the model-vs-model benchmark. */
+const DOSSIER_RULES=`You play repeated Breach matches against ONE human opponent and keep a private scouting report to beat them.
+You are given your current notes on this player (maybe empty) and the full decision log of the game you just finished, with the result.
+Update the report. Focus ENTIRELY on the HUMAN and how to beat them: their opening and tempo (rush / turtle / eco?), the units they lean on, their economy habits, and the concrete weakness to exploit next time.
+Revise your prior notes — keep what still holds, correct what was wrong, add what is new. Under 160 words total.
+Respond ONLY as JSON: {"read":"2-3 sentences on how this human plays","plan":"2-3 sentences on your plan to beat them next game"}`;
+
+const dosKey=m=>'breach.dossier.'+m;
+const shortModel=m=>(m||'').split('/').pop().replace(/[-:_]/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+function dossierGet(m){ try{ const v=localStorage.getItem(dosKey(m)); return v?JSON.parse(v):null; }catch(e){ return null; } }
+function dossierSave(m,o){ try{ localStorage.setItem(dosKey(m),JSON.stringify(o)); }catch(e){} }
+function dossierAll(){ const out=[]; try{ for(let i=0;i<localStorage.length;i++){ const k=localStorage.key(i);
+  if(k&&k.indexOf('breach.dossier.')===0){ try{ out.push(JSON.parse(localStorage.getItem(k))); }catch(e){} } } }catch(e){} return out; }
+
+async function updateDossier(s){
+  if(CMD[s].kind!=='llm' || CMD[1-s].kind!=='human') return;   // only a model that just faced the human
+  const model=CMD[s].model, prior=dossierGet(model);
+  const human=LOG.filter(e=>e.s===(1-s)), mine=LOG.filter(e=>e.s===s);
+  const modelWon=S.win===s, humanWon=S.win===(1-s);
+  const payload={
+    yourExistingNotes: prior?{read:prior.read,plan:prior.plan}:'none yet — this is your first game against this player',
+    gamesBefore: prior?prior.games:0,
+    result: modelWon?'YOU (the model) WON':humanWon?'THE HUMAN BEAT YOU':'draw',
+    humanBaseHP:Math.max(0,Math.round(S.hp[1-s])), yourBaseHP:Math.max(0,Math.round(S.hp[s])),
+    humanEcoUpgrades:S.eco[1-s], yourEcoUpgrades:S.eco[s],
+    humanDecisions:human.map(e=>Math.round(e.t)+'s: '+(e.queue.join(',')||'none')),
+    yourDecisions:mine.map(e=>Math.round(e.t)+'s: '+(e.queue.join(',')||'none')),
+  };
+  let parsed=null;
+  try{
+    const key=(document.getElementById('apikey').value||'').trim();
+    const r=await fetch('https://openrouter.ai/api/v1/chat/completions',{method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`,'HTTP-Referer':location.origin||'https://localhost','X-Title':'Breach'},
+      body:JSON.stringify({model,messages:[{role:'system',content:DOSSIER_RULES},{role:'user',content:JSON.stringify(payload)}],temperature:0.7,max_tokens:1400})});
+    const j=await r.json(); const msg=j.choices&&j.choices[0]&&j.choices[0].message;
+    const flat=v=>Array.isArray(v)?v.map(x=>(x&&x.text)||'').join(''):(v||'');
+    for(const c of [flat(msg&&msg.content),flat(msg&&msg.reasoning)].filter(Boolean)){ try{ parsed=extractJSON(c); break; }catch(e){} }
+  }catch(e){}
+  const rec=prior||{model, name:shortModel(model), games:0, modelWins:0, humanWins:0};
+  rec.name=rec.name||shortModel(model);
+  rec.games++; if(modelWon)rec.modelWins++; else if(humanWon)rec.humanWins++;
+  if(parsed){ if(parsed.read)rec.read=String(parsed.read).slice(0,600); if(parsed.plan)rec.plan=String(parsed.plan).slice(0,600); }
+  rec.updatedAt=new Date().toISOString();
+  dossierSave(model,rec);
+  if(document.getElementById('mRivals')&&document.getElementById('mRivals').classList.contains('on')) paintRivals();
+}
+function updateDossiers(){ [0,1].forEach(s=>{ try{ updateDossier(s); }catch(e){} }); }
+
+function paintRivals(){
+  const box=document.getElementById('rivalBody'); if(!box) return;
+  const all=dossierAll().sort((a,b)=>b.games-a.games);
+  if(!all.length){ box.innerHTML='<div class="empty">No rivals yet. Play a game against a seated model and it will start a scouting report on you — come back to read what it thinks.</div>'; return; }
+  box.innerHTML=all.map(d=>`<div class="db" style="border-left-color:#c25a3a">
+    <div class="dbn" style="color:#c25a3a">${d.name||shortModel(d.model)} · ${d.games} game${d.games===1?'':'s'} · you lead ${d.humanWins}–${d.modelWins}</div>
+    ${d.read?`<div class="dbr"><b>Its read on you</b> ${d.read}</div>`:'<div class="dbr"><i>still forming its read…</i></div>'}
+    ${d.plan?`<div class="dbr"><b>Its plan to beat you</b> ${d.plan}</div>`:''}
+  </div>`).join('');
+}
+const openRivals=()=>{ paintRivals(); modal('mRivals',true); };
+
 async function runDebrief(){
   if(!CMD.some(c=>c.kind==='llm')) return;
   const box=document.getElementById('debrief');
@@ -961,6 +1036,7 @@ function endGame(){
   paintSummary();
   setSheet(1);
   runDebrief();
+  updateDossiers();   // each model refreshes its scouting report on the human
   const b=document.getElementById('banner'), bt=document.getElementById('bannerTxt');
   b.style.display='flex';
   bt.textContent = S.win===null?'Draw' : `${SIDE[S.win].name} breaks through`;
@@ -2426,6 +2502,7 @@ document.getElementById('btnApiPushAll').onclick=async()=>{
 const openRanks=async()=>{ paintRanks(); modal('mRanks',true);
   if(apiBase()){ await lbFetchRemote(); paintRanks(); } };
 document.getElementById('btnRanksOpen').onclick=openRanks;
+const brv=document.getElementById('btnRivalsOpen'); if(brv) brv.onclick=openRivals;
 document.getElementById('btnRanks2').onclick=openRanks;
 document.getElementById('btnRanksFab').onclick=openRanks;
 document.getElementById('btnLbExport').onclick=()=>{
@@ -2784,7 +2861,15 @@ async function llmAgent(St,s,model){
      system still carries a cache_control marker — harmless, and it pays off if
      OpenRouter's incremental caching improves or a provider supports it. */
   const viewStr=JSON.stringify(view);
-  const sys={role:'system',content:[{type:'text',text:RULES,cache_control:{type:'ephemeral'}}]};
+  // Rival dossier: when this model is up against the human, prepend what it has
+  // learned about them so it can anticipate and counter their habits.
+  let sysText=RULES;
+  if(CMD[1-s]&&CMD[1-s].kind==='human'){
+    const dos=dossierGet(model);
+    if(dos&&dos.games>0&&(dos.read||dos.plan))
+      sysText=RULES+`\n\nSCOUTING REPORT — you have played this HUMAN opponent ${dos.games} time(s); your record against them is ${dos.modelWins}-${dos.humanWins}.\nHow they play: ${dos.read||'?'}\nYour plan to beat them: ${dos.plan||'?'}\nAnticipate and counter their known habits this game.`;
+  }
+  const sys={role:'system',content:[{type:'text',text:sysText,cache_control:{type:'ephemeral'}}]};
   let hist=[];
   if(MEMORY_ON && CONV[s].length)
     hist=CONV[s].slice(-MEM_TURNS*2).map(m=>({role:m.role,content:m.content}));
