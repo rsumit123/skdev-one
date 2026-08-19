@@ -1138,15 +1138,25 @@ async function decide(s){
   let raw=null, err=null;
   for(let attempt=0;attempt<2&&!raw;attempt++){
     try{ raw = c.kind==='mock' ? await mockAgent(S,s) : await llmAgent(S,s,c.model); }
-    catch(e){ err=e; if(attempt===0) await sleep(400); }
+    catch(e){ err=e;
+      if(/timed out/i.test(String(e.message))) break;   // slow model: don't spend another 20s, auto-order now
+      if(attempt===0) await sleep(400); }
   }
   const ms=performance.now()-t0;
   THINK[s]=false;
   STATS[s].calls++; STATS[s].ms+=ms;
-  if(!raw){ STATS[s].fail++; STREAK[s]++;
+  if(!raw){
+    // A slow model must never stall or halt the match. Fall back to the built-in
+    // ADAPTIVE order (not a dumb infantry spam) and play on. Only real errors —
+    // bad key, HTTP, unparseable — count toward the 3-strike halt; a model that
+    // is merely slow resets the streak and the game always runs to completion.
+    const auto=sanitize(agent(S,s)).queue, q=auto.length?auto:(S.q[s].length?[...S.q[s]]:['inf','inf']);
+    if(/timed out/i.test(String(err&&err.message))){
+      STATS[s].slow=(STATS[s].slow||0)+1; STREAK[s]=0;
+      return {queue:q, why:`no reply in 20s — auto-order ${q.join(',')}`, bad:[], ms, failed:true, timedOut:true}; }
+    STATS[s].fail++; STREAK[s]++;
     if(STREAK[s]>=3) haltOnFailure(s, err&&err.message);
-    return {queue:S.q[s].length?[...S.q[s]]:['inf','inf'],
-      why:`call failed — ${String(err&&err.message).slice(0,160)}`, bad:[], ms, failed:true}; }
+    return {queue:q, why:`call failed — ${String(err&&err.message).slice(0,160)}`, bad:[], ms, failed:true}; }
   STREAK[s]=0;
   const out=sanitize(raw);
   if(out.bad.length || out.shape==='unusable' || out.shape==='missing') STATS[s].bad++;
@@ -2238,7 +2248,7 @@ function lbAll(){
 function lbRecord(){
   if(!CMD.some(c=>c.kind==='llm')) return;          // model leaderboard only
   const side=s=>({name:SIDE[s].name, model:CMD[s].kind==='llm'?CMD[s].model:CMD[s].kind, human:CMD[s].kind==='human',
-    kind:CMD[s].kind, calls:STATS[s].calls, failed:STATS[s].fail, malformed:STATS[s].bad,
+    kind:CMD[s].kind, calls:STATS[s].calls, failed:STATS[s].fail, timedOut:STATS[s].slow||0, malformed:STATS[s].bad,
     avgMs:STATS[s].calls?Math.round(STATS[s].ms/STATS[s].calls):0,
     built:{...BUILT[s]}, peakCoins:Math.floor(PEAK[s])});
   /* The local copy and the uploaded copy must carry the SAME timestamp: the
@@ -2555,7 +2565,7 @@ document.getElementById('btnSpeed').onclick=e=>{
   e.target.textContent=SPEED+'×'; document.getElementById('spdTag').textContent=SPEED+'×';
 };
 const reset=()=>{newGame(+document.getElementById('seed').value||1);
-  STATS.forEach(x=>{x.calls=0;x.fail=0;x.bad=0;x.ms=0;}); STREAK[0]=STREAK[1]=0;
+  STATS.forEach(x=>{x.calls=0;x.fail=0;x.bad=0;x.ms=0;x.slow=0;}); STREAK[0]=STREAK[1]=0;
   const bb=document.getElementById('bannerTxt'); bb.style.fontSize=''; bb.style.color='';
   const f=document.getElementById('feed'); if(f) f.innerHTML='';
   DEBRIEF=[null,null];
@@ -2621,7 +2631,7 @@ function matchPayload(){
     // a human match was being logged under an unrelated model id
     commanders:[0,1].map(s=>({side:SIDE[s].name,kind:CMD[s].kind,
       model:CMD[s].kind==='llm'?CMD[s].model:CMD[s].kind,
-      calls:STATS[s].calls,failed:STATS[s].fail,malformed:STATS[s].bad,
+      calls:STATS[s].calls,failed:STATS[s].fail,timedOut:STATS[s].slow||0,malformed:STATS[s].bad,
       avgLatencyMs:STATS[s].calls?Math.round(STATS[s].ms/STATS[s].calls):0})),
     result:{winner:S.win===null?'draw':SIDE[S.win].name, over:S.over,
       durationSeconds:+S.t.toFixed(1), baseHP:S.hp.map(h=>Math.max(0,Math.round(h))),
@@ -2753,7 +2763,7 @@ async function llmAgent(St,s,model){
   await rateGate(/:free$/.test(model));
   // NOTE: no AbortController here. Sandboxed webviews proxy fetch over postMessage,
   // which structured-clones the options object, and AbortSignal is not cloneable.
-  const timeout=new Promise((_,rej)=>setTimeout(()=>rej(new Error('timed out after 25s')),25000));
+  const timeout=new Promise((_,rej)=>setTimeout(()=>rej(new Error('timed out after 20s')),20000));
   try{
     const r=await Promise.race([fetch('https://openrouter.ai/api/v1/chat/completions',{
       method:'POST',
