@@ -1299,7 +1299,7 @@ async function runDecisions(){
     for(let s=0;s<2;s++){const d=sanitize(agent(S,s));S.q[s]=d.queue;
       S.stance[s]=d.stance==='hold'?1:0;
       LASTQ[s]=[...d.queue]; SINCE[s]={}; LASTTO[s]=false;
-      const e={t:S.t,s,queue:[...d.queue],why:d.why}; LOG.push(e); pushFeed(e);}
+      const e={t:S.t,s,queue:[...d.queue],why:d.why,stance:d.stance||'push'}; LOG.push(e); pushFeed(e);}
     S.next+=DECIDE; return;
   }
   AWAIT=true; paintThink();
@@ -1308,7 +1308,7 @@ async function runDecisions(){
     S.q[s]=d.queue;
     S.stance[s]=d.stance==='hold'?1:0;
     LASTQ[s]=[...d.queue]; SINCE[s]={}; LASTTO[s]=!!d.timedOut;   // reset the window after the view was read
-    const e={t:S.t,s,queue:[...d.queue],why:d.why,ms:d.ms,bad:d.bad,failed:d.failed,shape:d.shape,raw:d.raw};
+    const e={t:S.t,s,queue:[...d.queue],why:d.why,stance:d.stance||'push',ms:d.ms,bad:d.bad,failed:d.failed,shape:d.shape,raw:d.raw};
     LOG.push(e); pushFeed(e);
   });
   S.next+=DECIDE; AWAIT=false; acc=0; last=0; paintThink();
@@ -1449,6 +1449,7 @@ function seedAttract(){
   });
 }
 let PREVU=new Map(), ACC=new Map(), PREVBASE=[BASE_HP,BASE_HP], PREVECO=[0,0], BACC=[0,0], LASTRT=0, SMOKET=0;
+let PREVHOLDER=null, PREVBOLTT=BOLT_PERIOD;   // tower capture + airstrike moment feedback
 
 /* The playable ground is a band, not the whole lower half: the top of the
    band sits below the horizon and the bottom reserves room for the ticker,
@@ -1838,7 +1839,10 @@ function fort(g,w,h,s){
      Put the purse on the base itself, with income alongside once eco exists. */
   {
     const coins=Math.floor(S.coins[s]);
-    const label=S.eco[s]>0 ? coins+'  '+(S.inc[s]*RAMP(S.t)).toFixed(1)+'/s' : String(coins);
+    // include the tower bonus in the shown rate, and flag it with ▲ so holding reads as income
+    const towerBonus = S.tower.holder===s ? (S.tower.holdT>=TOWER_ESC?TOWER_ECO*2:TOWER_ECO) : 0;
+    const rate = S.inc[s]*RAMP(S.t) + towerBonus;
+    const label=(S.eco[s]>0||towerBonus>0) ? coins+'  '+rate.toFixed(1)+'/s'+(towerBonus>0?' ▲':'') : String(coins);
     const fs2=Math.max(9,10.5*sc);
     g.font=`700 ${fs2}px "Saira Condensed",sans-serif`;
     g.textAlign='center'; g.textBaseline='middle';
@@ -1977,6 +1981,19 @@ function draw(now){
     }
     PREVECO[s]=S.eco[s];
   });
+  // tower capture + airstrike moments
+  {
+    const T=S.tower;
+    if(T.holder!==PREVHOLDER){
+      if(T.holder!==null) DMGN.push({x:toPix(w,TOWER_X), y:groundY(h,ROWS-2)-90, life:2.0,
+        txt:`${SIDE[T.holder].name.toUpperCase()} TAKES THE TOWER`, col:SIDECOL[T.holder].body==='#a83f26'?'#e0774f':'#5fa8d8'});
+      PREVHOLDER=T.holder;
+    }
+    if(T.boltT>PREVBOLTT+1 && T.holder!==null && forts){   // boltT jumped up = a strike just fired
+      const f=forts[1-T.holder]; if(f){ DMGN.push({x:f.x, y:f.my-8, life:1.6, txt:`AIRSTRIKE −${BOLT_DMG}`, col:'#ff9a5a'}); SHAKE=Math.max(SHAKE,7); }
+    }
+    PREVBOLTT=T.boltT;
+  }
   /* Damaged-base smoke used to keep spawning after the match ended. With motion
      frozen those particles never expire either, so they piled up indefinitely. */
   SMOKET-=mdt;
@@ -2747,7 +2764,7 @@ const reset=()=>{newGame(+document.getElementById('seed').value||1);
   const db=document.getElementById('debrief'); if(db){db.style.display='none';db.innerHTML='';}
   if(PICK){ const r=PICK.resolve; closePicker(); r({queue:[],stance:'push',why:'match reset'}); }
   PART=[];DMGN=[];DECAL=[];PROJ=[];SHAKE=0;PREVU.clear();ACC.clear();DEADPOS.clear();
-  PREVBASE=[BASE_HP,BASE_HP]; PREVECO=[0,0]; BACC=[0,0]; BUILT=[{},{}]; PEAK=[0,0]; LASTQ=[[],[]]; SINCE=[{},{}]; BLOCKED=[null,null]; LASTTO=[false,false]; CONV=[[],[]];
+  PREVBASE=[BASE_HP,BASE_HP]; PREVECO=[0,0]; BACC=[0,0]; BUILT=[{},{}]; PEAK=[0,0]; LASTQ=[[],[]]; SINCE=[{},{}]; BLOCKED=[null,null]; LASTTO=[false,false]; CONV=[[],[]]; PREVHOLDER=null; PREVBOLTT=BOLT_PERIOD;
   const sm=document.getElementById('summary'); if(sm){sm.style.display='none';sm.innerHTML='';}
   showResults(false);
   ['ovA','ovB'].forEach(i=>{const e=document.getElementById(i);e.classList.remove('on','flash');e.innerHTML='';});
@@ -2814,7 +2831,7 @@ function matchPayload(){
       durationSeconds:+S.t.toFixed(1), baseHP:S.hp.map(h=>Math.max(0,Math.round(h))),
       ecoUpgrades:[...S.eco]},
     debrief:[0,1].map(s=>({side:SIDE[s].name,...(DEBRIEF[s]||{})})),
-    decisions:LOG.map(e=>({tSeconds:+e.t.toFixed(1),side:SIDE[e.s].name,queue:e.queue,
+    decisions:LOG.map(e=>({tSeconds:+e.t.toFixed(1),side:SIDE[e.s].name,queue:e.queue,stance:e.stance||'push',
       reasoning:e.why,latencyMs:e.ms?Math.round(e.ms):undefined,
       invalidTokens:e.bad&&e.bad.length?e.bad:undefined,failed:e.failed||undefined,
       outputShape:e.shape&&e.shape!=='ok'?e.shape:undefined,
