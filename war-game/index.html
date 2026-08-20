@@ -762,7 +762,7 @@ const MULT=(a,t)=>{
    escalating eco and, every BOLT_PERIOD of unbroken hold, fires a bolt at the
    enemy base — so the tower cannot be held forever without ending the game, and
    sitting on it leaves your own base exposed. All values are swept before UI. */
-const TOWER_X=(80+4*2)/2, TOWER_R=10, TOWER_ECO=0.4, TOWER_ESC=30, BOLT_PERIOD=20, BOLT_DMG=120;
+const TOWER_X=(80+4*2)/2, TOWER_R=10, TOWER_ECO=0.3, TOWER_ESC=30, BOLT_PERIOD=20, BOLT_DMG=120, CAP_TIME=5;
 const BASE_HW=4, LANE=80+BASE_HW*2, WALL=[BASE_HW, LANE-BASE_HW], FIELD=LANE-BASE_HW*2,
       BASE_HP=600, BASE_DPS=2, BASE_RNG=7,
       ECO_COST=36, ECO_STEP=0.5, ECO_MAX=3, ECO_ESC=0.75, DECIDE=4, TIME_CAP=300;
@@ -839,7 +839,7 @@ let S, R, LOG, RUNNING=false, SPEED=1, TAB='battle', RAF=null, FX=[];
 function newGame(seed){
   R=mulberry32(seed);
   S={t:0,coins:[20,20],inc:[1,1],eco:[0,0],bf:[null,null],hp:[BASE_HP,BASE_HP],units:[],q:[[],[]],
-     stance:[0,0],tower:{holder:null,holdT:0,boltT:BOLT_PERIOD,flash:0},
+     stance:[0,0],tower:{holder:null,holdT:0,boltT:BOLT_PERIOD,flash:0,capSide:null,capProg:0},
      over:false,win:null,nid:0,next:0};
   LOG=[]; FX=[]; RUNNING=false; CONV=[[],[]]; DOSSIER_USED=[false,false];
   document.getElementById('banner').style.display='none';
@@ -906,17 +906,23 @@ function step(dt){
     }
     if(u.fl>0)u.fl-=dt;
   }
-  // ---- neutral tower: control by presence, escalating eco, periodic lightning ----
+  // ---- neutral tower: capture-and-HOLD, escalating eco, periodic airstrike ----
   { const c0=S.units.reduce((a,u)=>a+(u.s===0&&Math.abs(u.x-TOWER_X)<=TOWER_R?1:0),0);
     const c1=S.units.reduce((a,u)=>a+(u.s===1&&Math.abs(u.x-TOWER_X)<=TOWER_R?1:0),0);
-    // sticky: an equal-and-CONTESTED tower keeps its current holder, so matching the
-    // enemy is not enough — you must win a majority to flip it, and the loser keeps
-    // eating bolts until they do. An EMPTY tower clears (you must keep units there).
-    const T=S.tower, h = c0>c1?0 : c1>c0?1 : (c0>0 ? T.holder : null);
-    if(h!==T.holder){ T.holder=h; T.holdT=0; T.boltT=BOLT_PERIOD; }
-    else if(h!==null){ T.holdT+=dt; T.boltT-=dt;
-      if(T.boltT<=0){ S.hp[1-h]-=BOLT_DMG; T.boltT=BOLT_PERIOD; T.flash=.5; } }
-    if(h!==null) S.coins[h]+=(T.holdT>=TOWER_ESC?TOWER_ECO*2:TOWER_ECO)*dt;
+    const maj = c0>c1?0 : c1>c0?1 : null, T=S.tower;
+    // CONTROL IS STICKY and CAPTURED, not flipped: a CHALLENGER (the side that does
+    // not own the tower) must hold a majority in the zone to fill a capture bar over
+    // ~CAP_TIME seconds; only then does ownership transfer. It never reverts to
+    // neutral once taken. Progress decays half as fast as it builds, so a brief loss
+    // of majority slows the capture but does not restart it — no flicker.
+    const challenger = (maj!==null && maj!==T.holder) ? maj : null;
+    if(challenger!==null){ T.capSide=challenger; T.capProg=Math.min(1, T.capProg + dt/CAP_TIME);
+      if(T.capProg>=1){ T.holder=challenger; T.holdT=0; T.boltT=BOLT_PERIOD; T.capProg=0; T.capSide=null; } }
+    else { T.capProg=Math.max(0, T.capProg - dt/(CAP_TIME*2)); if(T.capProg<=0)T.capSide=null; }
+    // holder keeps the reward until the enemy captures — sticky even if the zone empties
+    if(T.holder!==null){ T.holdT+=dt; T.boltT-=dt;
+      if(T.boltT<=0){ S.hp[1-T.holder]-=BOLT_DMG; T.boltT=BOLT_PERIOD; T.flash=.5; }
+      S.coins[T.holder]+=(T.holdT>=TOWER_ESC?TOWER_ECO*2:TOWER_ECO)*dt; }
     if(T.flash>0)T.flash-=dt;
   }
   for(let s=0;s<2;s++){
@@ -1897,6 +1903,14 @@ function drawTower(g,w,h,forts){
   g.fillStyle='rgba(6,10,15,.72)'; g.beginPath(); g.roundRect(x-tw/2,ty-8*sc,tw,16*sc,8*sc); g.fill();
   g.fillStyle=held?col:'#e6e9ee'; g.fillText(label,x,ty);
   g.restore();
+  // capture progress bar — the enemy filling this is about to take the tower
+  if(T.capProg>0 && T.capSide!==null){
+    const bw=44*sc, bh=5*sc, by=ty+11*sc;
+    g.fillStyle='rgba(6,10,15,.72)'; g.beginPath(); g.roundRect(x-bw/2,by,bw,bh,bh/2); g.fill();
+    g.fillStyle=SIDECOL[T.capSide].body; g.beginPath(); g.roundRect(x-bw/2,by,Math.max(bh,bw*T.capProg),bh,bh/2); g.fill();
+    g.font=`700 ${Math.max(7,8*sc)}px "Saira Condensed",sans-serif`; g.textAlign='center'; g.textBaseline='middle';
+    g.fillStyle='#c7ced6'; g.fillText('CAPTURING '+Math.round(T.capProg*100)+'%', x, by-7*sc);
+  }
   // AIRSTRIKE — a bright bomb streak onto the loser's base when a strike just fired
   if(T.flash>0 && held && forts){
     const f=forts[1-T.holder]; if(f){
@@ -2876,8 +2890,11 @@ THE NEUTRAL TOWER — the biggest strategic decision in the game:
 A tower stands at the exact middle of the lane. Every decision you also choose a STANCE:
 - "push": your units march all the way to the enemy base to destroy it (the direct win).
 - "hold": your units advance to the TOWER and STOP there, fighting for it instead of over-extending.
-You CONTROL the tower when you have MORE units in its zone than the enemy (see "tower" in the state).
-Controlling it does two things:
+CAPTURING it: to take the tower you must hold MORE units than the enemy in its zone for about ${CAP_TIME}s
+straight (a capture bar fills — see "tower" in the state). Ownership is STICKY: once you capture it, it
+stays yours even if your units leave, until the enemy runs their own ${CAP_TIME}s capture. It never goes
+back to neutral. Losing the majority briefly only slows the enemy's capture, it does not reset it.
+While you own it, it does two things:
 1. It pays you bonus income (${TOWER_ECO}/sec, doubling to ${TOWER_ECO*2}/sec after ${TOWER_ESC}s of unbroken hold).
 2. Every ${BOLT_PERIOD}s you hold it, it calls an AIRSTRIKE on the enemy base for ${BOLT_DMG} damage — a second way to win.
 Because the tower sits in the middle, holding it also BLOCKS the enemy: they cannot reach your base
@@ -2981,6 +2998,9 @@ async function llmAgent(St,s,model){
         foe =St.units.filter(u=>u.s!==s&&Math.abs(u.x-TOWER_X)<=TOWER_R).length;
       return { heldBy: T.holder===s?'you':T.holder===null?'neutral':'enemy',
         yourUnitsOnTower:mine, enemyUnitsOnTower:foe,
+        beingCapturedBy: T.capSide===null?'nobody':T.capSide===s?'you':'enemy',
+        captureProgressPercent: Math.round(T.capProg*100),
+        secondsToCapture: T.capSide!==null ? Math.max(0,Math.round((1-T.capProg)*CAP_TIME)) : null,
         ecoBonusPerSecToHolder:+((T.holder!==null&&T.holdT>=TOWER_ESC?TOWER_ECO*2:TOWER_ECO)).toFixed(2),
         holderIncomeEscalated: T.holder!==null && T.holdT>=TOWER_ESC,
         secondsUntilAirstrikeOnTheLoser: T.holder!==null ? Math.max(0,Math.round(T.boltT)) : null }; })(),
