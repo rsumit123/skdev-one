@@ -615,11 +615,11 @@ body.split #nudge{display:none}
   <div class="mbody">
     <div class="grp"><h3>Commanders</h3>
       <div class="crow"><span class="cw2" style="color:var(--A)">Vulcan</span>
-        <select id="kindA"><option value="script">Scripted</option><option value="human">You (fair mode)</option><option value="mock">Mock LLM</option><option value="llm">OpenRouter</option></select></div>
+        <select id="kindA"><option value="llm">OpenRouter</option><option value="human">You (fair mode)</option><option value="script" hidden>Scripted</option><option value="mock" hidden>Mock LLM</option></select></div>
       <div class="crow" style="margin-top:7px"><button class="act modelbtn" id="modelA" data-side="0">Choose model</button></div>
       <div class="crow" style="margin-top:7px"><input type="text" id="customA" placeholder="or paste any model id" style="width:100%"></div>
       <div class="crow" style="margin-top:12px"><span class="cw2" style="color:var(--B)">Cobalt</span>
-        <select id="kindB"><option value="script">Scripted</option><option value="human">You (fair mode)</option><option value="mock">Mock LLM</option><option value="llm">OpenRouter</option></select></div>
+        <select id="kindB"><option value="llm">OpenRouter</option><option value="human">You (fair mode)</option><option value="script" hidden>Scripted</option><option value="mock" hidden>Mock LLM</option></select></div>
       <div class="crow" style="margin-top:7px"><button class="act modelbtn" id="modelB" data-side="1">Choose model</button></div>
       <div class="crow" style="margin-top:7px"><input type="text" id="customB" placeholder="or paste any model id" style="width:100%"></div>
     </div>
@@ -3158,6 +3158,9 @@ function priceText(m){
 }
 function setModel(i,id){
   CMD[i].model=id;
+  // choosing a model IS choosing to run it — flip this side to the LLM and sync the kind select.
+  // (previously the model was set but kind stayed 'script', so it silently kept playing scripted.)
+  if(id){ CMD[i].kind='llm'; const sel=document.getElementById('kind'+(i?'B':'A')); if(sel) sel.value='llm'; }
   const btn=document.getElementById('model'+(i?'B':'A'));
   if(btn) btn.textContent=id||'Choose model';
   refreshNames();
