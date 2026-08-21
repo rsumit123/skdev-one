@@ -1179,7 +1179,9 @@ function sanitize(raw){
      .map(x=>String(x).trim().toLowerCase());
   const bad=q.filter(x=>x&&!VALID.includes(x));
   q=q.filter(x=>VALID.includes(x)).slice(0,6);
-  const stance = (raw && typeof raw.stance==='string' && /hold/i.test(raw.stance)) ? 'hold' : 'push';
+  // stance persists: only 'hold'/'push' when the model explicitly says so, else null = no change
+  const st = raw && typeof raw.stance==='string' ? raw.stance : '';
+  const stance = /hold/i.test(st) ? 'hold' : /push/i.test(st) ? 'push' : null;
   return {queue:q, why:String((raw&&raw.why)||'').slice(0,240), stance, bad, shape};
 }
 
@@ -1199,8 +1201,9 @@ async function mockAgent(St,s){
 let PICK=null;
 function humanTurn(s){
   return new Promise(resolve=>{
-    PICK={s,queue:[],stance:'push',resolve};
-    document.querySelectorAll('#pkStance .stbtn').forEach(x=>x.classList.toggle('on',x.dataset.st==='push'));
+    const cur = S.stance[s]===1 ? 'hold' : 'push';
+    PICK={s,queue:[],stance:cur,resolve};
+    document.querySelectorAll('#pkStance .stbtn').forEach(x=>x.classList.toggle('on',x.dataset.st===cur));
     renderPicker();
     document.getElementById('picker').classList.add('on');
   });
@@ -1303,7 +1306,7 @@ async function runDecisions(){
   const need = CMD.some(c=>c.kind!=='script');
   if(!need){
     for(let s=0;s<2;s++){const d=sanitize(agent(S,s));S.q[s]=d.queue;
-      S.stance[s]=d.stance==='hold'?1:0;
+      if(d.stance) S.stance[s]=d.stance==='hold'?1:0;
       LASTQ[s]=[...d.queue]; SINCE[s]={}; LASTTO[s]=false;
       const e={t:S.t,s,queue:[...d.queue],why:d.why,stance:d.stance||'push'}; LOG.push(e); pushFeed(e);}
     S.next+=DECIDE; return;
@@ -1312,7 +1315,7 @@ async function runDecisions(){
   const [a,b]=await Promise.all([decide(0),decide(1)]);
   [a,b].forEach((d,s)=>{
     S.q[s]=d.queue;
-    S.stance[s]=d.stance==='hold'?1:0;
+    if(d.stance) S.stance[s]=d.stance==='hold'?1:0;
     LASTQ[s]=[...d.queue]; SINCE[s]={}; LASTTO[s]=!!d.timedOut;   // reset the window after the view was read
     const e={t:S.t,s,queue:[...d.queue],why:d.why,stance:d.stance||'push',ms:d.ms,bad:d.bad,failed:d.failed,shape:d.shape,raw:d.raw};
     LOG.push(e); pushFeed(e);
@@ -2903,7 +2906,8 @@ The tension: hold to grind them down with income + airstrikes, or push to break 
 base directly. If you sit and hold, the enemy can mass units and PUSH through your tower position — so
 holding only works if you win the fight there. A player who does nothing loses the tower, gets out-
 produced, AND gets airstruck. Read "tower" and "yourStance" every turn and set stance deliberately.
-Respond with "stance":"push" or "stance":"hold" alongside your queue (default is push).
+Your stance PERSISTS — it stays whatever you last set until you change it, so you do NOT need to repeat it
+every turn. Only include "stance":"push" or "stance":"hold" when you want to SWITCH; omit it to keep going.
 
 ECONOMY — the most commonly misplayed part of this game:
 "eco" is permanent and can be bought ${ECO_MAX} times. The price ESCALATES: ${[0,1,2].map(n=>ecoPrice(n)).join(', then ')}.
