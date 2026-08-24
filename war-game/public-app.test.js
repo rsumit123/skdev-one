@@ -46,7 +46,9 @@ function loadSlice(overrides={}){
     'loadDifficulties','startDifficulty','difficultyButtonDisabled','refreshPublicSession',
     'battleViewForServer','publicCommanders','serverDecisionState','completionOutcome',
     'recentBattleText','relativeBattleTime','writePublicName','publicHistoryRow','publicPlayerRow',
-    'publicAiRow','resultCardState','requestPublicDecision','completePublicGame'];
+    'publicAiRow','resultCardState','requestPublicDecision','completePublicGame',
+    'canOpenLab','benchmarkRequest','startBenchmark','benchmarkCommanders','startMockDiagnostic',
+    'benchmarkHumanSide','benchmarkActionLabel'];
   const expose=exports.map(name=>`${JSON.stringify(name)}:typeof ${name}==='undefined'?undefined:${name}`).join(',');
   vm.runInContext(`${source.slice(start,end+END.length)}\nglobalThis.__slice={${expose}};`,context);
   return {...context.__slice,localStorage};
@@ -57,8 +59,8 @@ function loadDomSlice(PUB,document){
   const start=source.indexOf(DOM_START),end=source.indexOf(DOM_END);
   assert.notEqual(start,-1,'public DOM test slice start marker must exist');
   assert.notEqual(end,-1,'public DOM test slice end marker must exist');
-  const context=vm.createContext({PUB,document});
-  vm.runInContext(`${source.slice(start,end+DOM_END.length)}\nglobalThis.__dom={setPublicBusy,setPublicHidden};`,context);
+  const context=vm.createContext({PUB,document,canOpenLab:loadSlice().canOpenLab});
+  vm.runInContext(`${source.slice(start,end+DOM_END.length)}\nglobalThis.__dom={setPublicBusy,setPublicHidden,syncBenchmarkLabAccess};`,context);
   return context.__dom;
 }
 
@@ -175,6 +177,146 @@ test('hard access is account-only',()=>{
   assert.equal(ctx.difficultyAccess({kind:'guest'},'hard'),false);
   assert.equal(ctx.difficultyAccess({kind:'user'},'hard'),true);
   assert.equal(ctx.difficultyAccess({kind:'guest'},'medium'),true);
+});
+
+test('benchmark lab visibility depends only on the server admin flag',()=>{
+  const ctx=loadSlice();
+  assert.equal(ctx.canOpenLab(null),false);
+  assert.equal(ctx.canOpenLab({kind:'guest',displayName:'Owner',isAdmin:true}),false);
+  assert.equal(ctx.canOpenLab({kind:'user',displayName:'rsumit123@gmail.com',isAdmin:false}),false);
+  assert.equal(ctx.canOpenLab({kind:'user',displayName:'Owner',isAdmin:true}),true);
+});
+
+test('non-admin identities cannot invoke benchmark creation',async()=>{
+  let calls=0;
+  const ctx=loadSlice({fetch:async()=>{calls++;return jsonResponse(201,{});}});
+  ctx.setIdentity({kind:'user',id:'u1',displayName:'rsumit123@gmail.com',isAdmin:false});
+  await assert.rejects(
+    ctx.startBenchmark({modelA:'alpha',modelB:'beta',humanSide:null,seed:42,memory:true,sideSwap:false}),
+    error=>error.code==='admin_required'
+  );
+  assert.equal(calls,0);
+  assert.equal(ctx.PUB.game,null);
+});
+
+test('admin benchmark creation sends the exact server configuration',async()=>{
+  const calls=[];
+  const response={gameId:'bms_1',mode:'benchmark',modelA:'alpha',modelB:'beta',humanSide:null,
+    seed:-7,memory:true,sideSwap:false,promptVersion:8,expiresAt:'2026-08-24T15:30:00Z'};
+  const ctx=loadSlice({fetch:async(...args)=>{calls.push(args);return jsonResponse(201,response);}});
+  ctx.setIdentity({kind:'user',id:'owner',displayName:'Owner',isAdmin:true});
+  const result=await ctx.startBenchmark({modelA:'alpha',modelB:'beta',humanSide:null,seed:-7,
+    memory:true,sideSwap:false,ignored:'must-not-leak'});
+  assert.equal(calls[0][0],'https://breach-api.skdev.one/v1/admin/games');
+  assert.deepEqual(JSON.parse(calls[0][1].body),{
+    modelA:'alpha',modelB:'beta',humanSide:null,seed:-7,memory:true,sideSwap:false
+  });
+  assert.equal(result.gameId,'bms_1');
+  assert.equal(ctx.PUB.game.gameId,'bms_1');
+});
+
+test('benchmark commander seats use server models except for the authorized human side',()=>{
+  const ctx=loadSlice();
+  const modelGame={modelA:'alpha',modelB:'beta',humanSide:null};
+  assert.deepEqual(Array.from(ctx.benchmarkCommanders(modelGame),entry=>({...entry})),[
+    {kind:'server',model:'alpha'},{kind:'server',model:'beta'}
+  ]);
+  assert.deepEqual(Array.from(ctx.benchmarkCommanders({...modelGame,humanSide:1}),entry=>({...entry})),[
+    {kind:'server',model:'alpha'},{kind:'human',model:'beta'}
+  ]);
+});
+
+test('benchmark human seat selection allows at most one human commander',()=>{
+  const ctx=loadSlice();
+  assert.equal(ctx.benchmarkHumanSide('server','server'),null);
+  assert.equal(ctx.benchmarkHumanSide('human','server'),0);
+  assert.equal(ctx.benchmarkHumanSide('server','human'),1);
+  assert.throws(()=>ctx.benchmarkHumanSide('human','human'),error=>error.code==='invalid_request');
+});
+
+test('server denial cannot leave a forged benchmark session',async()=>{
+  const ctx=loadSlice({fetch:async()=>jsonResponse(403,{code:'admin_required',detail:'private'})});
+  ctx.setIdentity({kind:'user',id:'owner',displayName:'Owner',isAdmin:true});
+  await assert.rejects(
+    ctx.startBenchmark({modelA:'alpha',modelB:'beta',humanSide:null,seed:42,memory:true,sideSwap:false}),
+    error=>error.code==='admin_required'&&error.message==='This command requires Benchmark Lab access.'
+  );
+  assert.equal(ctx.PUB.game,null);
+});
+
+test('a delayed benchmark response cannot revive admin state after logout',async()=>{
+  let resolveBenchmark;
+  const pendingResponse=new Promise(resolve=>{resolveBenchmark=resolve;});
+  const ctx=loadSlice({fetch:async url=>url.endsWith('/v1/admin/games')?pendingResponse:
+    ({ok:true,status:204,json:async()=>{throw new Error('no body');}})});
+  ctx.setIdentity({kind:'user',id:'owner',displayName:'Owner',isAdmin:true});
+  const pending=ctx.startBenchmark({modelA:'alpha',modelB:'beta',humanSide:null,seed:42,memory:true,sideSwap:false});
+  await Promise.resolve();
+  await ctx.logout();
+  resolveBenchmark(jsonResponse(201,{gameId:'bms_stale',modelA:'alpha',modelB:'beta',humanSide:null,seed:42,memory:true,sideSwap:false}));
+  const result=await pending;
+  assert.equal(result.view,'stale');
+  assert.equal(ctx.PUB.identity,null);
+  assert.equal(ctx.PUB.game,null);
+});
+
+test('admin mock diagnostic is local, unrecorded, and never creates a server game',()=>{
+  let calls=0;
+  const ctx=loadSlice({fetch:async()=>{calls++;return jsonResponse(201,{});}});
+  ctx.setIdentity({kind:'user',id:'owner',displayName:'Owner',isAdmin:true});
+  const result=ctx.startMockDiagnostic({seed:19});
+  assert.deepEqual(JSON.parse(JSON.stringify(result)),{mode:'local_diagnostic',seed:19,recorded:false,
+    commanders:[{kind:'mock',model:''},{kind:'mock',model:''}]});
+  assert.equal(calls,0);
+  assert.equal(ctx.PUB.game,null);
+});
+
+test('non-admin identities cannot invoke the local mock diagnostic',()=>{
+  const ctx=loadSlice();
+  ctx.setIdentity({kind:'guest',id:'g1',displayName:'Guest1:Owner',isAdmin:false});
+  assert.throws(()=>ctx.startMockDiagnostic({seed:19}),error=>error.code==='admin_required');
+});
+
+test('local diagnostic start copy never implies server authorization',()=>{
+  const ctx=loadSlice();
+  assert.equal(ctx.benchmarkActionLabel(false),'Authorize benchmark');
+  assert.equal(ctx.benchmarkActionLabel(true),'Run local diagnostic');
+});
+
+test('guest and user menus hide the lab while the admin menu reveals it',()=>{
+  const buttons=new Map(['btnBenchmarkLab','btnSetupOpen','btnSetupOpen2'].map(id=>[id,{hidden:false}]));
+  const document={
+    querySelectorAll(){return [];},
+    getElementById(id){return buttons.get(id)||null;}
+  };
+  const PUB={busy:false,identity:{kind:'guest',id:'g1',isAdmin:false}};
+  const dom=loadDomSlice(PUB,document);
+  assert.equal(dom.syncBenchmarkLabAccess(),false);
+  assert.deepEqual(Array.from(buttons.values(),button=>button.hidden),[true,true,true]);
+  PUB.identity={kind:'user',id:'u1',displayName:'Owner',isAdmin:true};
+  assert.equal(dom.syncBenchmarkLabAccess(),true);
+  assert.deepEqual(Array.from(buttons.values(),button=>button.hidden),[false,false,false]);
+});
+
+test('benchmark lab has no browser credential or results-server fields',()=>{
+  const html=readIndex();
+  const hit=html.match(/<div class="modal" id="mSetup">([\s\S]*?)<div class="modal" id="mPicker">/);
+  assert.ok(hit,'benchmark lab modal exists');
+  for(const id of ['apikey','remember','apiBase','apiTok','btnApiTest','btnApiPushAll']){
+    assert.equal(new RegExp(`id=["']${id}["']`).test(hit[1]),false,id);
+  }
+});
+
+test('benchmark lab owns the technical session controls removed from the public unit guide',()=>{
+  const html=readIndex();
+  const lab=html.match(/<div class="modal" id="mSetup">([\s\S]*?)<div class="modal" id="mPicker">/);
+  const units=html.match(/<div class="modal" id="mUnits">([\s\S]*?)<script>/);
+  assert.ok(lab&&units);
+  for(const id of ['seed','memory','labels','lowfx','btnExport']){
+    assert.match(lab[1],new RegExp(`id=["']${id}["']`),id);
+    assert.equal(new RegExp(`id=["']${id}["']`).test(units[1]),false,id);
+  }
+  assert.match(lab[1],/Prompt v8/);
 });
 
 test('dossier keys keep guest and user memories separate',()=>{

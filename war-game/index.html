@@ -164,7 +164,7 @@ body:not(.live) #sheet{display:none}
   min-width:64px;cursor:pointer;text-transform:uppercase;letter-spacing:.08em;font-size:10px}
 .public-menu-panel{display:flex;justify-content:flex-end;gap:8px;border-bottom:1px solid var(--rule);
   padding:8px 0;background:#080c10}
-.public-menu-panel[hidden],.public-menu-button[hidden]{display:none}
+.public-menu-panel[hidden],.public-menu-button[hidden],#btnSetupOpen[hidden],#btnSetupOpen2[hidden]{display:none!important}
 .public-screen{display:none;flex:1;min-height:0;padding:18px 0}
 .public-screen.on{display:flex;flex-direction:column}
 .public-kicker{color:var(--amber);font-size:9px;letter-spacing:.18em;text-transform:uppercase;margin-bottom:5px}
@@ -735,6 +735,7 @@ body.split #nudge{display:none}
       <nav class="public-menu-panel" id="publicMenu" aria-label="Commander menu" hidden>
         <button type="button" class="public-quiet" id="btnHomeHistory">My Battles</button>
         <button type="button" class="public-quiet" id="btnHomeRanks">Leaderboard</button>
+        <button type="button" class="public-quiet" id="btnBenchmarkLab" hidden>Benchmark Lab</button>
         <button type="button" class="public-quiet" id="btnPublicLogout">Sign out</button>
       </nav>
 
@@ -983,58 +984,44 @@ body.split #nudge{display:none}
 <!-- PUBLIC MARKUP END -->
 
 <div class="modal" id="mSetup">
-  <div class="mhead"><h3>Setup</h3>
-    <button class="act primary" id="btnSetupStart">Start match</button>
+  <div class="mhead"><h3>Benchmark Lab</h3>
+    <button class="act primary" id="btnSetupStart">Authorize benchmark</button>
     <button class="act" data-close="mSetup">Done</button></div>
   <div class="mbody">
+    <div class="warnbox">Owner workspace · benchmark games use server-authorized model access and do not consume daily games or enter the public Human-vs-AI leaderboard.</div>
     <div class="grp"><h3>Commanders</h3>
       <div class="crow"><span class="cw2" style="color:var(--A)">Vulcan</span>
-        <select id="kindA"><option value="llm">OpenRouter</option><option value="human">You (fair mode)</option><option value="script" hidden>Scripted</option><option value="mock" hidden>Mock LLM</option></select></div>
+        <select id="kindA"><option value="server">Model</option><option value="human">You (fair mode)</option></select></div>
       <div class="crow" style="margin-top:7px"><button class="act modelbtn" id="modelA" data-side="0">Choose model</button></div>
       <div class="crow" style="margin-top:7px"><input type="text" id="customA" placeholder="or paste any model id" style="width:100%"></div>
       <div class="crow" style="margin-top:12px"><span class="cw2" style="color:var(--B)">Cobalt</span>
-        <select id="kindB"><option value="llm">OpenRouter</option><option value="human">You (fair mode)</option><option value="script" hidden>Scripted</option><option value="mock" hidden>Mock LLM</option></select></div>
+        <select id="kindB"><option value="server">Model</option><option value="human">You (fair mode)</option></select></div>
       <div class="crow" style="margin-top:7px"><button class="act modelbtn" id="modelB" data-side="1">Choose model</button></div>
       <div class="crow" style="margin-top:7px"><input type="text" id="customB" placeholder="or paste any model id" style="width:100%"></div>
+      <label class="chk"><input type="checkbox" id="labSideSwap"> Swap sides on start</label>
     </div>
-    <div class="grp"><h3>OpenRouter key</h3>
-      <input type="password" id="apikey" placeholder="sk-or-…" style="width:100%" autocomplete="off">
-      <label class="chk"><input type="checkbox" id="remember"> Remember on this device</label>
-      <div class="crow" style="margin-top:9px"><button class="act" id="btnTest">Test</button>
-        <button class="act" id="btnModels">Load live models</button></div>
-      <div id="modelsout" class="tout"></div>
-      <div id="testout" class="tout">Not tested.</div>
-      <div class="warnbox">Your key goes only to OpenRouter, direct from your browser — this page has no server.
-        Unchecked, it is held in memory and gone when you close the tab. Checked, it is stored in this
-        browser's localStorage so you don't retype it on mobile.</div>
-    </div>
-    <div class="grp"><h3>Results server</h3>
-      <div class="tout" style="margin-top:0">Every finished match uploads automatically —
-        no setup on any device. Leave these blank unless you are self-hosting.</div>
-      <input type="text" id="apiBase" placeholder="https://breach-api.skdev.one (default)" style="width:100%;margin-top:8px">
-      <input type="password" id="apiTok" placeholder="write token (only if your server requires one)" style="width:100%;margin-top:7px" autocomplete="off">
-      <div class="crow" style="margin-top:9px"><button class="act" id="btnApiTest">Test</button>
-        <button class="act" id="btnApiPushAll">Upload local history</button></div>
-      <div id="apiOut" class="tout">Using the default server.</div>
-      <div class="warnbox">History follows you across devices because matches live on the server,
-        not in one browser. Reads and writes are both open — a match is only recorded when a real
-        model played it, which needs your own API key, so there is nothing worth locking.</div>
-    </div>
-
-    <div class="grp"><h3>Mock LLM (free testing)</h3>
+    <div class="grp"><h3>Mock commander</h3>
+      <label class="chk"><input type="checkbox" id="labMockDiagnostic"> Local diagnostic — not recorded</label>
       <div class="crow"><label class="inline">Latency ms</label><input type="number" id="mLo" value="900" style="width:76px">
         <label class="inline">to</label><input type="number" id="mHi" value="5000" style="width:76px"></div>
       <div class="crow" style="margin-top:7px"><label class="inline">Fail %</label><input type="number" id="mFail" value="6" style="width:64px">
         <label class="inline">Malformed %</label><input type="number" id="mBad" value="10" style="width:64px"></div>
-      <div class="tout">Mock plays the scripted commander but with real latency, dropped calls and invalid
-        output, so you can prove the plumbing before spending anything.</div>
+      <div class="tout">Mock plays the scripted commander with real latency, dropped calls and invalid output.
+        Local diagnostics use Mock vs Mock, make no server request, consume no daily game, and never appear in history or leaderboards.</div>
     </div>
     <div class="grp"><h3>Session</h3><div id="stats" class="tout">No calls yet.</div>
+      <div class="setrow"><label class="inline" for="seed">Seed</label><input type="number" id="seed" value="42" style="width:88px">
+        <button class="act" id="btnReset">Reset</button><button class="act" id="btnExport">Save log</button></div>
+      <label class="chk"><input type="checkbox" id="labels" checked> Show unit type badges</label>
+      <label class="chk"><input type="checkbox" id="lowfx"> Reduce effects</label>
+      <label class="chk"><input type="checkbox" id="memory" checked> Conversation memory</label>
+      <div class="tout">Prompt v8 · server-authorized decisions · detailed reasoning, latency, errors, usage, and side diagnostics remain in the battle log.</div>
       <div class="warnbox">A full game is about <b>90 calls</b> ≈ 83k input / 7k output tokens.
         On GPT-OSS 120B that is roughly <b>half a cent per game</b>; on Gemini 3.7 Flash about
         <b>4.5 cents</b>.<br><br>
         The <b>:free</b> routes are capped at 20/min and 50/day with no credits — not enough to finish
         one match, which is why Test returns 429. Paid routes have no daily cap.</div></div>
+    <div class="auth-error" id="labError" role="alert" aria-live="assertive"></div>
   </div>
 </div>
 
@@ -1093,11 +1080,6 @@ body.split #nudge{display:none}
       <b>Economy</b> costs <span id="ecoCostTxt">45</span> (price rises each time) and adds +0.5 to base income, up to three times. Income also escalates on its own — it roughly
       doubles by the one-minute mark and keeps climbing, so no stalemate holds.
     </div>
-    <div class="setrow"><label class="inline" for="seed">Seed</label><input type="number" id="seed" value="42" style="width:88px">
-      <button class="act" id="btnReset">Reset</button><button class="act" id="btnExport">Save log</button></div>
-    <label class="chk"><input type="checkbox" id="labels" checked> Show unit type badges (I / G / R / A / T)</label>
-    <label class="chk"><input type="checkbox" id="lowfx"> Reduce effects (helps older phones)</label>
-    <label class="chk"><input type="checkbox" id="memory" checked> Conversation memory — models remember their own turns (prompt-cached, low cost)</label>
   </div>
 </div>
 
@@ -1180,14 +1162,14 @@ function shortName(id){
 }
 function commanderLabel(s){
   const c=CMD[s];
-  return c.kind==='script'?'scripted (no model calls)':c.kind==='human'?'you, fair mode — same 4s cadence as the model':c.kind==='mock'?'mock (no model calls)':c.model;
+  return c.kind==='script'?'scripted (no model calls)':c.kind==='human'?'you, fair mode — same 4s cadence as the model':c.kind==='mock'?'mock diagnostic (not recorded)':c.model;
 }
 function paintWho(){
   const w=document.getElementById('whobar'); if(!w) return;
-  const live=CMD.filter(c=>c.kind==='llm').length;
+  const live=CMD.filter(c=>c.kind==='server').length;
   w.className='whobar'+(live<2?' warn':'');
   w.innerHTML=[0,1].map(s=>`<span style="color:${SIDE[s].col}">${SIDE[s].name}</span>: ${commanderLabel(s)}`).join('<br>')
-    + (live<2?'<br><b>Set both commanders to OpenRouter in Setup to run real models.</b>':'');
+    + (live<2&&CMD.some(c=>c.kind==='mock')?'<br><b>Local diagnostic · no server game · not recorded.</b>':'');
 }
 function refreshNames(){
   [0,1].forEach(s=>{
@@ -1580,6 +1562,30 @@ function countdownRefreshDue(allowance,nowMs,refreshedAt){
 function difficultyAccess(identity,difficulty){
   return difficulty!=='hard'||!!(identity&&identity.kind==='user');
 }
+function canOpenLab(identity){
+  return !!(identity&&identity.kind==='user'&&identity.isAdmin===true);
+}
+function benchmarkRequest(config){
+  return {
+    modelA:config.modelA,modelB:config.modelB,humanSide:config.humanSide,
+    seed:config.seed,memory:config.memory,sideSwap:config.sideSwap
+  };
+}
+function benchmarkCommanders(game){
+  return [game.modelA,game.modelB].map((model,side)=>({
+    kind:game.humanSide===side?'human':'server',model
+  }));
+}
+function benchmarkHumanSide(kindA,kindB){
+  if(kindA==='human'&&kindB==='human'){
+    const code='invalid_request';
+    throw Object.assign(new Error('Choose one human seat at most.'),{code,status:422,data:{code}});
+  }
+  return kindA==='human'?0:kindB==='human'?1:null;
+}
+function benchmarkActionLabel(localDiagnostic){
+  return localDiagnostic?'Run local diagnostic':'Authorize benchmark';
+}
 function difficultyButtonDisabled(identity,allowance,difficulty,busy){
   const locked=!difficultyAccess(identity,difficulty);
   const exhausted=!!(allowance&&allowance.remaining===0);
@@ -1665,6 +1671,7 @@ function publicMessage(code){
     authentication_required:'Your session expired. Sign in or continue as a guest.',
     session_required:'Your session expired. Sign in or continue as a guest.',
     session_expired:'Your battle session expired. Choose a difficulty to start again.',
+    admin_required:'This command requires Benchmark Lab access.',
     try_again_later:'Too many attempts. Wait a moment and try again.'
   })[code]||'Something interrupted the connection. Please try again.';
 }
@@ -1801,6 +1808,28 @@ async function startDifficulty(difficulty){
     PUBLIC_REQUESTS.delete(controller);
   }
 }
+async function startBenchmark(config){
+  if(!canOpenLab(PUB.identity)){
+    const code='admin_required';
+    throw Object.assign(new Error(publicMessage(code)),{code,status:403,data:{code}});
+  }
+  const generation=PUB.generation;
+  const game=await apiRequest('/v1/admin/games',{
+    method:'POST',body:benchmarkRequest(config),authScope:'session'
+  });
+  if(generation!==PUB.generation||!canOpenLab(PUB.identity))return {view:'stale'};
+  PUB.game={...game};
+  return PUB.game;
+}
+function startMockDiagnostic(config){
+  if(!canOpenLab(PUB.identity)){
+    const code='admin_required';
+    throw Object.assign(new Error(publicMessage(code)),{code,status:403,data:{code}});
+  }
+  PUB.game=null;
+  return {mode:'local_diagnostic',seed:config.seed,recorded:false,
+    commanders:[{kind:'mock',model:''},{kind:'mock',model:''}]};
+}
 /* PUBLIC APP TEST SLICE END */
 /* PUBLIC DOM TEST SLICE START */
 function setPublicBusy(busy){
@@ -1809,6 +1838,14 @@ function setPublicBusy(busy){
 }
 function setPublicHidden(element,hidden){
   element.hidden=!!hidden;element.style.display=hidden?'none':'';
+}
+function syncBenchmarkLabAccess(){
+  const allowed=canOpenLab(PUB.identity);
+  ['btnBenchmarkLab','btnSetupOpen','btnSetupOpen2'].forEach(id=>{
+    const button=document.getElementById(id);
+    if(button)button.hidden=!allowed;
+  });
+  return allowed;
 }
 /* PUBLIC DOM TEST SLICE END */
 function showPublicView(view){
@@ -1821,6 +1858,7 @@ function showPublicView(view){
   }
   const menuButton=document.getElementById('btnPublicMenu');
   menuButton.hidden=view!=='home';
+  syncBenchmarkLabAccess();
   if(view!=='home')closePublicMenu();
   if(view==='home'){
     renderHome();
@@ -2416,7 +2454,7 @@ async function decide(s){
   THINK[s]=true; paintThink(); const t0=performance.now();
   let raw=null, err=null;
   for(let attempt=0;attempt<2&&!raw;attempt++){
-    try{ raw = c.kind==='mock' ? await mockAgent(S,s) : await llmAgent(S,s,c.model); }
+    try{ raw = c.kind==='mock' ? await mockAgent(S,s) : c.kind==='server' ? await serverAgent(S,s) : await llmAgent(S,s,c.model); }
     catch(e){ err=e;
       if(/timed out/i.test(String(e.message))) break;   // slow model: don't spend another 30s, auto-order now
       if(attempt===0) await sleep(400); }
@@ -3612,7 +3650,15 @@ function modal(id,v,opener=document.activeElement){
   if(v){el.classList.add('on');openDialogScope(el,opener);}
   else {el.classList.remove('on');closeDialogScope(el);}
 }
-['btnSetupOpen','btnSetupOpen2'].forEach(i=>document.getElementById(i).onclick=()=>modal('mSetup',true));
+function openBenchmarkLab(opener=document.activeElement){
+  if(!canOpenLab(PUB.identity))return false;
+  closePublicMenu();
+  setAuthError('labError','');
+  modal('mSetup',true,opener);
+  return true;
+}
+['btnSetupOpen','btnSetupOpen2'].forEach(i=>document.getElementById(i).onclick=e=>openBenchmarkLab(e.currentTarget));
+document.getElementById('btnBenchmarkLab').onclick=e=>openBenchmarkLab(e.currentTarget);
 ['btnUnitsOpen','btnUnitsOpen2'].forEach(i=>document.getElementById(i).onclick=()=>modal('mUnits',true));
 document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>{
   if(b.dataset.close==='mHowTo') closeHowTo(howToDismissOptions(HOW_TO_AUTOMATIC));
@@ -3909,6 +3955,7 @@ function apiStatus(msg,col){
 }
 ['apiBase','apiTok'].forEach(id=>{
   const el=document.getElementById(id), k=id==='apiBase'?'breach.api':'breach.apitoken';
+  if(!el)return;
   try{ const v=localStorage.getItem(k); if(v!==null) el.value=v; }catch(e){}
   el.addEventListener('input',()=>{ try{
     const v=el.value.trim();
@@ -3916,7 +3963,7 @@ function apiStatus(msg,col){
     else localStorage.setItem(k,v);
   }catch(e){} });
 });
-document.getElementById('btnApiTest').onclick=async()=>{
+const btnApiTest=document.getElementById('btnApiTest');if(btnApiTest)btnApiTest.onclick=async()=>{
   const b=apiBase(); if(!b) return apiStatus('No server configured.','#c9a227');
   apiStatus('Checking '+b+' …','#7b8692');
   try{
@@ -3926,7 +3973,7 @@ document.getElementById('btnApiTest').onclick=async()=>{
     await lbFetchRemote();
   }catch(e){ apiStatus('Cannot reach it: '+String(e.message).slice(0,70),'#c9765c'); }
 };
-document.getElementById('btnApiPushAll').onclick=async()=>{
+const btnApiPushAll=document.getElementById('btnApiPushAll');if(btnApiPushAll)btnApiPushAll.onclick=async()=>{
   const local=lbLoad().concat(LB_SEED);
   if(!local.length) return apiStatus('Nothing stored locally to upload.','#c9a227');
   apiStatus(`Uploading ${local.length}…`,'#7b8692');
@@ -4009,7 +4056,7 @@ function goLive(){
   applyMode();fit(); draw(performance.now()); wakeFabs();
 }
 document.getElementById('btnBegin').onclick=goLive;
-document.getElementById('btnPickModels').onclick=()=>modal('mSetup',true);
+document.getElementById('btnPickModels').onclick=e=>openBenchmarkLab(e.currentTarget);
 
 /* Swapping sides is the single most useful button here: Vulcan has a measured
    side advantage, so a pairing is only meaningful once it has been played both
@@ -4038,14 +4085,47 @@ document.getElementById('btnSwap').onclick=()=>rematch({swap:true});
 document.getElementById('btnNewSeed').onclick=()=>rematch({newSeed:true});
 document.getElementById('btnNewModels').onclick=()=>{
   showResults(false);
-  modal('mSetup',true);            // pick opponents, then Start match from in there
+  openBenchmarkLab(document.getElementById('btnNewModels'));
 };
-/* Configure-then-play used to require closing Setup, finding the transport and
-   guessing which button restarted. This is the single obvious action. */
-document.getElementById('btnSetupStart').onclick=()=>{
-  modal('mSetup',false);
-  showResults(false);
-  goLive();
+let LAB_LOCAL_DIAGNOSTIC=false;
+function applyBenchmarkGame(game){
+  const commanders=benchmarkCommanders(game);
+  commanders.forEach((commander,side)=>{CMD[side]={...commander};});
+  MEMORY_ON=game.memory;
+  const memory=document.getElementById('memory');if(memory)memory.checked=MEMORY_ON;
+  document.getElementById('seed').value=game.seed;
+  refreshNames();
+}
+async function launchBenchmarkFromLab(){
+  if(!canOpenLab(PUB.identity))return false;
+  const button=document.getElementById('btnSetupStart');
+  const local=document.getElementById('labMockDiagnostic').checked;
+  const seed=Number.parseInt(document.getElementById('seed').value,10)||1;
+  setAuthError('labError','');button.disabled=true;
+  try{
+    if(local){
+      const diagnostic=startMockDiagnostic({seed});
+      diagnostic.commanders.forEach((commander,side)=>{CMD[side]={...commander};});
+      LAB_LOCAL_DIAGNOSTIC=true;
+    }else{
+      const humanSide=benchmarkHumanSide(document.getElementById('kindA').value,document.getElementById('kindB').value);
+      const game=await startBenchmark({
+        modelA:CMD[0].model,modelB:CMD[1].model,humanSide,seed,
+        memory:document.getElementById('memory').checked,
+        sideSwap:document.getElementById('labSideSwap').checked
+      });
+      if(game.view==='stale')return false;
+      applyBenchmarkGame(game);LAB_LOCAL_DIAGNOSTIC=false;
+    }
+    refreshNames();modal('mSetup',false);showResults(false);goLive();return true;
+  }catch(error){
+    setAuthError('labError',error.code==='invalid_request'&&error.message?error.message:publicMessage(error.code));
+    return false;
+  }finally{button.disabled=false;}
+}
+document.getElementById('btnSetupStart').onclick=launchBenchmarkFromLab;
+document.getElementById('labMockDiagnostic').onchange=event=>{
+  document.getElementById('btnSetupStart').textContent=benchmarkActionLabel(event.target.checked);
 };
 document.getElementById('btnSeeLog').onclick=()=>{
   showResults(false);              // get the card out of the way of the log
@@ -4488,9 +4568,9 @@ function priceText(m){
 }
 function setModel(i,id){
   CMD[i].model=id;
-  // choosing a model IS choosing to run it — flip this side to the LLM and sync the kind select.
-  // (previously the model was set but kind stayed 'script', so it silently kept playing scripted.)
-  if(id){ CMD[i].kind='llm'; const sel=document.getElementById('kind'+(i?'B':'A')); if(sel) sel.value='llm'; }
+  // Choosing a model seats the server-authorized commander. Provider credentials
+  // never enter this page; the benchmark session owns the configured model.
+  if(id){ CMD[i].kind='server'; const sel=document.getElementById('kind'+(i?'B':'A')); if(sel) sel.value='server'; }
   const btn=document.getElementById('model'+(i?'B':'A'));
   if(btn) btn.textContent=id||'Choose model';
   refreshNames();
@@ -4555,7 +4635,7 @@ setModel(1,'google/gemini-2.5-flash-lite');
   MOCK.fail=(+document.getElementById('mFail').value||0)/100;
   MOCK.bad=(+document.getElementById('mBad').value||0)/100;
 });
-document.getElementById('btnTest').onclick=testKey;
+const btnTest=document.getElementById('btnTest');if(btnTest)btnTest.onclick=testKey;
 async function refreshCatalog(outEl){
   const say=(m,c)=>{ if(outEl){ outEl.style.color=c||'#7b8692'; outEl.textContent=m; } };
   say('Fetching catalogue from OpenRouter…');
@@ -4593,7 +4673,7 @@ async function refreshCatalog(outEl){
     say('Could not load ('+String(e.message).slice(0,70)+'). The built-in list still works.','#c9765c');
   }
 }
-document.getElementById('btnModels').onclick=()=>refreshCatalog(document.getElementById('modelsout'));
+const btnModels=document.getElementById('btnModels');if(btnModels)btnModels.onclick=()=>refreshCatalog(document.getElementById('modelsout'));
 document.getElementById('mpRefresh').onclick=()=>refreshCatalog(document.getElementById('mpCount'));
 
 setInterval(()=>{
@@ -4605,6 +4685,7 @@ setInterval(()=>{
 /* ----- key persistence (opt-in) ----- */
 (function(){
   const box=document.getElementById('apikey'), chk=document.getElementById('remember');
+  if(!box||!chk)return;
   try{
     const saved=localStorage.getItem('breach.key');
     if(saved){ box.value=saved; chk.checked=true; }
