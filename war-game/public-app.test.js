@@ -7,6 +7,8 @@ const vm=require('node:vm');
 const INDEX=path.join(__dirname,'index.html');
 const START='/* PUBLIC APP TEST SLICE START */';
 const END='/* PUBLIC APP TEST SLICE END */';
+const DOM_START='/* PUBLIC DOM TEST SLICE START */';
+const DOM_END='/* PUBLIC DOM TEST SLICE END */';
 
 function storage(initial={}){
   const values=new Map(Object.entries(initial));
@@ -30,7 +32,6 @@ function loadSlice(overrides={}){
   const context=vm.createContext({
     fetch:overrides.fetch||(async()=>jsonResponse(200,{})),
     localStorage,
-    document:overrides.document,
     AbortController,
     URL,
     Date,
@@ -42,11 +43,20 @@ function loadSlice(overrides={}){
   const exports=['PUB','guestToken','dossierKey','setIdentity','setAllowance','quotaView',
     'difficultyAccess','publicMessage','apiRequest','bootPublicApp','submitGuest','submitSignup',
     'submitLogin','logout','exhaustionAction','formatCountdown','countdownRefreshDue',
-    'loadDifficulties','startDifficulty','setPublicBusy','difficultyButtonDisabled',
-    'refreshPublicSession'];
+    'loadDifficulties','startDifficulty','difficultyButtonDisabled','refreshPublicSession'];
   const expose=exports.map(name=>`${JSON.stringify(name)}:typeof ${name}==='undefined'?undefined:${name}`).join(',');
   vm.runInContext(`${source.slice(start,end+END.length)}\nglobalThis.__slice={${expose}};`,context);
   return {...context.__slice,localStorage};
+}
+
+function loadDomSlice(PUB,document){
+  const source=fs.readFileSync(INDEX,'utf8');
+  const start=source.indexOf(DOM_START),end=source.indexOf(DOM_END);
+  assert.notEqual(start,-1,'public DOM test slice start marker must exist');
+  assert.notEqual(end,-1,'public DOM test slice end marker must exist');
+  const context=vm.createContext({PUB,document});
+  vm.runInContext(`${source.slice(start,end+DOM_END.length)}\nglobalThis.__dom={setPublicBusy};`,context);
+  return context.__dom;
 }
 
 function publicActionDocument(buttons){
@@ -285,8 +295,10 @@ test('busy state disables every public session action, including locked and navi
     {label:'auth navigation',type:'button',disabled:false},
     {label:'medium',type:'button',disabled:false}
   ];
-  const ctx=loadSlice({document:publicActionDocument(buttons)});
-  ctx.setPublicBusy(true);
+  const PUB={busy:false};
+  const dom=loadDomSlice(PUB,publicActionDocument(buttons));
+  dom.setPublicBusy(true);
+  assert.equal(PUB.busy,true);
   assert.deepEqual(buttons.map(button=>button.disabled),[true,true,true,true,true,true]);
 });
 
@@ -404,6 +416,139 @@ test('periodic 401 clears an in-memory guest token even when storage removal fai
   assert.equal(ctx.guestToken(),'');
   assert.equal(ctx.PUB.identity,null);
   assert.equal(ctx.PUB.view,'identity');
+});
+
+test('a failed token write cannot let an older persisted token replace the new tab token',async()=>{
+  const calls=[];
+  const values=new Map([['breach.guestToken','old-token']]);
+  const setFailStorage={
+    getItem:key=>values.get(key)||null,
+    setItem(){throw new Error('write unavailable');},
+    removeItem:key=>values.delete(key)
+  };
+  const ctx=loadSlice({localStorage:setFailStorage,fetch:async(url,options)=>{
+    calls.push([url,options]);
+    if(url.endsWith('/v1/guests'))return jsonResponse(201,{
+      guestToken:'new-token',
+      identity:{kind:'guest',id:'g2',displayName:'Guest2:Rahul',isAdmin:false},
+      allowance:{remaining:3,limit:3,resetsAt:'2026-08-25T00:00:00+05:30'}
+    });
+    return jsonResponse(200,{ok:true});
+  }});
+  await ctx.submitGuest('Rahul');
+  await ctx.apiRequest('/v1/difficulties');
+  assert.equal(values.get('breach.guestToken'),'old-token');
+  assert.equal(ctx.guestToken(),'new-token');
+  assert.equal(calls[1][1].headers['X-Breach-Guest'],'new-token');
+});
+
+test('a failed token removal leaves a tab tombstone that blocks persisted-token resurrection',async()=>{
+  const calls=[];
+  const values=new Map([['breach.guestToken','expired-token']]);
+  const removeFailStorage={
+    getItem:key=>values.get(key)||null,
+    setItem:(key,value)=>values.set(key,String(value)),
+    removeItem(){throw new Error('remove unavailable');}
+  };
+  let expireNext=true;
+  const ctx=loadSlice({localStorage:removeFailStorage,fetch:async(url,options)=>{
+    calls.push([url,options]);
+    if(expireNext){expireNext=false;return jsonResponse(401,{code:'authentication_required'});}
+    return jsonResponse(200,{ok:true});
+  }});
+  ctx.setIdentity({kind:'guest',id:'g1',displayName:'Guest1:Rahul',isAdmin:false});
+  await assert.rejects(ctx.refreshPublicSession(),error=>error.code==='authentication_required');
+  await ctx.apiRequest('/v1/difficulties');
+  assert.equal(values.get('breach.guestToken'),'expired-token');
+  assert.equal(ctx.guestToken(),'');
+  assert.equal('X-Breach-Guest' in calls[1][1].headers,false);
+});
+
+test('a new guest token supersedes a removal tombstone and remains authoritative across calls',async()=>{
+  const calls=[];
+  const values=new Map([['breach.guestToken','expired-token']]);
+  const removeFailStorage={
+    getItem:key=>values.get(key)||null,
+    setItem:(key,value)=>values.set(key,String(value)),
+    removeItem(){throw new Error('remove unavailable');}
+  };
+  let phase='expire';
+  const ctx=loadSlice({localStorage:removeFailStorage,fetch:async(url,options)=>{
+    calls.push([url,options]);
+    if(phase==='expire'){phase='create';return jsonResponse(401,{code:'authentication_required'});}
+    if(url.endsWith('/v1/guests')){
+      phase='use';
+      return jsonResponse(201,{
+        guestToken:'replacement-token',
+        identity:{kind:'guest',id:'g2',displayName:'Guest2:Rahul',isAdmin:false},
+        allowance:{remaining:3,limit:3,resetsAt:'2026-08-25T00:00:00+05:30'}
+      });
+    }
+    return jsonResponse(200,{ok:true});
+  }});
+  ctx.setIdentity({kind:'guest',id:'g1',displayName:'Guest1:Rahul',isAdmin:false});
+  await assert.rejects(ctx.refreshPublicSession());
+  await ctx.submitGuest('Rahul');
+  await ctx.apiRequest('/v1/difficulties');
+  assert.equal(ctx.guestToken(),'replacement-token');
+  assert.equal(calls[2][1].headers['X-Breach-Guest'],'replacement-token');
+});
+
+test('a guest token set after an initial read failure remains authoritative',async()=>{
+  const calls=[];
+  const getFailStorage={
+    getItem(){throw new Error('read unavailable');},
+    setItem(){},
+    removeItem(){}
+  };
+  const ctx=loadSlice({localStorage:getFailStorage,fetch:async(url,options)=>{
+    calls.push([url,options]);
+    if(url.endsWith('/v1/guests'))return jsonResponse(201,{
+      guestToken:'recovered-token',
+      identity:{kind:'guest',id:'g3',displayName:'Guest3:Rahul',isAdmin:false},
+      allowance:{remaining:3,limit:3,resetsAt:'2026-08-25T00:00:00+05:30'}
+    });
+    return jsonResponse(200,{ok:true});
+  }});
+  await ctx.submitGuest('Rahul');
+  await ctx.apiRequest('/v1/difficulties');
+  assert.equal(ctx.guestToken(),'recovered-token');
+  assert.equal(calls[1][1].headers['X-Breach-Guest'],'recovered-token');
+});
+
+test('logout is locally final when revoke cannot connect',async()=>{
+  const ctx=loadSlice({fetch:async()=>{throw new Error('internal network detail');}});
+  ctx.setIdentity({kind:'user',id:'u1',displayName:'Rahul',isAdmin:false});
+  ctx.setAllowance({remaining:10,resetsAt:'2026-08-25T00:00:00+05:30'});
+  const result=await ctx.logout();
+  assert.equal(result.view,'identity');
+  assert.equal(result.notice,'You are signed out here. The connection could not confirm it.');
+  assert.equal(result.notice.includes('internal'),false);
+  assert.equal(ctx.PUB.identity,null);
+  assert.equal(ctx.PUB.allowance,null);
+});
+
+test('logout is locally final when revoke returns a server error',async()=>{
+  const ctx=loadSlice({fetch:async()=>jsonResponse(500,{code:'private_failure',detail:'stack'})});
+  ctx.setIdentity({kind:'user',id:'u1',displayName:'Rahul',isAdmin:false});
+  const result=await ctx.logout();
+  assert.equal(result.view,'identity');
+  assert.equal(result.notice,'You are signed out here. The connection could not confirm it.');
+  assert.equal(ctx.PUB.identity,null);
+  assert.equal(ctx.PUB.view,'identity');
+});
+
+test('successful logout needs no warning',async()=>{
+  const ctx=loadSlice({fetch:async()=>({ok:true,status:204,json:async()=>{throw new Error('no body');}})});
+  ctx.setIdentity({kind:'user',id:'u1',displayName:'Rahul',isAdmin:false});
+  const result=await ctx.logout();
+  assert.deepEqual({...result},{view:'identity',notice:''});
+});
+
+test('the pure public-app slice has no DOM dependency',()=>{
+  const source=fs.readFileSync(INDEX,'utf8');
+  const slice=source.slice(source.indexOf(START),source.indexOf(END));
+  assert.equal(/\b(?:document|window)\b/.test(slice),false);
 });
 
 module.exports={jsonResponse,loadSlice,storage};

@@ -1406,23 +1406,30 @@ function baseAgent(St,s){
 /* PUBLIC APP TEST SLICE START */
 const PUBLIC_API='https://breach-api.skdev.one';
 const PUB={identity:null,allowance:null,difficulties:null,game:null,difficulty:null,view:'boot',busy:false,generation:0};
-let MEMORY_GUEST_TOKEN='';
+const GUEST_TOKEN_STATE={value:'',decided:false,tombstone:false,version:0};
 const PUBLIC_REQUESTS=new Set();
 
 function guestToken(){
-  try{
-    const stored=localStorage.getItem('breach.guestToken');
-    if(stored)MEMORY_GUEST_TOKEN=stored;
-  }catch(error){}
-  return MEMORY_GUEST_TOKEN;
+  if(!GUEST_TOKEN_STATE.decided){
+    GUEST_TOKEN_STATE.decided=true;
+    try{GUEST_TOKEN_STATE.value=localStorage.getItem('breach.guestToken')||'';}
+    catch(error){GUEST_TOKEN_STATE.value='';}
+  }
+  return GUEST_TOKEN_STATE.tombstone?'':GUEST_TOKEN_STATE.value;
 }
 function guestTokenSet(token){
-  MEMORY_GUEST_TOKEN=String(token||'');
-  try{localStorage.setItem('breach.guestToken',MEMORY_GUEST_TOKEN);}catch(error){}
-  return MEMORY_GUEST_TOKEN;
+  GUEST_TOKEN_STATE.value=String(token||'');
+  GUEST_TOKEN_STATE.decided=true;
+  GUEST_TOKEN_STATE.tombstone=false;
+  GUEST_TOKEN_STATE.version++;
+  try{localStorage.setItem('breach.guestToken',GUEST_TOKEN_STATE.value);}catch(error){}
+  return GUEST_TOKEN_STATE.value;
 }
 function guestTokenClear(){
-  MEMORY_GUEST_TOKEN='';
+  GUEST_TOKEN_STATE.value='';
+  GUEST_TOKEN_STATE.decided=true;
+  GUEST_TOKEN_STATE.tombstone=true;
+  GUEST_TOKEN_STATE.version++;
   try{localStorage.removeItem('breach.guestToken');}catch(error){}
 }
 function invalidatePublicGeneration(){
@@ -1560,10 +1567,11 @@ async function submitLogin({email,password}){
 }
 async function logout(){
   expirePublicSession();
+  let notice='';
   try{await apiRequest('/v1/auth/logout',{method:'POST'});}catch(error){
-    if(error.status!==401)throw error;
+    if(error.status!==401)notice='You are signed out here. The connection could not confirm it.';
   }
-  return {view:'identity'};
+  return {view:'identity',notice};
 }
 async function loadDifficulties(){
   const data=await apiRequest('/v1/difficulties',{authScope:'session'});
@@ -1607,11 +1615,13 @@ async function startDifficulty(difficulty){
     PUBLIC_REQUESTS.delete(controller);
   }
 }
+/* PUBLIC APP TEST SLICE END */
+/* PUBLIC DOM TEST SLICE START */
 function setPublicBusy(busy){
   PUB.busy=!!busy;
   document.querySelectorAll('.public-shell button').forEach(button=>button.disabled=PUB.busy);
 }
-/* PUBLIC APP TEST SLICE END */
+/* PUBLIC DOM TEST SLICE END */
 function showPublicView(view){
   PUB.view=view;
   document.querySelectorAll('[data-public-screen]').forEach(screen=>{
@@ -1843,7 +1853,18 @@ document.getElementById('btnPublicLogout').addEventListener('click',async()=>{
   if(PUB.busy)return;
   setAuthError('homeError','');
   setPublicBusy(true);
-  try{showPublicView((await logout()).view);}catch(error){setAuthError('homeError',error.message);}
+  const pendingLogout=logout();
+  /* logout() clears local session state synchronously before its first await.
+     Move the visible shell at that same boundary; revoke confirmation may lag. */
+  showPublicView('identity');
+  setPublicBusy(false);
+  try{
+    const result=await pendingLogout;
+    setAuthError('identityError',result.notice);
+  }catch(error){
+    showPublicView('identity');
+    setAuthError('identityError',publicMessage('connection_error'));
+  }
   finally{setPublicBusy(false);}
 });
 document.getElementById('btnBootRetry').addEventListener('click',()=>{if(!PUB.busy)bootPublicUI();});
