@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#0b1017">
-<meta name="description" content="Breach — two language models command opposing armies in a lane battle. A benchmark harness that looks like a game.">
+<meta name="description" content="Breach is a daily tactical battle where you command an army against an AI opponent.">
 <title>Breach — two AIs, one lane</title>
 <link rel="manifest" href="/war-game/manifest.webmanifest">
 <link rel="icon" href="/war-game/icon-192.png" sizes="192x192">
@@ -101,11 +101,23 @@ canvas#field{display:block;width:100%;height:100%}
 #bannerX{position:absolute;top:5px;right:7px;width:30px;height:30px;border:0;border-radius:50%;
   background:rgba(255,255,255,.08);color:#c3ccd6;font-size:21px;line-height:1;cursor:pointer;
   font-family:system-ui,sans-serif;padding:0;display:flex;align-items:center;justify-content:center}
+#bannerX,#resultsChip{min-width:44px;min-height:44px}
 #bannerX:hover{background:rgba(255,255,255,.16);color:#fff}
 #bannerX:active{transform:scale(.92)}
 .brow{display:flex;gap:9px;flex-wrap:wrap;justify-content:center}
 .brow .act{font-size:14px;padding:10px 16px}
 .brow2 .act{font-size:12.5px;padding:8px 13px;opacity:.85}
+.public-result-meta{font-family:"IBM Plex Mono",monospace;font-size:10px;line-height:1.6;
+  letter-spacing:0;text-transform:none;color:#aeb8c2}
+.public-result-meta strong{color:#f0d77c}
+.public-result-status{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:0;
+  text-transform:none;color:#8f9ba7;min-height:15px}
+body.public-battle .benchmark-result-actions{display:none}
+body:not(.public-battle) .public-result-actions,body:not(.public-battle) .public-result-meta,
+body:not(.public-battle) .public-result-status{display:none!important}
+body.public-battle #btnSetupOpen,body.public-battle #btnRanksFab,body.public-battle #btnUnitsOpen,
+body.public-battle #btnSetupOpen2,body.public-battle #btnRanks2,body.public-battle #btnUnitsOpen2,
+body.public-battle #btnCopyAnalysis,body.public-battle #btnExport2{display:none}
 
 /* attract screen — no match runs until you ask for one */
 #title{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -123,9 +135,9 @@ canvas#field{display:block;width:100%;height:100%}
 body.live #title{display:none}
 body:not(.live) #ticker,body:not(.live) #fabs,body:not(.live) .ovcard,
 body:not(.live) #mini,body:not(.live) #hudTop{display:none}
-/* the sheet remembers how far it was open; keep it stowed on the title screen
-   so it can never cover the start buttons */
-body:not(.live) #sheet{transform:translateY(100%);pointer-events:none}
+/* The legacy battle log is absent from the public shell's visual and
+   accessibility trees; its state returns unchanged when a battle begins. */
+body:not(.live) #sheet{display:none}
 @media (max-height:400px){
   .tbrand{font-size:min(11vw,40px)}
   .tsub{font-size:11px;max-width:360px;line-height:1.45}
@@ -133,6 +145,149 @@ body:not(.live) #sheet{transform:translateY(100%);pointer-events:none}
   #title{gap:9px}
   .brow .act{font-size:13px;padding:8px 13px}
   #banner{font-size:22px;gap:11px}
+}
+
+/* Public command shell. The battlefield stays behind it as context; the shell
+   itself is a flat steel docket, not a stack of floating product cards. */
+#title.public-title{align-items:stretch;justify-content:flex-start;padding:
+  calc(12px + var(--st)) calc(14px + var(--sr)) calc(14px + var(--sb)) calc(14px + var(--sl));
+  overflow:auto;background:rgba(5,7,10,.94)}
+.public-shell{width:min(100%,760px);margin:auto;min-height:100%;display:flex;flex-direction:column}
+.public-mast{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  border-bottom:1px solid var(--rule);padding:0 0 10px}
+.public-wordmark{font-family:"Saira Condensed",sans-serif;font-size:29px;font-weight:700;
+  letter-spacing:.2em;line-height:1;color:#f1f3f5;text-transform:uppercase}
+.public-mark{font-size:9px;line-height:1.4;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--txt-2);text-align:right}
+.public-mast-tools{display:flex;align-items:center;gap:10px}
+.public-menu-button{border:1px solid #4a5560;background:#0a0e13;color:#d4dbe1;padding:8px 12px;
+  min-width:64px;cursor:pointer;text-transform:uppercase;letter-spacing:.08em;font-size:10px}
+.public-menu-panel{display:flex;justify-content:flex-end;gap:8px;border-bottom:1px solid var(--rule);
+  padding:8px 0;background:#080c10}
+.public-menu-panel[hidden],.public-menu-button[hidden],#btnSetupOpen[hidden],#btnSetupOpen2[hidden]{display:none!important}
+.public-screen{display:none;flex:1;min-height:0;padding:18px 0}
+.public-screen.on{display:flex;flex-direction:column}
+.public-kicker{color:var(--amber);font-size:9px;letter-spacing:.18em;text-transform:uppercase;margin-bottom:5px}
+.public-screen h1{font-family:"Saira Condensed",sans-serif;font-size:clamp(30px,7vw,49px);
+  line-height:.98;letter-spacing:.045em;text-transform:uppercase;color:#f2f4f6;margin:0}
+.public-lede{color:#a2acb7;line-height:1.55;max-width:560px;margin:9px 0 0}
+.auth-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:18px 0 0}
+.public-shell button,.public-shell input{font:inherit}
+.public-shell button{min-height:44px}
+.auth-switch{border:1px solid var(--rule);background:#0b0f14;color:#cbd3da;padding:10px 12px;
+  cursor:pointer;text-align:left}
+.auth-switch:hover,.auth-switch[aria-pressed="true"]{border-color:#7b672b;color:#fff;background:#17170f}
+.auth-switch:focus-visible,.public-shell input:focus-visible,.public-shell button:focus-visible{
+  outline:2px solid var(--amber);outline-offset:2px}
+.auth-panel{display:none;border-top:1px solid var(--rule);margin-top:14px;padding-top:14px}
+.auth-panel.on{display:block}
+.auth-panel form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;align-items:end}
+.auth-panel label{display:flex;flex-direction:column;gap:5px;color:#aab3bc;font-size:10px;
+  letter-spacing:.06em;text-align:left}
+.auth-panel label.auth-wide{grid-column:1/-1}
+.auth-panel input{width:100%;min-height:44px;border:1px solid #39434e;border-radius:0;
+  background:#090d12;color:#f3f5f7;padding:10px 11px;font-size:16px}
+.auth-panel input::placeholder{color:#5f6a75}
+.auth-submit{border:1px solid #9c8129;background:var(--amber);color:#151207;font-weight:600;
+  min-height:44px;padding:10px 14px;cursor:pointer}
+.auth-submit:disabled{opacity:.5;cursor:wait}
+.auth-help{font-size:10px;color:var(--txt-2);margin:9px 0 0;text-align:left}
+.auth-error{min-height:18px;color:#ef9b7e;font-size:11px;line-height:1.4;margin-top:8px;text-align:left}
+.public-secondary{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:auto;padding-top:16px}
+.public-quiet{border:1px solid var(--rule);background:transparent;color:#aeb7c0;padding:9px 13px;cursor:pointer}
+.public-retry{margin-top:16px;align-self:flex-start}
+.public-home-placeholder{border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);
+  margin-top:16px;padding:14px 0;color:#8e99a5;text-align:left}
+.public-tabs,.public-filters{display:flex;gap:7px;flex-wrap:wrap;margin-top:14px}
+.public-tabs button,.public-filters button{border:1px solid var(--rule);background:#0b0f14;color:#9fa9b3;
+  padding:8px 12px;cursor:pointer;text-transform:uppercase;font-size:10px;letter-spacing:.06em}
+.public-tabs button[aria-selected="true"],.public-filters button[aria-pressed="true"]{
+  border-color:#887326;background:#17170f;color:#f0d77c}
+.public-list{border-top:1px solid var(--rule);margin-top:13px;text-align:left}
+.public-list-row{display:grid;grid-template-columns:minmax(0,1.4fr) repeat(3,minmax(62px,.45fr));
+  gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--rule);min-height:52px}
+.public-list-row strong{font-family:"Saira Condensed",sans-serif;font-size:16px;color:#e7ebef}
+.public-list-row span{font-size:10px;color:#929da8}.public-list-row .outcome{color:#f0d77c;text-transform:uppercase}
+.public-list-row.recent{grid-template-columns:minmax(0,1fr) auto}
+.public-list-empty{padding:18px 0;color:#8e99a5;line-height:1.5}
+.battle-authorization{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:18px;align-items:end;
+  border-top:2px solid var(--amber);border-bottom:1px solid #665a2a;padding:12px 0 13px;
+  position:relative;text-align:left}
+.authorization-stamp{position:absolute;right:0;top:-8px;background:#17170f;
+  color:var(--amber);border:1px solid #665a2a;padding:2px 6px;font-size:8px;letter-spacing:.15em}
+.battle-authorization h1{font-size:clamp(28px,6vw,44px);overflow-wrap:anywhere}
+.authorization-quota{text-align:right;display:flex;flex-direction:column;gap:5px;min-width:260px}
+.authorization-quota strong{color:#f0d77c;font-family:"Saira Condensed",sans-serif;font-size:20px;
+  letter-spacing:.035em;text-transform:uppercase}
+.authorization-quota span{font-size:9px;color:var(--txt-2);text-transform:uppercase;letter-spacing:.08em}
+.difficulty-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin:17px 0 7px;text-align:left}
+.difficulty-heading h2{font-family:"Saira Condensed",sans-serif;font-size:25px;line-height:1;
+  text-transform:uppercase;letter-spacing:.06em;color:#e7eaed;margin:0}
+.difficulty-heading p{max-width:285px;font-size:9.5px;line-height:1.4;color:var(--txt-2);margin:0;text-align:right}
+.difficulty-list{border-top:1px solid var(--rule)}
+.difficulty-row{display:grid;grid-template-columns:minmax(170px,.85fr) minmax(230px,1.4fr) minmax(155px,.65fr);
+  gap:12px;align-items:center;text-align:left;border-bottom:1px solid var(--rule);padding:10px 0;position:relative}
+.difficulty-row::before{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:#505a64;opacity:0}
+.difficulty-row:hover::before{opacity:1}
+.difficulty-level{display:flex;flex-direction:column;gap:1px}
+.difficulty-level span{font-family:"Saira Condensed",sans-serif;text-transform:uppercase;letter-spacing:.1em;
+  color:var(--amber);font-size:19px;font-weight:700}
+.difficulty-level b{font-family:"Saira Condensed",sans-serif;font-size:16px;letter-spacing:.025em;color:#dbe0e5}
+.difficulty-row p{color:#8d98a4;font-size:10px;line-height:1.4;margin:0}
+.difficulty-row button{border:1px solid #756525;background:#17170f;color:#f0d77c;cursor:pointer;
+  padding:7px 10px;text-align:left;font-weight:600}
+.difficulty-row button small{display:block;color:#978a55;font-size:8px;font-weight:400;letter-spacing:.08em;
+  margin-top:2px;text-transform:uppercase}
+.difficulty-row.locked{opacity:.72}.difficulty-row.locked button{border-color:#414a53;background:#0b0f14;color:#bac2ca}
+.difficulty-row.locked button small{color:#7b8692}
+.difficulty-row.exhausted button{opacity:.45;cursor:not-allowed}
+.exhaustion-state{border-left:2px solid var(--amber);background:#0c1014;padding:11px 12px;margin-top:12px;
+  text-align:left;color:#bdc5cd;line-height:1.45}
+.exhaustion-state strong{display:block;font-family:"Saira Condensed",sans-serif;font-size:20px;
+  color:#f0d77c;text-transform:uppercase;letter-spacing:.04em}
+.exhaustion-state button{margin-top:8px}
+.matchup-screen{justify-content:center;position:relative;text-align:center;overflow:hidden}
+.matchup-screen .public-kicker{margin-top:16px}
+.matchup-screen h1{max-width:680px;margin-left:auto;margin-right:auto;font-size:clamp(34px,8vw,66px)}
+.matchup-screen h1 span{color:#fff}
+.matchup-rails{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px;width:100%;
+  margin-bottom:14px}
+.matchup-rails span{height:5px;background:var(--A);box-shadow:0 0 0 1px #57291d}
+.matchup-rails span:last-child{background:var(--B);box-shadow:0 0 0 1px #234b65}
+.matchup-rails i{font-family:"Saira Condensed",sans-serif;font-style:normal;font-size:20px;color:var(--amber)}
+.matchup-tier{display:inline-flex;align-self:center;margin-top:12px;border:1px solid #786824;color:#f0d77c;
+  padding:6px 14px;text-transform:uppercase;font-family:"Saira Condensed",sans-serif;font-weight:700;
+  font-size:19px;letter-spacing:.12em}
+.matchup-screen .public-lede{align-self:center}
+.matchup-actions{display:flex;justify-content:center;gap:9px;flex-wrap:wrap;margin-top:18px}
+.matchup-enter{border:1px solid #a98a27;background:var(--amber);color:#151207;padding:10px 20px;
+  cursor:pointer;font-weight:600;min-width:180px}
+.legacy-entry{display:none}
+@media (max-width:560px){
+  .auth-actions{grid-template-columns:1fr}
+  .auth-panel form{grid-template-columns:1fr}
+  .auth-panel label.auth-wide{grid-column:auto}
+  .public-mark{display:none}
+  .battle-authorization{grid-template-columns:1fr;gap:8px;align-items:start}
+  .authorization-quota{text-align:left;min-width:0}
+  .difficulty-heading{display:block}.difficulty-heading p{text-align:left;margin-top:5px}
+  .difficulty-row{grid-template-columns:1fr;padding:12px 0;gap:6px}
+  .difficulty-row button{width:100%}
+  .public-list-row{grid-template-columns:minmax(0,1fr) auto;gap:5px 10px}
+}
+@media (max-height:430px) and (orientation:landscape){
+  #title.public-title{padding-top:calc(7px + var(--st));padding-bottom:calc(7px + var(--sb))}
+  .public-mast{padding-bottom:6px}.public-wordmark{font-size:23px}
+  .public-screen{padding:9px 0}.public-screen h1{font-size:30px}.public-lede{margin-top:5px;line-height:1.35}
+  .auth-actions{margin-top:9px}.auth-panel{margin-top:8px;padding-top:8px}
+  .auth-panel form{gap:7px}.auth-panel input{min-height:44px;padding:8px 10px}
+  .auth-help,.auth-error{margin-top:4px}.public-secondary{padding-top:8px}
+  .battle-authorization{padding:7px 0;gap:12px}.battle-authorization h1{font-size:28px}
+  .authorization-quota strong{font-size:17px}.difficulty-heading{margin:9px 0 5px}
+  .difficulty-heading h2{font-size:20px}.difficulty-row{padding:6px 0}
+  .difficulty-level span{font-size:16px}.difficulty-level b{font-size:14px}
+  .matchup-screen .public-kicker{margin-top:8px}.matchup-screen h1{font-size:38px}
+  .matchup-rails{margin-bottom:7px}.matchup-actions{margin-top:10px}
 }
 
 /* decision overlays */
@@ -320,7 +475,7 @@ body:not(.live) #sheet{transform:translateY(100%);pointer-events:none}
 
 /* ---------- modals ---------- */
 .modal{position:fixed;inset:0;z-index:50;background:#0a0e14;display:none;flex-direction:column;
-  padding-top:var(--st);padding-bottom:var(--sb)}
+  padding:var(--st) var(--sr) var(--sb) var(--sl)}
 .modal.on{display:flex}
 .mhead{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--rule);flex:none}
 .mhead h3{font-size:16px;color:#eef2f6;flex:1}
@@ -330,13 +485,16 @@ body:not(.live) #sheet{transform:translateY(100%);pointer-events:none}
 .crow{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
 .cw2{font-family:"Saira Condensed",sans-serif;font-size:13px;letter-spacing:.05em;width:61px;flex:none;font-weight:700}
 select,input{background:#0b1016;border:1px solid #333d47;color:var(--txt);border-radius:5px;padding:7px 8px;
-  font-family:"IBM Plex Mono",monospace;font-size:12px;min-width:0}
+  font-family:"IBM Plex Mono",monospace;font-size:12px;min-width:0;min-height:44px}
 select{flex:1}
 .act{background:#1a222b;border:1px solid #39434e;color:#dfe6ee;border-radius:6px;padding:9px 13px;
   font-family:"Saira Condensed",sans-serif;font-size:13px;letter-spacing:.07em;text-transform:uppercase;
-  cursor:pointer;font-weight:700}
+  cursor:pointer;font-weight:700;min-height:44px}
 .act.primary{background:var(--amber);color:#20180a;border-color:var(--amber)}
 .act:active{transform:scale(.97)}
+.act[aria-disabled="true"],.act:disabled{opacity:.5;cursor:not-allowed}
+button:focus-visible,input:focus-visible,select:focus-visible,[tabindex]:focus-visible{
+  outline:2px solid var(--amber);outline-offset:2px}
 .tout{font-size:10px;color:var(--txt-2);margin-top:7px;line-height:1.5;word-break:break-word}
 .warnbox{font-size:9.5px;color:var(--txt-3);margin-top:8px;line-height:1.55;border-left:2px solid #333d47;padding-left:8px}
 .inline{font-size:10px;color:var(--txt-2)}
@@ -399,6 +557,34 @@ table.lb td:first-child{text-align:left;white-space:normal}
 .lbflag{color:#c9765c;font-size:9px;margin-top:2px}
 .lbempty{color:var(--txt-3);font-size:11px;padding:16px 0;text-align:center;line-height:1.6}
 
+/* ---------- first-battle field briefing ---------- */
+#mHowTo{background:rgba(5,7,10,.87);backdrop-filter:blur(8px)}
+#mHowTo .mhead{border-color:rgba(224,184,58,.28)}
+.howbody{display:flex;align-items:center;justify-content:center;overflow:hidden;padding:12px 14px}
+.howcard{width:min(680px,100%);border:1px solid #38424c;background:#11161c;
+  box-shadow:0 24px 70px rgba(0,0,0,.62);padding:clamp(12px,2.5vh,22px);position:relative}
+.howeyebrow{font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--amber);margin-bottom:5px}
+.howtitle{font-size:clamp(21px,5vh,32px);line-height:.95;color:#eef2f6}
+.howcopy{margin:8px 0 0;max-width:60ch;color:#b9c3ce;line-height:1.5;font-size:clamp(10px,1.7vh,12px)}
+.howmap{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;margin:clamp(12px,2.6vh,20px) 0 10px}
+.howpoint{min-height:58px;border:1px solid #2b3540;background:#0c1117;padding:7px 6px;position:relative;
+  color:#64717d;font-family:"Saira Condensed",sans-serif;font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+  display:flex;align-items:flex-end;line-height:1.05}
+.howpoint::before{content:'';position:absolute;top:9px;left:7px;width:18px;height:3px;background:#35414c}
+.howpoint.on{border-color:var(--amber);color:#edf2f7;background:#171a18;box-shadow:inset 0 0 0 1px rgba(224,184,58,.2)}
+.howpoint.on::before{width:calc(100% - 14px);background:var(--amber)}
+.howpoint.done{color:#aeb8c1}.howpoint.done::before{background:#7f6a24}
+.howfoot{display:flex;align-items:center;gap:8px;margin-top:14px;border-top:1px solid #29333d;padding-top:11px}
+.howprogress{font-size:10px;color:var(--txt-2);margin-right:auto}.howprogress b{color:#edf2f7;font-weight:600}
+.howback{min-width:44px;padding-left:10px;padding-right:10px}
+@media (prefers-reduced-motion:no-preference){.howcard{animation:briefing-in .28s cubic-bezier(.2,.9,.3,1) both}@keyframes briefing-in{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}}
+@media (max-height:430px){
+  .howbody{padding:6px 12px}.howcard{padding:10px 12px}.howmap{margin:9px 0 7px}.howpoint{min-height:45px;padding:5px;font-size:9px}.howpoint::before{top:6px;left:5px;width:13px}.howpoint.on::before{width:calc(100% - 10px)}
+  .howcopy{margin-top:5px;line-height:1.35}.howfoot{margin-top:9px;padding-top:8px}
+}
+@media (max-width:380px){.howmap{gap:3px}.howpoint{font-size:8px;word-break:break-word}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}}
+
 /* ---------- portrait split ---------- */
 body.split #sheet{position:relative;transform:none;height:auto;flex:1 1 auto;min-height:0;
   border-radius:0;box-shadow:none;border-top:1px solid var(--rule)}
@@ -409,7 +595,7 @@ body.split .ovcard{display:none}
 /* In split mode the battlefield is small, so only the transport controls stay
    on it — setup and units move into the sheet footer where there is room. */
 body.split #fabs{top:auto;bottom:38px;flex-direction:row;gap:6px;max-height:none}
-body.split .fab{width:34px;height:34px;font-size:11px}
+body.split .fab{width:44px;height:44px;font-size:11px}
 body.split #btnSetupOpen,body.split #btnUnitsOpen{display:none}
 body.split #ticker{bottom:0}
 body.split #nudge{display:none}
@@ -430,7 +616,7 @@ body.split #nudge{display:none}
   .clockwrap small{font-size:7.5px}
   #hudTop{top:calc(4px + var(--st))}
   #fabs{top:calc(44px + var(--st));gap:5px;max-height:calc(100% - 62px - var(--st) - var(--sb))}
-  .fab{width:32px;height:32px;font-size:11px}
+  .fab{width:44px;height:44px;font-size:11px}
   .ovcard{bottom:calc(var(--peek) + 12px);font-size:11px;padding:5px 7px;max-width:min(33%,230px);
     max-height:52%;overflow:hidden;border-radius:7px}
   .ovh{font-size:8.5px;margin-bottom:2px}
@@ -450,7 +636,7 @@ body.split #nudge{display:none}
   #mini{display:flex}
   #fabs{flex-direction:row;flex-wrap:wrap;align-content:flex-start;top:auto;
     bottom:calc(var(--peek) + 24px);right:calc(5px + var(--sr));gap:4px;max-height:none}
-  .fab{width:29px;height:29px;font-size:10px}
+  .fab{width:44px;height:44px;font-size:10px}
   .hpstack{max-width:min(42%,180px)}
   .hpname{width:50px;font-size:9px}
   .hpnum{font-size:8px;width:22px}
@@ -494,13 +680,22 @@ body.split #nudge{display:none}
   <div id="banner" style="display:none">
     <button id="bannerX" aria-label="Close">&times;</button>
     <div id="bannerTxt"></div>
-    <div class="brow">
+    <div class="public-result-meta" id="publicResultMeta" hidden></div>
+    <div class="public-result-status" id="publicResultStatus" role="status" hidden></div>
+    <button class="act" id="btnCompletionRetry" type="button" hidden>Retry save</button>
+    <div class="brow public-result-actions" id="publicResultActions" hidden>
+      <button class="act primary" id="btnPublicRematch">Rematch (uses 1 game)</button>
+      <button class="act" id="btnResultHistory">My Battles</button>
+      <button class="act" id="btnResultRanks">Leaderboard</button>
+      <button class="act" id="btnResultDifficulty">Choose difficulty</button>
+    </div>
+    <div class="brow benchmark-result-actions">
       <button class="act primary" id="btnRematch">Rematch</button>
       <button class="act" id="btnSwap">Swap sides</button>
       <button class="act" id="btnNewSeed">New seed</button>
       <button class="act" id="btnNewModels">Change models</button>
     </div>
-    <div class="brow brow2">
+    <div class="brow brow2 benchmark-result-actions">
       <button class="act" id="btnSeeLog">Results &amp; log</button>
       <button class="act" id="btnCopyEnd">Copy log</button>
     </div>
@@ -527,18 +722,175 @@ body.split #nudge{display:none}
 
   <button id="resultsChip">&#9873; Results</button>
 
-  <div id="title">
-    <div class="tbrand">BREACH</div>
-    <div class="tsub">Two language models command opposing armies down one lane.
-      Same map, same economy, no fog of war — whoever reasons better wins.</div>
-    <div class="trow">
-      <button class="act primary" id="btnBegin">Start battle</button>
-      <button class="act" id="btnPickModels">Choose models</button>
-      <button class="act" id="btnRanksOpen">Leaderboard</button>
-      <button class="act" id="btnRivalsOpen">Rivals</button>
-    </div>
-    <div class="tnote">Runs scripted commanders by default. Seat real models in Setup with an OpenRouter key.</div>
+  <!-- PUBLIC MARKUP START -->
+  <div id="title" class="public-title">
+    <main class="public-shell" aria-live="polite">
+      <header class="public-mast">
+        <div class="public-wordmark">BREACH</div>
+        <div class="public-mast-tools">
+          <div class="public-mark">Tactical command<br>Public theatre</div>
+          <button class="public-menu-button" id="btnPublicMenu" type="button" aria-expanded="false" aria-controls="publicMenu" hidden>Menu</button>
+        </div>
+      </header>
+      <nav class="public-menu-panel" id="publicMenu" aria-label="Commander menu" hidden>
+        <button type="button" class="public-quiet" id="btnHomeHistory">My Battles</button>
+        <button type="button" class="public-quiet" id="btnHomeRanks">Leaderboard</button>
+        <button type="button" class="public-quiet" id="btnBenchmarkLab" hidden>Benchmark Lab</button>
+        <button type="button" class="public-quiet" id="btnPublicLogout">Sign out</button>
+      </nav>
+
+      <section class="public-screen on" id="publicBoot" data-public-screen="boot" aria-labelledby="bootTitle">
+        <div class="public-kicker">Establishing link</div>
+        <h1 id="bootTitle">Stand by, commander</h1>
+        <p class="public-lede">Checking your battle authorization.</p>
+        <button class="public-quiet public-retry" id="btnBootRetry" type="button" hidden>Try again</button>
+        <div class="auth-error" id="bootError" role="alert"></div>
+      </section>
+
+      <section class="public-screen" id="publicIdentity" data-public-screen="identity" aria-labelledby="identityTitle">
+        <div class="public-kicker">Identity clearance</div>
+        <h1 id="identityTitle">Choose your callsign</h1>
+        <p class="public-lede">Enter the breach as a guest, or keep your battles with an account.</p>
+        <div class="auth-error" id="identityError" role="alert" aria-live="assertive"></div>
+        <div class="auth-actions" aria-label="Identity options">
+          <button type="button" class="auth-switch" data-auth-view="guest">Play as guest</button>
+          <button type="button" class="auth-switch" data-auth-view="signup">Create account</button>
+          <button type="button" class="auth-switch" data-auth-view="login">Sign in</button>
+        </div>
+
+        <div class="auth-panel" data-auth-panel="guest">
+          <form id="guestForm">
+            <label class="auth-wide" for="guestName">Public display name
+              <input id="guestName" name="displayName" required maxlength="24" autocomplete="nickname" aria-describedby="guestError" placeholder="Your callsign">
+            </label>
+            <button class="auth-submit" type="submit">Continue as guest</button>
+          </form>
+          <div class="auth-error" id="guestError" role="alert" aria-live="assertive"></div>
+        </div>
+
+        <div class="auth-panel" data-auth-panel="signup">
+          <form id="signupForm">
+            <label for="signupName">Public display name
+              <input id="signupName" name="displayName" required maxlength="24" autocomplete="nickname" aria-describedby="signupError" placeholder="Your callsign">
+            </label>
+            <label for="signupEmail">Email
+              <input id="signupEmail" name="email" type="email" required maxlength="254" autocomplete="email" aria-describedby="signupError" placeholder="you@example.com">
+            </label>
+            <label for="signupPassword">Password
+              <input id="signupPassword" name="password" type="password" required minlength="8" autocomplete="new-password" aria-describedby="signupError" placeholder="8 characters minimum">
+            </label>
+            <button class="auth-submit" type="submit">Create account</button>
+          </form>
+          <p class="auth-help">Password reset coming soon</p>
+          <div class="auth-error" id="signupError" role="alert" aria-live="assertive"></div>
+        </div>
+
+        <div class="auth-panel" data-auth-panel="login">
+          <form id="loginForm">
+            <label for="loginEmail">Email
+              <input id="loginEmail" name="email" type="email" required maxlength="254" autocomplete="email" aria-describedby="loginError" placeholder="you@example.com">
+            </label>
+            <label for="loginPassword">Password
+              <input id="loginPassword" name="password" type="password" required autocomplete="current-password" aria-describedby="loginError" placeholder="Your password">
+            </label>
+            <button class="auth-submit" type="submit">Sign in</button>
+          </form>
+          <p class="auth-help">Password reset coming soon</p>
+          <div class="auth-error" id="loginError" role="alert" aria-live="assertive"></div>
+        </div>
+
+        <div class="public-secondary">
+          <button type="button" class="public-quiet" id="btnPublicRanks">View leaderboard</button>
+        </div>
+      </section>
+
+      <section class="public-screen" id="publicHome" data-public-screen="home" aria-labelledby="homeTitle">
+        <section class="battle-authorization" aria-labelledby="homeTitle">
+          <span class="authorization-stamp" aria-hidden="true">AUTHORIZED</span>
+          <div class="authorization-copy">
+            <div class="public-kicker">Daily battle authorization</div>
+            <h1 id="homeTitle"><span id="publicName">Commander</span></h1>
+          </div>
+          <div class="authorization-quota">
+            <strong id="publicQuota">— games left · Resets in --:--:--</strong>
+            <span>Daily limit resets at midnight IST</span>
+          </div>
+        </section>
+        <div class="difficulty-heading">
+          <div><span class="public-kicker">Opponent class</span><h2>Choose your difficulty</h2></div>
+          <p>The commander is revealed after your game is authorized.</p>
+        </div>
+        <div class="difficulty-list" id="difficultyList">
+          <article class="difficulty-row" data-difficulty-card="easy">
+            <div class="difficulty-level"><span>Easy</span><b>Learn the battlefield</b></div>
+            <p>Nova Lite · Nova 2 Lite · Phi-4</p>
+            <button type="button" data-difficulty="easy">Choose Easy <small>Uses 1 game</small></button>
+          </article>
+          <article class="difficulty-row" data-difficulty-card="medium">
+            <div class="difficulty-level"><span>Medium</span><b>Expect counterplay</b></div>
+            <p>Gemini 3.5 Flash Lite · Qwen 3.7 Flash</p>
+            <button type="button" data-difficulty="medium">Choose Medium <small>Uses 1 game</small></button>
+          </article>
+          <article class="difficulty-row" data-difficulty-card="hard">
+            <div class="difficulty-level"><span>Hard</span><b>Face the benchmark leader</b></div>
+            <p>Gemini 3.7 Flash</p>
+            <button type="button" data-difficulty="hard">Choose Hard <small>Uses 1 game</small></button>
+          </article>
+        </div>
+        <div class="exhaustion-state" id="exhaustionState" hidden></div>
+        <div class="auth-error" id="homeError" role="alert" aria-live="assertive"></div>
+      </section>
+
+      <section class="public-screen matchup-screen" id="publicMatchup" data-public-screen="matchup" aria-labelledby="matchupTitle">
+        <div class="matchup-rails" aria-hidden="true"><span></span><i>VS</i><span></span></div>
+        <div class="public-kicker">Battle authorization confirmed</div>
+        <h1 id="matchupTitle">Your opponent: <span id="matchupOpponent">Unknown commander</span></h1>
+        <div class="matchup-tier" id="matchupDifficulty">—</div>
+        <p class="public-lede">Your daily game is now reserved. Leaving this screen does not restore it.</p>
+        <div class="matchup-actions">
+          <button type="button" class="matchup-enter" id="btnEnterBattle">Enter battle</button>
+          <button type="button" class="public-quiet" id="btnMatchupBack">Back to command</button>
+        </div>
+        <div class="auth-error" id="matchupError" role="alert" aria-live="assertive"></div>
+      </section>
+
+      <section class="public-screen" id="publicHistory" data-public-screen="history" aria-labelledby="historyTitle">
+        <div class="public-kicker">Private battle record</div>
+        <h1 id="historyTitle">My Battles</h1>
+        <div class="public-list" id="historyList" aria-live="polite"></div>
+        <div class="auth-error" id="historyError" role="alert"></div>
+        <div class="public-secondary"><button type="button" class="public-quiet" id="btnHistoryBack">Back</button></div>
+      </section>
+
+      <section class="public-screen" id="publicRanksPreview" data-public-screen="ranks" aria-labelledby="ranksPreviewTitle">
+        <div class="public-kicker">Global theatre</div>
+        <h1 id="ranksPreviewTitle">Leaderboard</h1>
+        <div class="public-tabs" role="tablist" aria-label="Leaderboard view">
+          <button type="button" role="tab" data-rank-tab="players" aria-selected="true" aria-current="page">Top Players</button>
+          <button type="button" role="tab" data-rank-tab="ai" aria-selected="false">AI Commanders</button>
+          <button type="button" role="tab" data-rank-tab="recent" aria-selected="false">Recent Battles</button>
+        </div>
+        <div class="public-filters" id="playerDifficultyFilters" aria-label="Difficulty filter">
+          <button type="button" data-rank-difficulty="easy" aria-pressed="true">Easy</button>
+          <button type="button" data-rank-difficulty="medium" aria-pressed="false">Medium</button>
+          <button type="button" data-rank-difficulty="hard" aria-pressed="false">Hard</button>
+        </div>
+        <div class="public-list public-rank-list" id="publicRankList" aria-live="polite"></div>
+        <div class="auth-error" id="ranksError" role="alert"></div>
+        <div class="public-secondary">
+          <button type="button" class="public-quiet" id="btnRanksBack">Back</button>
+        </div>
+      </section>
+
+      <div class="legacy-entry" aria-hidden="true">
+        <button id="btnBegin" type="button">Start battle</button>
+        <button id="btnPickModels" type="button">Choose models</button>
+        <button id="btnRanksOpen" type="button">Leaderboard</button>
+        <button id="btnRivalsOpen" type="button">Rivals</button>
+      </div>
+    </main>
   </div>
+  <!-- PUBLIC MARKUP END -->
 
   <div class="ovcard a" id="ovA"></div>
   <div class="ovcard b" id="ovB"></div>
@@ -578,7 +930,7 @@ body.split #nudge{display:none}
 <div id="sheet">
   <div id="grab"><span class="glabel">Thinking &amp; log</span></div>
   <div class="sheettabs">
-    <button class="on" data-s="feed">Thinking</button>
+    <button class="on" data-s="feed" aria-current="page">Thinking</button>
     <button data-s="log">Full log</button>
   </div>
   <div class="sheetbody">
@@ -597,70 +949,79 @@ body.split #nudge{display:none}
   </div>
 </div>
 
-<div id="rotate">
+<!-- PUBLIC MARKUP START -->
+<div id="rotate" role="dialog" aria-modal="true" aria-labelledby="rotateTitle">
   <svg width="76" height="76" viewBox="0 0 76 76" fill="none">
     <rect x="24" y="8" width="28" height="60" rx="5" stroke="#7b8692" stroke-width="2.5"/>
     <rect x="30" y="16" width="16" height="40" rx="2" fill="#1d2630"/>
     <circle cx="38" cy="62" r="2.4" fill="#7b8692"/>
   </svg>
-  <h3>Rotate your phone</h3>
+  <h3 id="rotateTitle" tabindex="-1">Rotate your phone</h3>
   <p>Breach is a wide battlefield — landscape gives you the whole lane with units big enough to actually see.</p>
   <button class="act primary" id="btnAnyway">Play in portrait anyway</button>
 </div>
+<!-- PUBLIC MARKUP END -->
+
+<!-- PUBLIC MARKUP START -->
+<div class="modal" id="mHowTo" role="dialog" aria-modal="true" aria-labelledby="howToHeading" aria-describedby="howToCopy">
+  <div class="mhead"><h3 id="howToHeading" tabindex="-1">Field briefing</h3>
+    <button class="act" id="btnHowToClose" data-close="mHowTo" aria-label="Close How to Play">Close</button></div>
+  <div class="mbody howbody">
+    <section class="howcard" aria-live="polite">
+      <div class="howeyebrow">How to play · field briefing</div>
+      <h2 class="disp howtitle" id="howToBeat"></h2>
+      <p class="howcopy" id="howToCopy"></p>
+      <div class="howmap" id="howToMap" aria-label="Five-step battle plan"></div>
+      <div class="howfoot">
+        <span class="howprogress" id="howToProgress"></span>
+        <button class="act howback" id="btnHowToBack" aria-label="Previous briefing step">Back</button>
+        <button class="act" id="btnHowToSkip">Skip briefing</button>
+        <button class="act primary" id="btnHowToNext">Next</button>
+      </div>
+    </section>
+  </div>
+</div>
+<!-- PUBLIC MARKUP END -->
 
 <div class="modal" id="mSetup">
-  <div class="mhead"><h3>Setup</h3>
-    <button class="act primary" id="btnSetupStart">Start match</button>
+  <div class="mhead"><h3>Benchmark Lab</h3>
+    <button class="act primary" id="btnSetupStart">Authorize benchmark</button>
     <button class="act" data-close="mSetup">Done</button></div>
   <div class="mbody">
+    <div class="warnbox">Owner workspace · benchmark games use server-authorized model access and do not consume daily games or enter the public Human-vs-AI leaderboard.</div>
     <div class="grp"><h3>Commanders</h3>
       <div class="crow"><span class="cw2" style="color:var(--A)">Vulcan</span>
-        <select id="kindA"><option value="llm">OpenRouter</option><option value="human">You (fair mode)</option><option value="script" hidden>Scripted</option><option value="mock" hidden>Mock LLM</option></select></div>
+        <select id="kindA"><option value="server">Model</option><option value="human">You (fair mode)</option></select></div>
       <div class="crow" style="margin-top:7px"><button class="act modelbtn" id="modelA" data-side="0">Choose model</button></div>
       <div class="crow" style="margin-top:7px"><input type="text" id="customA" placeholder="or paste any model id" style="width:100%"></div>
       <div class="crow" style="margin-top:12px"><span class="cw2" style="color:var(--B)">Cobalt</span>
-        <select id="kindB"><option value="llm">OpenRouter</option><option value="human">You (fair mode)</option><option value="script" hidden>Scripted</option><option value="mock" hidden>Mock LLM</option></select></div>
+        <select id="kindB"><option value="server">Model</option><option value="human">You (fair mode)</option></select></div>
       <div class="crow" style="margin-top:7px"><button class="act modelbtn" id="modelB" data-side="1">Choose model</button></div>
       <div class="crow" style="margin-top:7px"><input type="text" id="customB" placeholder="or paste any model id" style="width:100%"></div>
+      <label class="chk"><input type="checkbox" id="labSideSwap"> Swap sides on start</label>
     </div>
-    <div class="grp"><h3>OpenRouter key</h3>
-      <input type="password" id="apikey" placeholder="sk-or-…" style="width:100%" autocomplete="off">
-      <label class="chk"><input type="checkbox" id="remember"> Remember on this device</label>
-      <div class="crow" style="margin-top:9px"><button class="act" id="btnTest">Test</button>
-        <button class="act" id="btnModels">Load live models</button></div>
-      <div id="modelsout" class="tout"></div>
-      <div id="testout" class="tout">Not tested.</div>
-      <div class="warnbox">Your key goes only to OpenRouter, direct from your browser — this page has no server.
-        Unchecked, it is held in memory and gone when you close the tab. Checked, it is stored in this
-        browser's localStorage so you don't retype it on mobile.</div>
-    </div>
-    <div class="grp"><h3>Results server</h3>
-      <div class="tout" style="margin-top:0">Every finished match uploads automatically —
-        no setup on any device. Leave these blank unless you are self-hosting.</div>
-      <input type="text" id="apiBase" placeholder="https://breach-api.skdev.one (default)" style="width:100%;margin-top:8px">
-      <input type="password" id="apiTok" placeholder="write token (only if your server requires one)" style="width:100%;margin-top:7px" autocomplete="off">
-      <div class="crow" style="margin-top:9px"><button class="act" id="btnApiTest">Test</button>
-        <button class="act" id="btnApiPushAll">Upload local history</button></div>
-      <div id="apiOut" class="tout">Using the default server.</div>
-      <div class="warnbox">History follows you across devices because matches live on the server,
-        not in one browser. Reads and writes are both open — a match is only recorded when a real
-        model played it, which needs your own API key, so there is nothing worth locking.</div>
-    </div>
-
-    <div class="grp"><h3>Mock LLM (free testing)</h3>
+    <div class="grp"><h3>Mock commander</h3>
+      <label class="chk"><input type="checkbox" id="labMockDiagnostic"> Local diagnostic — not recorded</label>
       <div class="crow"><label class="inline">Latency ms</label><input type="number" id="mLo" value="900" style="width:76px">
         <label class="inline">to</label><input type="number" id="mHi" value="5000" style="width:76px"></div>
       <div class="crow" style="margin-top:7px"><label class="inline">Fail %</label><input type="number" id="mFail" value="6" style="width:64px">
         <label class="inline">Malformed %</label><input type="number" id="mBad" value="10" style="width:64px"></div>
-      <div class="tout">Mock plays the scripted commander but with real latency, dropped calls and invalid
-        output, so you can prove the plumbing before spending anything.</div>
+      <div class="tout">Mock plays the scripted commander with real latency, dropped calls and invalid output.
+        Local diagnostics use Mock vs Mock, make no server request, consume no daily game, and never appear in history or leaderboards.</div>
     </div>
     <div class="grp"><h3>Session</h3><div id="stats" class="tout">No calls yet.</div>
+      <div class="setrow"><label class="inline" for="seed">Seed</label><input type="number" id="seed" value="42" style="width:88px">
+        <button class="act" id="btnReset">Reset</button><button class="act" id="btnExport">Save log</button></div>
+      <label class="chk"><input type="checkbox" id="labels" checked> Show unit type badges</label>
+      <label class="chk"><input type="checkbox" id="lowfx"> Reduce effects</label>
+      <label class="chk"><input type="checkbox" id="memory" checked> Conversation memory</label>
+      <div class="tout">Prompt v8 · server-authorized decisions · detailed reasoning, latency, errors, usage, and side diagnostics remain in the battle log.</div>
       <div class="warnbox">A full game is about <b>90 calls</b> ≈ 83k input / 7k output tokens.
         On GPT-OSS 120B that is roughly <b>half a cent per game</b>; on Gemini 3.7 Flash about
         <b>4.5 cents</b>.<br><br>
         The <b>:free</b> routes are capped at 20/min and 50/day with no credits — not enough to finish
         one match, which is why Test returns 429. Paid routes have no daily cap.</div></div>
+    <div class="auth-error" id="labError" role="alert" aria-live="assertive"></div>
   </div>
 </div>
 
@@ -719,11 +1080,6 @@ body.split #nudge{display:none}
       <b>Economy</b> costs <span id="ecoCostTxt">45</span> (price rises each time) and adds +0.5 to base income, up to three times. Income also escalates on its own — it roughly
       doubles by the one-minute mark and keeps climbing, so no stalemate holds.
     </div>
-    <div class="setrow"><label class="inline" for="seed">Seed</label><input type="number" id="seed" value="42" style="width:88px">
-      <button class="act" id="btnReset">Reset</button><button class="act" id="btnExport">Save log</button></div>
-    <label class="chk"><input type="checkbox" id="labels" checked> Show unit type badges (I / G / R / A / T)</label>
-    <label class="chk"><input type="checkbox" id="lowfx"> Reduce effects (helps older phones)</label>
-    <label class="chk"><input type="checkbox" id="memory" checked> Conversation memory — models remember their own turns (prompt-cached, low cost)</label>
   </div>
 </div>
 
@@ -806,14 +1162,14 @@ function shortName(id){
 }
 function commanderLabel(s){
   const c=CMD[s];
-  return c.kind==='script'?'scripted (no model calls)':c.kind==='human'?'you, fair mode — same 4s cadence as the model':c.kind==='mock'?'mock (no model calls)':c.model;
+  return c.kind==='script'?'scripted (no model calls)':c.kind==='human'?'you, fair mode — same 4s cadence as the model':c.kind==='mock'?'mock diagnostic (not recorded)':c.model;
 }
 function paintWho(){
   const w=document.getElementById('whobar'); if(!w) return;
-  const live=CMD.filter(c=>c.kind==='llm').length;
+  const live=CMD.filter(c=>c.kind==='server').length;
   w.className='whobar'+(live<2?' warn':'');
   w.innerHTML=[0,1].map(s=>`<span style="color:${SIDE[s].col}">${SIDE[s].name}</span>: ${commanderLabel(s)}`).join('<br>')
-    + (live<2?'<br><b>Set both commanders to OpenRouter in Setup to run real models.</b>':'');
+    + (live<2&&CMD.some(c=>c.kind==='mock')?'<br><b>Local diagnostic · no server game · not recorded.</b>':'');
 }
 function refreshNames(){
   [0,1].forEach(s=>{
@@ -1139,7 +1495,795 @@ function baseAgent(St,s){
    so sim time and wall time are fully decoupled and a slow
    model is never punished for being slow.
    ------------------------------------------------------------ */
+/* PUBLIC APP TEST SLICE START */
+const PUBLIC_API='https://breach-api.skdev.one';
+const PUB={identity:null,allowance:null,difficulties:null,game:null,difficulty:null,view:'boot',busy:false,generation:0};
+const GUEST_TOKEN_STATE={value:'',decided:false,tombstone:false,version:0};
+const PUBLIC_REQUESTS=new Set();
+
+function guestToken(){
+  if(!GUEST_TOKEN_STATE.decided){
+    GUEST_TOKEN_STATE.decided=true;
+    try{GUEST_TOKEN_STATE.value=localStorage.getItem('breach.guestToken')||'';}
+    catch(error){GUEST_TOKEN_STATE.value='';}
+  }
+  return GUEST_TOKEN_STATE.tombstone?'':GUEST_TOKEN_STATE.value;
+}
+function guestTokenSet(token){
+  GUEST_TOKEN_STATE.value=String(token||'');
+  GUEST_TOKEN_STATE.decided=true;
+  GUEST_TOKEN_STATE.tombstone=false;
+  GUEST_TOKEN_STATE.version++;
+  try{localStorage.setItem('breach.guestToken',GUEST_TOKEN_STATE.value);}catch(error){}
+  return GUEST_TOKEN_STATE.value;
+}
+function guestTokenClear(){
+  GUEST_TOKEN_STATE.value='';
+  GUEST_TOKEN_STATE.decided=true;
+  GUEST_TOKEN_STATE.tombstone=true;
+  GUEST_TOKEN_STATE.version++;
+  try{localStorage.removeItem('breach.guestToken');}catch(error){}
+}
+function invalidatePublicGeneration(){
+  PUB.generation++;
+  PUBLIC_REQUESTS.forEach(controller=>controller.abort());
+  PUBLIC_REQUESTS.clear();
+  return PUB.generation;
+}
+function dossierKey(identity,model){
+  return `breach.dossier.${identity.kind}.${identity.id}.${model}`;
+}
+function setIdentity(identity){
+  const next=identity?{...identity}:null;
+  const currentKey=PUB.identity?`${PUB.identity.kind}:${PUB.identity.id}`:'';
+  const nextKey=next?`${next.kind}:${next.id}`:'';
+  if(currentKey!==nextKey)invalidatePublicGeneration();
+  PUB.identity=next;
+  return PUB.identity;
+}
+function setAllowance(allowance){
+  PUB.allowance=allowance?{...allowance}:null;
+  return PUB.allowance;
+}
+function quotaView(allowance,nowMs){
+  return {
+    remaining:allowance.remaining,
+    seconds:Math.max(0,Math.ceil((Date.parse(allowance.resetsAt)-nowMs)/1000))
+  };
+}
+function formatCountdown(seconds){
+  const value=Math.max(0,Math.floor(Number(seconds)||0));
+  const pad=n=>String(n).padStart(2,'0');
+  return `${pad(Math.floor(value/3600))}:${pad(Math.floor(value%3600/60))}:${pad(value%60)}`;
+}
+function countdownRefreshDue(allowance,nowMs,refreshedAt){
+  return quotaView(allowance,nowMs).seconds===0&&refreshedAt!==allowance.resetsAt;
+}
+function difficultyAccess(identity,difficulty){
+  return difficulty!=='hard'||!!(identity&&identity.kind==='user');
+}
+function canOpenLab(identity){
+  return !!(identity&&identity.kind==='user'&&identity.isAdmin===true);
+}
+function benchmarkRequest(config){
+  return {
+    modelA:config.modelA,modelB:config.modelB,humanSide:config.humanSide,
+    seed:config.seed,memory:config.memory,sideSwap:config.sideSwap
+  };
+}
+function benchmarkCommanders(game){
+  return [game.modelA,game.modelB].map((model,side)=>({
+    kind:game.humanSide===side?'human':'server',model
+  }));
+}
+function benchmarkHumanSide(kindA,kindB){
+  if(kindA==='human'&&kindB==='human'){
+    const code='invalid_request';
+    throw Object.assign(new Error('Choose one human seat at most.'),{code,status:422,data:{code}});
+  }
+  return kindA==='human'?0:kindB==='human'?1:null;
+}
+function benchmarkActionLabel(localDiagnostic){
+  return localDiagnostic?'Run local diagnostic':'Authorize benchmark';
+}
+function difficultyButtonDisabled(identity,allowance,difficulty,busy){
+  const locked=!difficultyAccess(identity,difficulty);
+  const exhausted=!!(allowance&&allowance.remaining===0);
+  return !!busy||(!locked&&exhausted);
+}
+function exhaustionAction(identity){
+  return identity&&identity.kind==='user'?'pro_coming_soon':'create_account';
+}
+function battleViewForServer(St,s,turn,dossier){
+  const body={...buildBattleView(St,s),turn,side:s};
+  if(dossier)body.dossier={
+    ...(dossier.model?{model:dossier.model}:{}),...(dossier.name?{name:dossier.name}:{}),
+    games:Number.isInteger(dossier.games)?dossier.games:0,
+    modelWins:Number.isInteger(dossier.modelWins)?dossier.modelWins:0,
+    humanWins:Number.isInteger(dossier.humanWins)?dossier.humanWins:0,
+    read:String(dossier.read||'').slice(0,600),plan:String(dossier.plan||'').slice(0,600)
+  };
+  return body;
+}
+function publicCommanders(game){
+  const human={kind:'human',model:'human'};
+  const server={kind:'server',model:game.opponent.id};
+  return game.humanSide===0?[human,server]:[server,human];
+}
+function serverDecisionState(response,fallbackQueue,fallbackStance){
+  const autoPlayed=response.autoPlayed===true;
+  const providerCode=response.providerCode||null;
+  return {
+    queue:autoPlayed?[...fallbackQueue]:[...(response.queue||[])],
+    stance:autoPlayed?(response.stance||fallbackStance||null):(response.stance||null),
+    why:String(response.why||''),autoPlayed,
+    timedOut:autoPlayed&&providerCode==='timeout',failed:autoPlayed,
+    strike:autoPlayed&&providerCode!=='timeout'?'increment':'reset',providerCode
+  };
+}
+function completionOutcome(response,errorCode){
+  if(response&&Number.isInteger(response.id))return {status:'saved',matchId:response.id};
+  return {status:'local_only',message:'Battle complete. This result could not join your online history.'};
+}
+function titleCaseDifficulty(value){
+  const text=String(value||'');return text?text[0].toUpperCase()+text.slice(1):'';
+}
+function recentBattleText(battle){
+  const tier=titleCaseDifficulty(battle.difficulty);
+  if(battle.result==='win')return `${battle.player} defeated ${battle.opponent} · ${tier}`;
+  if(battle.result==='loss')return `${battle.opponent} defeated ${battle.player} · ${tier}`;
+  return `${battle.player} drew with ${battle.opponent} · ${tier}`;
+}
+function relativeBattleTime(playedAt,nowMs){
+  const then=Date.parse(playedAt),now=Number.isFinite(nowMs)?nowMs:Date.now();
+  if(!Number.isFinite(then))return '';
+  const seconds=Math.max(0,Math.floor((now-then)/1000));
+  if(seconds<60)return 'just now';
+  if(seconds<3600)return `${Math.floor(seconds/60)}m ago`;
+  if(seconds<86400)return `${Math.floor(seconds/3600)}h ago`;
+  return `${Math.floor(seconds/86400)}d ago`;
+}
+function writePublicName(target,value){target.textContent=String(value||'');return target;}
+function publicHistoryRow(row){
+  return {id:row.id,opponent:row.opponent,difficulty:row.difficulty,result:row.result,
+    playedAt:row.playedAt,remainingBaseHp:row.remainingBaseHp};
+}
+function publicPlayerRow(row){
+  return {rank:row.rank,displayName:row.displayName,wins:row.wins,losses:row.losses,winRate:row.winRate};
+}
+function publicAiRow(row){
+  return {name:row.name,difficulty:row.difficulty,matches:row.matches,wins:row.wins,winRate:row.winRate};
+}
+function resultCardState(game,winner,baseHP,allowance){
+  const humanSide=game.humanSide,result=winner===null?'Draw':winner===humanSide?'Victory':'Defeat';
+  return {result,opponent:game.opponent.name,difficulty:titleCaseDifficulty(game.difficulty),
+    remainingBaseHp:Math.max(0,Math.round(baseHP[humanSide]||0)),gamesRemaining:allowance.remaining,
+    resetsAt:allowance.resetsAt,rematchLabel:'Rematch (uses 1 game)'};
+}
+function publicMessage(code){
+  return ({
+    quota_exhausted:'You have used today\'s free games.',
+    tier_unavailable:'That AI commander is temporarily unavailable. Your game was refunded.',
+    difficulty_requires_account:'Create an account to unlock Hard.',
+    invalid_credentials:'That email or password did not match.',
+    invalid_request:'Check the highlighted details and try again.',
+    active_session_exists:'You already have a battle in progress.',
+    authentication_required:'Your session expired. Sign in or continue as a guest.',
+    session_required:'Your session expired. Sign in or continue as a guest.',
+    session_expired:'Your battle session expired. Choose a difficulty to start again.',
+    admin_required:'This command requires Benchmark Lab access.',
+    try_again_later:'Too many attempts. Wait a moment and try again.'
+  })[code]||'Something interrupted the connection. Please try again.';
+}
+function expirePublicSession(){
+  const guestWasCurrent=PUB.identity&&PUB.identity.kind==='guest';
+  if(guestWasCurrent)guestTokenClear();
+  invalidatePublicGeneration();
+  PUB.identity=null;
+  PUB.allowance=null;
+  PUB.difficulties=null;
+  PUB.game=null;
+  PUB.difficulty=null;
+  PUB.view='identity';
+}
+async function apiRequest(path,{method='GET',body,headers={},authScope='establish',signal}={}){
+  const token=guestToken();
+  let response;
+  try{
+    response=await fetch(PUBLIC_API+path,{
+      method,
+      credentials:'include',
+      headers:{
+        ...(body?{'Content-Type':'application/json'}:{}),
+        ...(token?{'X-Breach-Guest':token}:{}),
+        ...headers
+      },
+      body:body?JSON.stringify(body):undefined,
+      ...(signal?{signal}:{})
+    });
+  }catch(error){
+    const code='connection_error';
+    throw Object.assign(new Error(publicMessage(code)),{code,status:0,data:{code}});
+  }
+  const data=await response.json().catch(()=>({code:'connection_error'}));
+  if(!response.ok){
+    let code=data&&typeof data.code==='string'?data.code:'connection_error';
+    if(response.status===401&&authScope==='session'){
+      expirePublicSession();
+      code='authentication_required';
+    }
+    throw Object.assign(new Error(publicMessage(code)),{code,status:response.status,data});
+  }
+  return data;
+}
+async function requestPublicDecision(game,body){
+  return apiRequest(`/v1/games/${encodeURIComponent(game.gameId)}/decisions`,{
+    method:'POST',body,authScope:'session'
+  });
+}
+async function completePublicGame(game,payload){
+  return apiRequest(`/v1/games/${encodeURIComponent(game.gameId)}/complete`,{
+    method:'POST',body:payload,authScope:'completion'
+  });
+}
+function acceptPublicSession(data){
+  setIdentity(data.identity);
+  setAllowance(data.allowance);
+  PUB.view='home';
+  return {view:'home',identity:PUB.identity,allowance:PUB.allowance};
+}
+async function bootPublicApp(){
+  try{
+    return acceptPublicSession(await apiRequest('/v1/me',{authScope:'boot'}));
+  }catch(error){
+    if(error.status!==401)throw error;
+    setIdentity(null);
+    setAllowance(null);
+    PUB.view='identity';
+    return {view:'identity'};
+  }
+}
+async function submitGuest(displayName){
+  const data=await apiRequest('/v1/guests',{method:'POST',body:{displayName}});
+  guestTokenSet(data.guestToken);
+  return acceptPublicSession(data);
+}
+async function submitSignup({displayName,email,password}){
+  const data=await apiRequest('/v1/auth/signup',{
+    method:'POST',body:{displayName,email,password}
+  });
+  return acceptPublicSession(data);
+}
+async function submitLogin({email,password}){
+  const data=await apiRequest('/v1/auth/login',{method:'POST',body:{email,password}});
+  return acceptPublicSession(data);
+}
+async function logout(){
+  expirePublicSession();
+  let notice='';
+  try{await apiRequest('/v1/auth/logout',{method:'POST'});}catch(error){
+    if(error.status!==401)notice='You are signed out here. The connection could not confirm it.';
+  }
+  return {view:'identity',notice};
+}
+async function loadDifficulties(){
+  const data=await apiRequest('/v1/difficulties',{authScope:'session'});
+  PUB.difficulties=Array.isArray(data.difficulties)?data.difficulties.map(item=>({...item})):[];
+  return PUB.difficulties;
+}
+async function refreshPublicSession(){
+  const generation=PUB.generation;
+  const data=await apiRequest('/v1/me',{authScope:'session'});
+  if(generation!==PUB.generation)return {view:'stale'};
+  setIdentity(data.identity);
+  setAllowance(data.allowance);
+  return {view:'home',identity:PUB.identity,allowance:PUB.allowance};
+}
+async function startDifficulty(difficulty){
+  if(!difficultyAccess(PUB.identity,difficulty)){
+    return {view:'signup',code:'difficulty_requires_account'};
+  }
+  const generation=PUB.generation;
+  const controller=new AbortController();
+  PUBLIC_REQUESTS.add(controller);
+  try{
+    const data=await apiRequest('/v1/games',{
+      method:'POST',body:{difficulty},authScope:'session',signal:controller.signal
+    });
+    if(generation!==PUB.generation||controller.signal.aborted)return {view:'stale'};
+    PUB.difficulty=data.difficulty;
+    PUB.game={...data};
+    setAllowance({remaining:data.gamesRemaining,resetsAt:data.resetsAt});
+    PUB.view='matchup';
+    return {view:'matchup',game:PUB.game};
+  }catch(error){
+    if(error.code==='authentication_required')throw error;
+    if(generation!==PUB.generation||controller.signal.aborted)return {view:'stale'};
+    if(error.code==='tier_unavailable'&&error.data&&Number.isInteger(error.data.gamesRemaining)){
+      setAllowance({remaining:error.data.gamesRemaining,resetsAt:error.data.resetsAt});
+    }
+    PUB.game=null;
+    throw error;
+  }finally{
+    PUBLIC_REQUESTS.delete(controller);
+  }
+}
+async function startBenchmark(config){
+  if(!canOpenLab(PUB.identity)){
+    const code='admin_required';
+    throw Object.assign(new Error(publicMessage(code)),{code,status:403,data:{code}});
+  }
+  const generation=PUB.generation;
+  const game=await apiRequest('/v1/admin/games',{
+    method:'POST',body:benchmarkRequest(config),authScope:'session'
+  });
+  if(generation!==PUB.generation||!canOpenLab(PUB.identity))return {view:'stale'};
+  PUB.game={...game};
+  return PUB.game;
+}
+function startMockDiagnostic(config){
+  if(!canOpenLab(PUB.identity)){
+    const code='admin_required';
+    throw Object.assign(new Error(publicMessage(code)),{code,status:403,data:{code}});
+  }
+  PUB.game=null;
+  return {mode:'local_diagnostic',seed:config.seed,recorded:false,
+    commanders:[{kind:'mock',model:''},{kind:'mock',model:''}]};
+}
+/* PUBLIC APP TEST SLICE END */
+/* PUBLIC DOM TEST SLICE START */
+function setPublicBusy(busy){
+  PUB.busy=!!busy;
+  document.querySelectorAll('.public-shell button').forEach(button=>button.disabled=PUB.busy);
+}
+function setPublicHidden(element,hidden){
+  element.hidden=!!hidden;element.style.display=hidden?'none':'';
+}
+function syncBenchmarkLabAccess(){
+  const allowed=canOpenLab(PUB.identity);
+  ['btnBenchmarkLab','btnSetupOpen','btnSetupOpen2'].forEach(id=>{
+    const button=document.getElementById(id);
+    if(button)button.hidden=!allowed;
+  });
+  return allowed;
+}
+/* PUBLIC DOM TEST SLICE END */
+function showPublicView(view){
+  PUB.view=view;
+  document.querySelectorAll('[data-public-screen]').forEach(screen=>{
+    screen.classList.toggle('on',screen.dataset.publicScreen===view);
+  });
+  if(view==='home'&&PUB.identity){
+    document.getElementById('publicName').textContent=PUB.identity.displayName;
+  }
+  const menuButton=document.getElementById('btnPublicMenu');
+  menuButton.hidden=view!=='home';
+  syncBenchmarkLabAccess();
+  if(view!=='home')closePublicMenu();
+  if(view==='home'){
+    renderHome();
+    startResetCountdown();
+  }else if(RESET_TIMER){
+    clearInterval(RESET_TIMER);RESET_TIMER=null;
+  }
+  document.getElementById('title').scrollTop=0;
+}
+function closePublicMenu(){
+  const menu=document.getElementById('publicMenu'),button=document.getElementById('btnPublicMenu');
+  menu.hidden=true;button.setAttribute('aria-expanded','false');
+}
+function openAuthPanel(view){
+  document.querySelectorAll('[data-auth-panel]').forEach(panel=>{
+    panel.classList.toggle('on',panel.dataset.authPanel===view);
+  });
+  document.querySelectorAll('[data-auth-view]').forEach(button=>{
+    button.setAttribute('aria-pressed',String(button.dataset.authView===view));
+  });
+  const panel=document.querySelector(`[data-auth-panel="${view}"]`);
+  if(panel){
+    const first=panel.querySelector('input');
+    if(first)setTimeout(()=>first.focus(),0);
+  }
+}
+function setAuthError(id,message){
+  document.getElementById(id).textContent=message||'';
+}
+function showBootRetry(message){
+  setAuthError('bootError',message);
+  document.getElementById('btnBootRetry').hidden=false;
+}
+function stopResetCountdown(){
+  if(RESET_TIMER){clearInterval(RESET_TIMER);RESET_TIMER=null;}
+}
+function showSessionExpiredUI(error){
+  if(!error||error.code!=='authentication_required')return false;
+  stopResetCountdown();
+  setPublicBusy(false);
+  setAuthError('homeError','');
+  setAuthError('identityError',error.message);
+  showPublicView('identity');
+  return true;
+}
+function renderPublicIdentityHome(){
+  if(!PUB.identity)return;
+  document.getElementById('publicName').textContent=PUB.identity.displayName;
+  renderHome();
+  window.breachPublicHooks?.onPublicIdentityResolved(PUB.identity);
+}
+async function bootPublicUI(){
+  showPublicView('boot');
+  document.getElementById('btnBootRetry').hidden=true;
+  setAuthError('bootError','');
+  setAuthError('identityError','');
+  try{
+    const result=await bootPublicApp();
+    if(result.view==='home'){
+      try{await loadDifficulties();}catch(error){
+        if(showSessionExpiredUI(error))return;
+      }
+      renderPublicIdentityHome();
+    }
+    showPublicView(result.view);
+  }catch(error){
+    showBootRetry(error.message);
+  }
+}
+async function runAuthAction(errorId,passwordInput,action){
+  setAuthError(errorId,'');
+  setAuthError('identityError','');
+  setPublicBusy(true);
+  try{
+    const result=await action();
+    if(passwordInput)passwordInput.value='';
+    try{await loadDifficulties();}catch(error){
+      if(showSessionExpiredUI(error))return;
+    }
+    renderPublicIdentityHome();
+    showPublicView(result.view);
+  }catch(error){
+    if(passwordInput)passwordInput.value='';
+    setAuthError(errorId,error.message);
+  }finally{
+    setPublicBusy(false);
+    if(PUB.view==='home')renderHome();
+  }
+}
+
+const PUBLIC_DIFFICULTIES={
+  easy:{label:'Easy'},medium:{label:'Medium'},hard:{label:'Hard'}
+};
+let RESET_TIMER=null,RESET_REFRESHED_AT='';
+
+function renderExhaustion(){
+  const box=document.getElementById('exhaustionState');
+  box.replaceChildren();
+  if(!PUB.allowance||PUB.allowance.remaining>0){box.hidden=true;return;}
+  box.hidden=false;
+  const strong=document.createElement('strong');
+  const message=document.createElement('span');
+  if(exhaustionAction(PUB.identity)==='create_account'){
+    strong.textContent='Daily games used';
+    message.textContent='Create an account for 10 games a day';
+    const button=document.createElement('button');
+    button.type='button';button.className='public-quiet';button.textContent='Create account';
+    button.disabled=PUB.busy;
+    button.addEventListener('click',showSignupForHard);
+    box.append(strong,message,button);
+  }else{
+    strong.textContent='Breach Pro — coming soon';
+    message.textContent="You've used today's free games. More games are coming with Breach Pro.";
+    box.append(strong,message);
+  }
+}
+function renderHome(){
+  if(!PUB.identity)return;
+  document.getElementById('publicName').textContent=PUB.identity.displayName;
+  const allowance=PUB.allowance;
+  if(allowance){
+    const view=quotaView(allowance,Date.now());
+    const games=view.remaining===1?'1 game left':`${view.remaining} games left`;
+    document.getElementById('publicQuota').textContent=`${games} · Resets in ${formatCountdown(view.seconds)}`;
+  }
+  document.querySelectorAll('[data-difficulty-card]').forEach(card=>{
+    const difficulty=card.dataset.difficultyCard;
+    const button=card.querySelector('button[data-difficulty]');
+    const small=button.querySelector('small');
+    const locked=!difficultyAccess(PUB.identity,difficulty);
+    const exhausted=!!(allowance&&allowance.remaining===0);
+    card.classList.toggle('locked',locked);
+    card.classList.toggle('exhausted',exhausted&&!locked);
+    if(locked){
+      button.firstChild.nodeValue='Create an account to unlock Hard ';
+      small.textContent='Account required';
+      button.disabled=difficultyButtonDisabled(PUB.identity,allowance,difficulty,PUB.busy);
+    }else{
+      button.firstChild.nodeValue=`Choose ${PUBLIC_DIFFICULTIES[difficulty].label} `;
+      small.textContent='Uses 1 game';
+      button.disabled=difficultyButtonDisabled(PUB.identity,allowance,difficulty,PUB.busy);
+    }
+  });
+  renderExhaustion();
+}
+function startResetCountdown(){
+  stopResetCountdown();
+  const tick=async()=>{
+    if(!PUB.allowance)return;
+    renderHome();
+    if(!countdownRefreshDue(PUB.allowance,Date.now(),RESET_REFRESHED_AT))return;
+    RESET_REFRESHED_AT=PUB.allowance.resetsAt;
+    try{
+      const result=await refreshPublicSession();
+      if(result.view==='home')renderHome();
+    }catch(error){
+      if(!showSessionExpiredUI(error))setAuthError('homeError',error.message);
+    }
+  };
+  tick();
+  RESET_TIMER=setInterval(tick,1000);
+}
+function showSignupForHard(){
+  if(PUB.busy)return;
+  showPublicView('identity');
+  openAuthPanel('signup');
+}
+function showMatchup(game){
+  document.getElementById('matchupOpponent').textContent=game.opponent.name;
+  document.getElementById('matchupDifficulty').textContent=PUBLIC_DIFFICULTIES[game.difficulty].label;
+  setAuthError('matchupError','');
+  showPublicView('matchup');
+}
+function showGameStartError(error){
+  if(showSessionExpiredUI(error))return;
+  renderHome();
+  setAuthError('homeError',error.message);
+  showPublicView('home');
+}
+async function startDifficultyUI(difficulty){
+  if(PUB.busy)return;
+  if(!difficultyAccess(PUB.identity,difficulty)){showSignupForHard();return;}
+  setAuthError('homeError','');
+  setPublicBusy(true);renderHome();
+  try{
+    const result=await startDifficulty(difficulty);
+    if(result.view==='matchup')showMatchup(result.game);
+  }catch(error){showGameStartError(error);}
+  finally{setPublicBusy(false);if(PUB.view==='home')renderHome();}
+}
+
+function publicListEmpty(target,message){
+  target.replaceChildren();const empty=document.createElement('div');
+  empty.className='public-list-empty';empty.textContent=message;target.append(empty);
+}
+function publicListRow(primary,fields,{recent=false}={}){
+  const row=document.createElement('div');row.className='public-list-row'+(recent?' recent':'');
+  const name=document.createElement('strong');writePublicName(name,primary);row.append(name);
+  fields.forEach(({text,className})=>{const span=document.createElement('span');span.textContent=String(text);
+    if(className)span.className=className;row.append(span);});
+  return row;
+}
+async function loadHistoryUI(){
+  const list=document.getElementById('historyList');setAuthError('historyError','');
+  publicListEmpty(list,'Loading battles…');
+  try{
+    const data=await apiRequest('/v1/history?limit=50',{authScope:'session'}),rows=(data.battles||[]).map(publicHistoryRow);
+    list.replaceChildren();
+    if(!rows.length){publicListEmpty(list,'No battles yet. Choose a difficulty to enter the breach.');return;}
+    rows.forEach(row=>list.append(publicListRow(row.opponent,[
+      {text:titleCaseDifficulty(row.difficulty)},{text:titleCaseDifficulty(row.result),className:'outcome'},
+      {text:`${row.remainingBaseHp} base HP · ${new Date(row.playedAt).toLocaleString()}`}
+    ])));
+  }catch(error){
+    if(!showSessionExpiredUI(error)){
+      publicListEmpty(list,'Your battles could not be loaded.');setAuthError('historyError','Please try again.');
+    }
+  }
+}
+let PUBLIC_RANK_TAB='players',PUBLIC_RANK_DIFFICULTY='easy';
+function syncPublicRankControls(){
+  document.querySelectorAll('[data-rank-tab]').forEach(button=>{
+    const on=button.dataset.rankTab===PUBLIC_RANK_TAB;
+    button.setAttribute('aria-selected',String(on));button.toggleAttribute('aria-current',on);
+  });
+  document.querySelectorAll('[data-rank-difficulty]').forEach(button=>
+    button.setAttribute('aria-pressed',String(button.dataset.rankDifficulty===PUBLIC_RANK_DIFFICULTY)));
+  setPublicHidden(document.getElementById('playerDifficultyFilters'),PUBLIC_RANK_TAB!=='players');
+}
+async function loadPublicRanksUI(){
+  const list=document.getElementById('publicRankList');setAuthError('ranksError','');syncPublicRankControls();
+  publicListEmpty(list,'Loading standings…');
+  try{
+    let data,rows;
+    if(PUBLIC_RANK_TAB==='players'){
+      data=await apiRequest(`/v1/leaderboards/players?difficulty=${encodeURIComponent(PUBLIC_RANK_DIFFICULTY)}`);
+      rows=(data.players||[]).map(publicPlayerRow);list.replaceChildren();
+      rows.forEach(row=>list.append(publicListRow(`#${row.rank} ${row.displayName}`,[
+        {text:`${row.wins} wins`},{text:`${row.losses} losses`},{text:`${row.winRate}% win rate`,className:'outcome'}
+      ])));
+    }else if(PUBLIC_RANK_TAB==='ai'){
+      data=await apiRequest('/v1/leaderboards/models');rows=(data.models||[]).map(publicAiRow);list.replaceChildren();
+      rows.forEach(row=>list.append(publicListRow(row.name,[
+        {text:titleCaseDifficulty(row.difficulty)},{text:`${row.matches} battles`},{text:`${row.wins} wins · ${row.winRate}%`,className:'outcome'}
+      ])));
+    }else{
+      data=await apiRequest('/v1/leaderboards/recent?limit=30');rows=data.battles||[];list.replaceChildren();
+      rows.forEach(row=>list.append(publicListRow(recentBattleText(row),[
+        {text:relativeBattleTime(row.playedAt,Date.now())}
+      ],{recent:true})));
+    }
+    if(!rows.length)publicListEmpty(list,'No battles yet. Choose a difficulty to enter the breach.');
+  }catch(error){
+    publicListEmpty(list,'Standings could not be loaded.');setAuthError('ranksError','Please try again.');
+  }
+}
+
+document.querySelectorAll('[data-auth-view]').forEach(button=>{
+  button.addEventListener('click',()=>{if(!PUB.busy)openAuthPanel(button.dataset.authView);});
+});
+document.getElementById('guestForm').addEventListener('submit',event=>{
+  event.preventDefault();
+  if(PUB.busy)return;
+  const form=event.currentTarget;
+  runAuthAction('guestError',null,()=>submitGuest(form.elements.displayName.value.trim()));
+});
+document.getElementById('signupForm').addEventListener('submit',event=>{
+  event.preventDefault();
+  if(PUB.busy)return;
+  const form=event.currentTarget;
+  runAuthAction('signupError',form.elements.password,()=>submitSignup({
+    displayName:form.elements.displayName.value.trim(),
+    email:form.elements.email.value.trim(),
+    password:form.elements.password.value
+  }));
+});
+document.getElementById('loginForm').addEventListener('submit',event=>{
+  event.preventDefault();
+  if(PUB.busy)return;
+  const form=event.currentTarget;
+  runAuthAction('loginError',form.elements.password,()=>submitLogin({
+    email:form.elements.email.value.trim(),password:form.elements.password.value
+  }));
+});
+document.getElementById('btnPublicLogout').addEventListener('click',async()=>{
+  if(PUB.busy)return;
+  setAuthError('homeError','');
+  setPublicBusy(true);
+  const pendingLogout=logout();
+  /* logout() clears local session state synchronously before its first await.
+     Move the visible shell at that same boundary; revoke confirmation may lag. */
+  showPublicView('identity');
+  setPublicBusy(false);
+  try{
+    const result=await pendingLogout;
+    setAuthError('identityError',result.notice);
+  }catch(error){
+    showPublicView('identity');
+    setAuthError('identityError',publicMessage('connection_error'));
+  }
+  finally{setPublicBusy(false);}
+});
+document.getElementById('btnBootRetry').addEventListener('click',()=>{if(!PUB.busy)bootPublicUI();});
+document.getElementById('btnPublicRanks').addEventListener('click',()=>{if(!PUB.busy){showPublicView('ranks');loadPublicRanksUI();}});
+document.getElementById('btnRanksBack').addEventListener('click',()=>{if(!PUB.busy)showPublicView(PUB.identity?'home':'identity');});
+document.getElementById('btnHomeRanks').addEventListener('click',()=>{if(!PUB.busy){showPublicView('ranks');loadPublicRanksUI();}});
+document.getElementById('btnHomeHistory').addEventListener('click',()=>{if(!PUB.busy){showPublicView('history');loadHistoryUI();}});
+document.getElementById('btnHistoryBack').addEventListener('click',()=>{if(!PUB.busy)showPublicView('home');});
+document.querySelectorAll('[data-rank-tab]').forEach(button=>button.addEventListener('click',()=>{
+  if(PUB.busy)return;PUBLIC_RANK_TAB=button.dataset.rankTab;loadPublicRanksUI();
+}));
+document.querySelectorAll('[data-rank-difficulty]').forEach(button=>button.addEventListener('click',()=>{
+  if(PUB.busy)return;PUBLIC_RANK_DIFFICULTY=button.dataset.rankDifficulty;loadPublicRanksUI();
+}));
+document.getElementById('btnPublicMenu').addEventListener('click',event=>{
+  if(PUB.busy)return;
+  const menu=document.getElementById('publicMenu'),open=menu.hidden;
+  menu.hidden=!open;event.currentTarget.setAttribute('aria-expanded',String(open));
+});
+document.querySelectorAll('button[data-difficulty]').forEach(button=>{
+  button.addEventListener('click',()=>startDifficultyUI(button.dataset.difficulty));
+});
+document.getElementById('btnMatchupBack').addEventListener('click',()=>{if(!PUB.busy)showPublicView('home');});
+document.getElementById('btnEnterBattle').addEventListener('click',()=>{
+  if(PUB.busy)return;
+  if(!PUB.game){setAuthError('matchupError',publicMessage('session_expired'));return;}
+  if(Date.parse(PUB.game.expiresAt)<=Date.now()){
+    setAuthError('matchupError',publicMessage('session_expired'));return;
+  }
+  applyPublicCommanders(PUB.game);
+  goLive();
+});
+
+
 const CMD=[{kind:'script',model:''},{kind:'script',model:''}];
+let NEXT_TURN=[0,0];
+let PUBLIC_COMPLETION={state:'idle',payload:null,response:null};
+const BENCHMARK_END_GAME=endGame;
+function isPublicBattle(){return !!(PUB.game&&CMD.some(c=>c.kind==='server'));}
+function publicDossierGet(model){
+  if(!PUB.identity)return null;
+  try{const value=localStorage.getItem(dossierKey(PUB.identity,model));return value?JSON.parse(value):null;}
+  catch(error){return null;}
+}
+function publicDossierSave(model,value){
+  if(!PUB.identity)return;
+  try{localStorage.setItem(dossierKey(PUB.identity,model),JSON.stringify(value));}catch(error){}
+}
+function renderPublicResultCard(message){
+  if(!isPublicBattle())return;
+  const state=resultCardState(PUB.game,S.win,S.hp,PUB.allowance||{remaining:0,resetsAt:''});
+  const title=document.getElementById('bannerTxt'),meta=document.getElementById('publicResultMeta');
+  title.textContent=state.result;
+  title.style.color=state.result==='Victory'?'#74ab7c':state.result==='Defeat'?'#ef9b7e':'#fff';
+  meta.hidden=false;
+  meta.textContent=`${state.opponent} · ${state.difficulty} · ${state.remainingBaseHp} base HP · ${state.gamesRemaining} games left`;
+  const status=document.getElementById('publicResultStatus');
+  status.hidden=false;status.textContent=message||'';
+  document.getElementById('publicResultActions').hidden=false;
+  document.getElementById('btnPublicRematch').disabled=PUBLIC_COMPLETION.state!=='saved';
+  document.getElementById('btnCompletionRetry').hidden=PUBLIC_COMPLETION.state!=='failed';
+}
+function applyCompletionReflections(response){
+  if(response&&response.dossierUpdate)publicDossierSave(response.dossierUpdate.model,response.dossierUpdate);
+  if(response&&response.debrief&&PUB.game)DEBRIEF[1-PUB.game.humanSide]=response.debrief;
+}
+async function finishPublicGame(){
+  if(!PUB.game||PUBLIC_COMPLETION.state==='pending'||PUBLIC_COMPLETION.state==='saved')return;
+  const payload=PUBLIC_COMPLETION.payload||matchPayload();
+  PUBLIC_COMPLETION={state:'pending',payload,response:null};renderPublicResultCard('Saving battle…');
+  try{
+    const response=await completePublicGame(PUB.game,payload);
+    PUBLIC_COMPLETION={state:'saved',payload,response};applyCompletionReflections(response);
+    renderPublicResultCard('Battle added to My Battles.');
+  }catch(error){
+    PUBLIC_COMPLETION={state:'failed',payload,response:null};
+    renderPublicResultCard(completionOutcome(null,error.code).message);
+  }
+}
+endGame=function(){
+  if(!isPublicBattle()){BENCHMARK_END_GAME();return;}
+  RUNNING=false;if(typeof wakeFabs==='function')wakeFabs();
+  const banner=document.getElementById('banner');banner.style.display='flex';
+  renderPublicResultCard('Saving battle…');finishPublicGame();
+  document.getElementById('btnPlay').textContent='Start';SHAKE=Math.max(SHAKE,9);
+};
+function paintPublicNames(){
+  if(!PUB.game)return;
+  const aiSide=1-PUB.game.humanSide;
+  SIDE[PUB.game.humanSide].name='You';SIDE[aiSide].name=PUB.game.opponent.name;
+  document.getElementById('hpAname').textContent=SIDE[0].name;
+  document.getElementById('hpBname').textContent=SIDE[1].name;
+  const who=document.getElementById('whobar');
+  if(who){who.className='whobar';who.replaceChildren();
+    [0,1].forEach((s,index)=>{if(index)who.append(document.createElement('br'));
+      const label=document.createElement('span');label.style.color=SIDE[s].col;label.textContent=s?'Cobalt':'Vulcan';
+      who.append(label,document.createTextNode(`: ${s===PUB.game.humanSide?'You':PUB.game.opponent.name}`));});}
+}
+function applyPublicCommanders(game){
+  const assigned=publicCommanders(game);
+  [0,1].forEach(s=>{CMD[s].kind=assigned[s].kind;CMD[s].model=assigned[s].model;});
+  NEXT_TURN=[0,0];
+  PUBLIC_COMPLETION={state:'idle',payload:null,response:null};
+  document.body.classList.add('public-battle');
+  refreshNames();
+  paintPublicNames();
+}
+function applyServerOpponent(opponent,s){
+  if(!opponent||!PUB.game)return;
+  PUB.game={...PUB.game,opponent:{...opponent}};
+  CMD[s].model=opponent.id;
+  refreshNames();
+  paintPublicNames();
+}
+function stopPublicBattle(message){
+  RUNNING=false;AWAIT=false;
+  const banner=document.getElementById('banner'),title=document.getElementById('bannerTxt');
+  banner.style.display='flex';title.textContent='Battle interrupted';title.style.color='#ef9b7e';
+  const meta=document.getElementById('publicResultMeta');meta.hidden=false;
+  meta.textContent=PUB.allowance?`${PUB.allowance.remaining} games left` : '';
+  const status=document.getElementById('publicResultStatus');status.hidden=false;status.textContent=message;
+  document.getElementById('publicResultActions').hidden=false;
+  document.getElementById('btnPublicRematch').disabled=true;
+  document.getElementById('btnCompletionRetry').hidden=true;
+}
 // what each side submitted last time, and what actually spawned since — fed
 // back into the next prompt so a model can notice its tank never appeared
 let LASTQ=[[],[]], SINCE=[{},{}], LASTTO=[false,false];   // was the last order auto-played after a timeout?
@@ -1259,6 +2403,20 @@ document.getElementById('pkGo').onclick=()=>{
   resolve({queue,stance,why:(stance==='hold'?'[HOLD] ':'[PUSH] ')+(queue.length?'Your orders: '+queue.join(', '):'no build this cycle')});
 };
 
+async function serverAgent(St,s){
+  if(!PUB.game)throw Object.assign(new Error(publicMessage('session_expired')),{code:'session_expired'});
+  const model=CMD[s].model,dossier=publicDossierGet(model);
+  if(dossier)DOSSIER_USED[s]=true;
+  const response=await requestPublicDecision(
+    PUB.game,battleViewForServer(St,s,NEXT_TURN[s],dossier||null)
+  );
+  NEXT_TURN[s]++;
+  if(response.opponent)applyServerOpponent(response.opponent,s);
+  const adaptive=sanitize(agent(St,s));
+  const fallback=adaptive.queue.length?adaptive.queue:(St.q[s].length?[...St.q[s]]:['inf','inf']);
+  return serverDecisionState(response,fallback,adaptive.stance);
+}
+
 async function decide(s){
   const c=CMD[s];
   if(c.kind==='script') return {...sanitize(agent(S,s)),bad:[]};
@@ -1271,10 +2429,32 @@ async function decide(s){
     STATS[s].calls++; STATS[s].ms+=ms;
     return {...sanitize(raw), ms};
   }
+  if(c.kind==='server'){
+    THINK[s]=true;paintThink();const t0=performance.now();
+    try{
+      const out=await serverAgent(S,s),ms=performance.now()-t0;
+      STATS[s].calls++;STATS[s].ms+=ms;
+      if(out.timedOut){STATS[s].slow=(STATS[s].slow||0)+1;STREAK[s]=0;}
+      else if(out.strike==='increment'){
+        STATS[s].fail++;STREAK[s]++;
+        if(STREAK[s]>=3)haltOnFailure(s,'The AI commander is temporarily unavailable.');
+      }else STREAK[s]=0;
+      return {...out,bad:[],shape:'ok',ms};
+    }catch(error){
+      const ms=performance.now()-t0,adaptive=sanitize(agent(S,s));
+      STATS[s].calls++;STATS[s].ms+=ms;STATS[s].fail++;STREAK[s]++;
+      if(error.code==='tier_unavailable'&&error.data&&Number.isInteger(error.data.gamesRemaining))
+        setAllowance({remaining:error.data.gamesRemaining,resetsAt:error.data.resetsAt});
+      if(error.code==='tier_unavailable'||['session_expired','game_not_found','authentication_required'].includes(error.code))
+        stopPublicBattle(error.message);
+      else if(STREAK[s]>=3)haltOnFailure(s,'The AI commander is temporarily unavailable.');
+      return {...adaptive,why:publicMessage(error.code),bad:[],shape:'ok',ms,failed:true,providerCode:error.code};
+    }finally{THINK[s]=false;}
+  }
   THINK[s]=true; paintThink(); const t0=performance.now();
   let raw=null, err=null;
   for(let attempt=0;attempt<2&&!raw;attempt++){
-    try{ raw = c.kind==='mock' ? await mockAgent(S,s) : await llmAgent(S,s,c.model); }
+    try{ raw = c.kind==='mock' ? await mockAgent(S,s) : c.kind==='server' ? await serverAgent(S,s) : await llmAgent(S,s,c.model); }
     catch(e){ err=e;
       if(/timed out/i.test(String(e.message))) break;   // slow model: don't spend another 30s, auto-order now
       if(attempt===0) await sleep(400); }
@@ -2338,9 +3518,9 @@ let FORCED=false;
 function applyMode(){
   const portrait=window.matchMedia('(orientation: portrait)').matches;
   const narrow=window.innerWidth<720;
-  const gate=portrait&&narrow&&!FORCED;
-  document.getElementById('rotate').style.display=gate?'flex':'none';
-  document.body.classList.toggle('split',portrait&&narrow&&FORCED);
+  const gate=LIVE&&portrait&&narrow&&!FORCED;
+  setRotateDialog(gate);
+  document.body.classList.toggle('split',LIVE&&portrait&&narrow&&FORCED);
   if(!gate) setTimeout(()=>{fit();draw();},60);
   if(window.checkNudge) window.checkNudge();
 }
@@ -2371,17 +3551,193 @@ window.addEventListener('pointerup',e=>{
 try{ const s0=localStorage.getItem('breach.sheet'); if(s0!==null) setSheet(+s0); }catch(e){}
 document.querySelectorAll('.sheettabs button').forEach(b=>b.onclick=()=>{
   TAB=b.dataset.s==='log'?'log':'battle';
-  document.querySelectorAll('.sheettabs button').forEach(x=>x.classList.toggle('on',x===b));
+  document.querySelectorAll('.sheettabs button').forEach(x=>{x.classList.toggle('on',x===b);x.toggleAttribute('aria-current',x===b);});
   document.getElementById('feed').classList.toggle('on',b.dataset.s==='feed');
   document.getElementById('log').classList.toggle('on',b.dataset.s==='log');
   if(b.dataset.s==='log') drawLog();
 });
 
+/* PUBLIC-APP INTEGRATION: foundation calls window.breachPublicHooks.identityResolved(identity)
+   after a guest or account has resolved. The DOM event provides the same hook without coupling
+   this experience patch to PUB, API, allowance, or routing contracts. */
+/* HOW TO PLAY TEST SLICE START */
+const HOW_TO_SESSION_SEEN=new Set();
+function onboardingKey(identity){
+  if(!identity||!identity.kind||identity.id===undefined||identity.id===null) return '';
+  return `breach.howto.${identity.kind}.${identity.id}`;
+}
+function finishHowTo(identity,store=localStorage){
+  const key=onboardingKey(identity); if(!key) return false;
+  HOW_TO_SESSION_SEEN.add(key);
+  try{store.setItem(key,'1');return true;}catch(e){return false;}
+}
+function shouldShowHowTo(identity,store=localStorage){
+  const key=onboardingKey(identity); if(!key) return false;
+  if(HOW_TO_SESSION_SEEN.has(key)) return false;
+  try{return store.getItem(key)!=='1';}catch(e){return true;}
+}
+function howToDismissOptions(automatic){return {complete:!!automatic};}
+function onPublicIdentityResolved(identity){
+  const key=onboardingKey(identity),active=currentHowToResolution();
+  if(key&&active&&active.open&&active.automatic&&onboardingKey(active.identity)===key) return false;
+  return maybeOpenHowTo(identity);
+}
+function mountHowToReplay(container,doc=document){
+  if(!container||typeof container.querySelector!=='function') return null;
+  const existing=container.querySelector('[data-how-to-replay]'); if(existing) return existing;
+  const button=doc.createElement('button');
+  button.type='button';button.className='public-quiet';button.textContent='How to Play';
+  button.dataset.howToReplay='';
+  button.addEventListener('click',()=>{
+    if(typeof closePublicMenu==='function') closePublicMenu();
+    openHowTo();
+  });
+  container.insertBefore(button,container.querySelector('#btnPublicLogout'));
+  return button;
+}
+/* HOW TO PLAY TEST SLICE END */
+
 /* ----- modals ----- */
-const modal=(id,v)=>document.getElementById(id).classList.toggle('on',v);
-['btnSetupOpen','btnSetupOpen2'].forEach(i=>document.getElementById(i).onclick=()=>modal('mSetup',true));
+/* DIALOG FOCUS TEST SLICE START */
+function trapFocusTarget(active,items,backwards){
+  if(!items.length) return null;
+  const index=items.indexOf(active);
+  if(index<0) return backwards?items.at(-1):items[0];
+  if(backwards&&index===0) return items.at(-1);
+  if(!backwards&&index===items.length-1) return items[0];
+  return null;
+}
+function pushDialogFrame(stack,dialog,opener){
+  const prior=stack.findIndex(frame=>frame.dialog===dialog);
+  if(prior>=0) stack.splice(prior,1);
+  const frame={dialog,opener};stack.push(frame);return frame;
+}
+function popDialogFrame(stack,dialog){
+  const index=stack.findIndex(frame=>frame.dialog===dialog);
+  return index<0?null:stack.splice(index,1)[0];
+}
+/* DIALOG FOCUS TEST SLICE END */
+const DIALOG_STACK=[];
+function topDialog(){return DIALOG_STACK.length?DIALOG_STACK.at(-1).dialog:null;}
+function dialogItems(dialog){
+  return [...dialog.querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[href],[tabindex]:not([tabindex="-1"])')]
+    .filter(item=>item.offsetParent!==null);
+}
+function focusModal(modalEl){
+  const target=modalEl.querySelector('[data-autofocus],[aria-invalid="true"],h1,h2,h3,[role="heading"],button,input,select,[tabindex]');
+  if(target){if(target.matches('h1,h2,h3')) target.setAttribute('tabindex','-1');target.focus({preventScroll:true});}
+}
+function openDialogScope(dialog,opener=document.activeElement){
+  const source=opener instanceof HTMLElement?opener:null;
+  pushDialogFrame(DIALOG_STACK,dialog,source);focusModal(dialog);
+}
+function closeDialogScope(dialog){
+  const wasTop=topDialog()===dialog,frame=popDialogFrame(DIALOG_STACK,dialog);
+  if(!wasTop) return;
+  const next=topDialog(),opener=frame&&frame.opener;
+  if(next){
+    if(opener&&next.contains(opener)) opener.focus({preventScroll:true});
+    else focusModal(next);
+  }else if(opener&&document.contains(opener)) opener.focus({preventScroll:true});
+}
+function setRotateDialog(open){
+  const rotate=document.getElementById('rotate'),shown=rotate.style.display==='flex';
+  if(open&&!shown){rotate.style.display='flex';openDialogScope(rotate);}
+  else if(!open&&shown){rotate.style.display='none';closeDialogScope(rotate);}
+}
+function modal(id,v,opener=document.activeElement){
+  const el=document.getElementById(id); if(!el) return;
+  if(v){el.classList.add('on');openDialogScope(el,opener);}
+  else {el.classList.remove('on');closeDialogScope(el);}
+}
+function openBenchmarkLab(opener=document.activeElement){
+  if(!canOpenLab(PUB.identity))return false;
+  closePublicMenu();
+  setAuthError('labError','');
+  modal('mSetup',true,opener);
+  return true;
+}
+['btnSetupOpen','btnSetupOpen2'].forEach(i=>document.getElementById(i).onclick=e=>openBenchmarkLab(e.currentTarget));
+document.getElementById('btnBenchmarkLab').onclick=e=>openBenchmarkLab(e.currentTarget);
 ['btnUnitsOpen','btnUnitsOpen2'].forEach(i=>document.getElementById(i).onclick=()=>modal('mUnits',true));
-document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>modal(b.dataset.close,false));
+document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>{
+  if(b.dataset.close==='mHowTo') closeHowTo(howToDismissOptions(HOW_TO_AUTOMATIC));
+  else modal(b.dataset.close,false);
+});
+document.querySelectorAll('.modal').forEach(el=>{
+  el.setAttribute('role','dialog');el.setAttribute('aria-modal','true');
+  const heading=el.querySelector('.mhead h3'); if(heading){if(!heading.id)heading.id=`${el.id}Title`;el.setAttribute('aria-labelledby',heading.id);}
+});
+document.addEventListener('keydown',e=>{
+  const open=topDialog(); if(!open) return;
+  if(e.key==='Escape'){
+    e.preventDefault();
+    if(open.id==='mHowTo') closeHowTo(howToDismissOptions(HOW_TO_AUTOMATIC));
+    else if(open.classList.contains('modal')) modal(open.id,false);
+    return;
+  }
+  if(e.key!=='Tab') return;
+  const target=trapFocusTarget(document.activeElement,dialogItems(open),e.shiftKey);
+  if(target){e.preventDefault();target.focus();}
+});
+Object.entries({btnFull:'Toggle fullscreen',btnSpeed:'Change battle speed',btnReset2:'Reset battle',btnSetupOpen:'Open setup',btnRanksFab:'Open leaderboard',btnUnitsOpen:'Open unit guide'}).forEach(([id,label])=>{
+    const el=document.getElementById(id);if(el&&!el.getAttribute('aria-label'))el.setAttribute('aria-label',label);
+  });
+
+const HOW_TO_BEATS=[
+  {map:'coins',title:'Read your coins',copy:'Coins pay for each order. Keep the next purchase affordable so your army can move when the turn arrives.'},
+  {map:'economy',title:'Time your economy',copy:'Economy costs tempo now and pays more later. Upgrade when your base can survive the delay.'},
+  {map:'units',title:'Build your queue',copy:'Orders execute from left to right. If the first purchase is too expensive, everything behind it waits.'},
+  {map:'tower + stance',title:'Control the tower',copy:'Push attacks the base. Hold captures the tower for income and airstrikes. Your stance stays active until you change it.'},
+  {map:'counter + read',title:'Counter the enemy',copy:'Tank beats Gunner · Gunner beats AT · AT beats Tank. Choppers need Gunners or AT to stop them. Read the lane, then change your next order.'}
+];
+let HOW_TO_INDEX=0, HOW_TO_IDENTITY=null, HOW_TO_AUTOMATIC=false;
+function currentHowToResolution(){
+  const dialog=document.getElementById('mHowTo');
+  return {identity:HOW_TO_IDENTITY,automatic:HOW_TO_AUTOMATIC,
+    open:!!dialog&&dialog.classList.contains('on')};
+}
+function currentHowToIdentity(){return HOW_TO_IDENTITY||(typeof PUB!=='undefined'&&PUB.identity)||null;}
+function renderHowTo(){
+  const beat=HOW_TO_BEATS[HOW_TO_INDEX];
+  document.getElementById('howToBeat').textContent=beat.title;
+  document.getElementById('howToCopy').textContent=beat.copy;
+  document.getElementById('howToMap').innerHTML=HOW_TO_BEATS.map((item,index)=>
+    `<span class="howpoint ${index===HOW_TO_INDEX?'on':index<HOW_TO_INDEX?'done':''}"${index===HOW_TO_INDEX?' aria-current="step"':''}>${item.map}</span>`).join('');
+  document.getElementById('howToProgress').innerHTML=`Step <b>${HOW_TO_INDEX+1}</b> of ${HOW_TO_BEATS.length}`;
+  const back=document.getElementById('btnHowToBack'), next=document.getElementById('btnHowToNext');
+  back.disabled=HOW_TO_INDEX===0; back.setAttribute('aria-disabled',String(HOW_TO_INDEX===0));
+  next.textContent=HOW_TO_INDEX===HOW_TO_BEATS.length-1?'Choose difficulty':'Next';
+}
+function openHowTo({identity=null,automatic=false}={}){
+  HOW_TO_IDENTITY=identity||(typeof PUB!=='undefined'&&PUB.identity)||null; HOW_TO_AUTOMATIC=automatic; HOW_TO_INDEX=0;
+  renderHowTo(); modal('mHowTo',true); return true;
+}
+function closeHowTo({complete=false}={}){
+  const identity=currentHowToIdentity(); if(complete&&identity) finishHowTo(identity);
+  modal('mHowTo',false); HOW_TO_IDENTITY=null; HOW_TO_AUTOMATIC=false;
+}
+function advanceHowTo(){
+  if(HOW_TO_INDEX<HOW_TO_BEATS.length-1){HOW_TO_INDEX++;renderHowTo();return;}
+  closeHowTo({complete:true});
+  if(typeof PUB!=='undefined'&&typeof showPublicView==='function') showPublicView('home');
+}
+function skipHowTo(){closeHowTo({complete:true});}
+function maybeOpenHowTo(identity){if(shouldShowHowTo(identity)) openHowTo({identity,automatic:true});}
+const legacyHowToButton=document.getElementById('btnHowTo');
+if(legacyHowToButton) legacyHowToButton.onclick=()=>openHowTo();
+document.getElementById('btnHowToBack').onclick=()=>{if(HOW_TO_INDEX){HOW_TO_INDEX--;renderHowTo();}};
+document.getElementById('btnHowToSkip').onclick=skipHowTo;
+document.getElementById('btnHowToNext').onclick=advanceHowTo;
+/* FOUNDATION CALL SITE: acceptPublicSession(data) resolves identity and allowance;
+   renderPublicIdentityHome then calls window.breachPublicHooks?.onPublicIdentityResolved(PUB.identity). */
+/* FOUNDATION CALL SITE: publicMenu, after its DOM exists:
+   window.breachPublicHooks?.mountHowToReplay(document.getElementById('publicMenu')). */
+window.breachPublicHooks={...(window.breachPublicHooks||{}),
+  identityResolved:onPublicIdentityResolved,onPublicIdentityResolved,mountHowToReplay,openHowTo:()=>openHowTo()};
+document.addEventListener('breach:identity-resolved',event=>onPublicIdentityResolved(event.detail));
+const publicReplayMenu=document.getElementById('publicMenu');
+if(publicReplayMenu) mountHowToReplay(publicReplayMenu);
 
 /* ----- fullscreen -----
    Installed as a PWA the manifest handles this, but most people just open the
@@ -2599,6 +3955,7 @@ function apiStatus(msg,col){
 }
 ['apiBase','apiTok'].forEach(id=>{
   const el=document.getElementById(id), k=id==='apiBase'?'breach.api':'breach.apitoken';
+  if(!el)return;
   try{ const v=localStorage.getItem(k); if(v!==null) el.value=v; }catch(e){}
   el.addEventListener('input',()=>{ try{
     const v=el.value.trim();
@@ -2606,7 +3963,7 @@ function apiStatus(msg,col){
     else localStorage.setItem(k,v);
   }catch(e){} });
 });
-document.getElementById('btnApiTest').onclick=async()=>{
+const btnApiTest=document.getElementById('btnApiTest');if(btnApiTest)btnApiTest.onclick=async()=>{
   const b=apiBase(); if(!b) return apiStatus('No server configured.','#c9a227');
   apiStatus('Checking '+b+' …','#7b8692');
   try{
@@ -2616,7 +3973,7 @@ document.getElementById('btnApiTest').onclick=async()=>{
     await lbFetchRemote();
   }catch(e){ apiStatus('Cannot reach it: '+String(e.message).slice(0,70),'#c9765c'); }
 };
-document.getElementById('btnApiPushAll').onclick=async()=>{
+const btnApiPushAll=document.getElementById('btnApiPushAll');if(btnApiPushAll)btnApiPushAll.onclick=async()=>{
   const local=lbLoad().concat(LB_SEED);
   if(!local.length) return apiStatus('Nothing stored locally to upload.','#c9a227');
   apiStatus(`Uploading ${local.length}…`,'#7b8692');
@@ -2696,10 +4053,10 @@ function goLive(){
   LIVE=true; document.body.classList.add('live');
   reset(); RUNNING=true; last=0;
   document.getElementById('btnPlay').textContent='❚❚';
-  fit(); draw(performance.now()); wakeFabs();
+  applyMode();fit(); draw(performance.now()); wakeFabs();
 }
 document.getElementById('btnBegin').onclick=goLive;
-document.getElementById('btnPickModels').onclick=()=>modal('mSetup',true);
+document.getElementById('btnPickModels').onclick=e=>openBenchmarkLab(e.currentTarget);
 
 /* Swapping sides is the single most useful button here: Vulcan has a measured
    side advantage, so a pairing is only meaningful once it has been played both
@@ -2728,14 +4085,47 @@ document.getElementById('btnSwap').onclick=()=>rematch({swap:true});
 document.getElementById('btnNewSeed').onclick=()=>rematch({newSeed:true});
 document.getElementById('btnNewModels').onclick=()=>{
   showResults(false);
-  modal('mSetup',true);            // pick opponents, then Start match from in there
+  openBenchmarkLab(document.getElementById('btnNewModels'));
 };
-/* Configure-then-play used to require closing Setup, finding the transport and
-   guessing which button restarted. This is the single obvious action. */
-document.getElementById('btnSetupStart').onclick=()=>{
-  modal('mSetup',false);
-  showResults(false);
-  goLive();
+let LAB_LOCAL_DIAGNOSTIC=false;
+function applyBenchmarkGame(game){
+  const commanders=benchmarkCommanders(game);
+  commanders.forEach((commander,side)=>{CMD[side]={...commander};});
+  MEMORY_ON=game.memory;
+  const memory=document.getElementById('memory');if(memory)memory.checked=MEMORY_ON;
+  document.getElementById('seed').value=game.seed;
+  refreshNames();
+}
+async function launchBenchmarkFromLab(){
+  if(!canOpenLab(PUB.identity))return false;
+  const button=document.getElementById('btnSetupStart');
+  const local=document.getElementById('labMockDiagnostic').checked;
+  const seed=Number.parseInt(document.getElementById('seed').value,10)||1;
+  setAuthError('labError','');button.disabled=true;
+  try{
+    if(local){
+      const diagnostic=startMockDiagnostic({seed});
+      diagnostic.commanders.forEach((commander,side)=>{CMD[side]={...commander};});
+      LAB_LOCAL_DIAGNOSTIC=true;
+    }else{
+      const humanSide=benchmarkHumanSide(document.getElementById('kindA').value,document.getElementById('kindB').value);
+      const game=await startBenchmark({
+        modelA:CMD[0].model,modelB:CMD[1].model,humanSide,seed,
+        memory:document.getElementById('memory').checked,
+        sideSwap:document.getElementById('labSideSwap').checked
+      });
+      if(game.view==='stale')return false;
+      applyBenchmarkGame(game);LAB_LOCAL_DIAGNOSTIC=false;
+    }
+    refreshNames();modal('mSetup',false);showResults(false);goLive();return true;
+  }catch(error){
+    setAuthError('labError',error.code==='invalid_request'&&error.message?error.message:publicMessage(error.code));
+    return false;
+  }finally{button.disabled=false;}
+}
+document.getElementById('btnSetupStart').onclick=launchBenchmarkFromLab;
+document.getElementById('labMockDiagnostic').onchange=event=>{
+  document.getElementById('btnSetupStart').textContent=benchmarkActionLabel(event.target.checked);
 };
 document.getElementById('btnSeeLog').onclick=()=>{
   showResults(false);              // get the card out of the way of the log
@@ -2749,6 +4139,19 @@ function showResults(v){
 }
 document.getElementById('bannerX').onclick=()=>{ showResults(false); wakeFabs(); };
 document.getElementById('resultsChip').onclick=()=>showResults(true);
+function leavePublicBattle(view){
+  RUNNING=false;LIVE=false;document.body.classList.remove('live','public-battle');
+  showResults(false);showPublicView(view);
+}
+document.getElementById('btnCompletionRetry').onclick=()=>finishPublicGame();
+document.getElementById('btnPublicRematch').onclick=async()=>{
+  if(PUBLIC_COMPLETION.state!=='saved'||!PUB.game)return;
+  const difficulty=PUB.game.difficulty;leavePublicBattle('home');
+  await startDifficultyUI(difficulty);
+};
+document.getElementById('btnResultDifficulty').onclick=()=>leavePublicBattle('home');
+document.getElementById('btnResultHistory').onclick=()=>{leavePublicBattle('history');loadHistoryUI();};
+document.getElementById('btnResultRanks').onclick=()=>{leavePublicBattle('ranks');loadPublicRanksUI();};
 
 /* ----- controls fade out of the way while you watch ----- */
 let IDLET=null;
@@ -2774,6 +4177,7 @@ document.getElementById('btnSpeed').onclick=e=>{
   e.target.textContent=SPEED+'×'; document.getElementById('spdTag').textContent=SPEED+'×';
 };
 const reset=()=>{newGame(+document.getElementById('seed').value||1);
+  NEXT_TURN=[0,0];
   STATS.forEach(x=>{x.calls=0;x.fail=0;x.bad=0;x.ms=0;x.slow=0;x.ptok=0;x.ctok=0;}); STREAK[0]=STREAK[1]=0;
   const bb=document.getElementById('bannerTxt'); bb.style.fontSize=''; bb.style.color='';
   const f=document.getElementById('feed'); if(f) f.innerHTML='';
@@ -2788,7 +4192,7 @@ const reset=()=>{newGame(+document.getElementById('seed').value||1);
   ['miniA','miniB'].forEach(i=>document.getElementById(i).innerHTML='');
   document.getElementById('tickline').textContent='Match reset — press play.';
   document.getElementById('btnPlay').textContent='▶';
-  refreshNames();fit();draw();paintHUD();drawLog();};
+  refreshNames();if(isPublicBattle())paintPublicNames();fit();draw();paintHUD();drawLog();};
 document.getElementById('btnReset').onclick=reset;
 document.getElementById('btnReset2').onclick=reset;
 document.getElementById('lowfx').onchange=e=>{LOWFX=e.target.checked;};
@@ -2828,27 +4232,28 @@ document.getElementById('btnCopyEnd').onclick=e=>copyAnalysis(e.target);
 
 function matchPayload(){
   return {
-    game:'breach', promptVersion:8, memory:MEMORY_ON, dossierUsed:[...DOSSIER_USED],   // v8: neutral tower + push/hold stance; v1-v7 runs are not comparable
+    game:'breach', promptVersion:8, difficulty:PUB.game&&PUB.game.difficulty?PUB.game.difficulty:'easy',
+    memory:MEMORY_ON, dossierUsed:[...DOSSIER_USED],   // v8: neutral tower + push/hold stance; v1-v7 runs are not comparable
     // balance is stamped into every log so a tuning change can never silently
     // invalidate a comparison between two saved matches
     balance:{ecoCost:ECO_COST,ecoEscalation:ECO_ESC,ecoPrices:[0,1,2].map(ecoPrice),ecoStep:ECO_STEP,ecoMax:ECO_MAX,lane:FIELD,baseHP:BASE_HP,
       decideEvery:DECIDE,timeCap:TIME_CAP,
       unitCosts:Object.fromEntries(Object.entries(UNITS).map(([k,u])=>[k,u.cost]))},
     seed:+document.getElementById('seed').value, savedAt:new Date().toISOString(),
-    unitsBuilt:[0,1].map(s=>({side:SIDE[s].name,...BUILT[s]})),
+    unitsBuilt:[0,1].map(s=>({side:s?'Cobalt':'Vulcan',...BUILT[s]})),
     peakCoins:[0,1].map(s=>Math.floor(PEAK[s])),
     // record what actually played, not whatever was left in the model dropdown —
     // a human match was being logged under an unrelated model id
-    commanders:[0,1].map(s=>({side:SIDE[s].name,kind:CMD[s].kind,
-      model:CMD[s].kind==='llm'?CMD[s].model:CMD[s].kind,
+    commanders:[0,1].map(s=>({side:s?'Cobalt':'Vulcan',kind:CMD[s].kind==='server'?'llm':CMD[s].kind,
+      model:(CMD[s].kind==='llm'||CMD[s].kind==='server')?CMD[s].model:CMD[s].kind,
       calls:STATS[s].calls,failed:STATS[s].fail,timedOut:STATS[s].slow||0,malformed:STATS[s].bad,
       promptTokens:STATS[s].ptok||0,cachedTokens:STATS[s].ctok||0,
       avgLatencyMs:STATS[s].calls?Math.round(STATS[s].ms/STATS[s].calls):0})),
-    result:{winner:S.win===null?'draw':SIDE[S.win].name, over:S.over,
+    result:{winner:S.win===null?'draw':(S.win?'Cobalt':'Vulcan'), over:S.over,
       durationSeconds:+S.t.toFixed(1), baseHP:S.hp.map(h=>Math.max(0,Math.round(h))),
       ecoUpgrades:[...S.eco]},
-    debrief:[0,1].map(s=>({side:SIDE[s].name,...(DEBRIEF[s]||{})})),
-    decisions:LOG.map(e=>({tSeconds:+e.t.toFixed(1),side:SIDE[e.s].name,queue:e.queue,stance:e.stance||'push',
+    debrief:[0,1].map(s=>({side:s?'Cobalt':'Vulcan',...(DEBRIEF[s]||{})})),
+    decisions:LOG.map(e=>({tSeconds:+e.t.toFixed(1),side:e.s?'Cobalt':'Vulcan',queue:e.queue,stance:e.stance||'push',
       reasoning:e.why,latencyMs:e.ms?Math.round(e.ms):undefined,
       invalidTokens:e.bad&&e.bad.length?e.bad:undefined,failed:e.failed||undefined,
       outputShape:e.shape&&e.shape!=='ok'?e.shape:undefined,
@@ -2949,9 +4354,7 @@ function counterHint(e){
   return h.join(' ');
 }
 
-async function llmAgent(St,s,model){
-  const key=(document.getElementById('apikey').value||'').trim();
-  if(!key) throw new Error('no API key set');
+function buildBattleView(St,s){
   const cls=side=>{const o={light:0,support:0,armor:0};
     St.units.filter(u=>u.s===side).forEach(u=>o[UNITS[u.type].cls]++);return o;};
   const eList=St.units.filter(u=>u.s!==s);
@@ -3009,6 +4412,13 @@ async function llmAgent(St,s,model){
         holderIncomeEscalated: T.holder!==null && T.holdT>=TOWER_ESC,
         secondsUntilAirstrikeOnTheLoser: T.holder!==null ? Math.max(0,Math.round(T.boltT)) : null }; })(),
   };
+  return view;
+}
+
+async function llmAgent(St,s,model){
+  const key=(document.getElementById('apikey').value||'').trim();
+  if(!key) throw new Error('no API key set');
+  const view=buildBattleView(St,s);
   /* CONVERSATION MEMORY (bounded window).
      Stateless calls (system + current state only) are why models lose their own
      chain of thought — each turn they re-derive from scratch and "forget" they
@@ -3158,9 +4568,9 @@ function priceText(m){
 }
 function setModel(i,id){
   CMD[i].model=id;
-  // choosing a model IS choosing to run it — flip this side to the LLM and sync the kind select.
-  // (previously the model was set but kind stayed 'script', so it silently kept playing scripted.)
-  if(id){ CMD[i].kind='llm'; const sel=document.getElementById('kind'+(i?'B':'A')); if(sel) sel.value='llm'; }
+  // Choosing a model seats the server-authorized commander. Provider credentials
+  // never enter this page; the benchmark session owns the configured model.
+  if(id){ CMD[i].kind='server'; const sel=document.getElementById('kind'+(i?'B':'A')); if(sel) sel.value='server'; }
   const btn=document.getElementById('model'+(i?'B':'A'));
   if(btn) btn.textContent=id||'Choose model';
   refreshNames();
@@ -3225,7 +4635,7 @@ setModel(1,'google/gemini-2.5-flash-lite');
   MOCK.fail=(+document.getElementById('mFail').value||0)/100;
   MOCK.bad=(+document.getElementById('mBad').value||0)/100;
 });
-document.getElementById('btnTest').onclick=testKey;
+const btnTest=document.getElementById('btnTest');if(btnTest)btnTest.onclick=testKey;
 async function refreshCatalog(outEl){
   const say=(m,c)=>{ if(outEl){ outEl.style.color=c||'#7b8692'; outEl.textContent=m; } };
   say('Fetching catalogue from OpenRouter…');
@@ -3263,7 +4673,7 @@ async function refreshCatalog(outEl){
     say('Could not load ('+String(e.message).slice(0,70)+'). The built-in list still works.','#c9765c');
   }
 }
-document.getElementById('btnModels').onclick=()=>refreshCatalog(document.getElementById('modelsout'));
+const btnModels=document.getElementById('btnModels');if(btnModels)btnModels.onclick=()=>refreshCatalog(document.getElementById('modelsout'));
 document.getElementById('mpRefresh').onclick=()=>refreshCatalog(document.getElementById('mpCount'));
 
 setInterval(()=>{
@@ -3275,6 +4685,7 @@ setInterval(()=>{
 /* ----- key persistence (opt-in) ----- */
 (function(){
   const box=document.getElementById('apikey'), chk=document.getElementById('remember');
+  if(!box||!chk)return;
   try{
     const saved=localStorage.getItem('breach.key');
     if(saved){ box.value=saved; chk.checked=true; }
@@ -3286,12 +4697,13 @@ setInterval(()=>{
   box.addEventListener('input',save); chk.addEventListener('change',save);
 })();
 
-/* boot — attract screen only. No match runs until the user starts one, so a
-   configured pairing is never contaminated by scripted opening decisions. */
+/* Boot the untouched battlefield core behind the public identity shell. No
+   match runs until the user starts one, so setup cannot contaminate a battle. */
 buildTable(); refreshNames(); newGame(42); seedAttract(); applyMode();
 fit(); paintHUD(); drawLog();
 RUNNING=false; document.getElementById('btnPlay').textContent='▶';
 RAF=requestAnimationFrame(frame);
+bootPublicUI();
 </script>
 </body>
 </html>
