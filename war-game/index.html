@@ -529,6 +529,33 @@ table.lb td:first-child{text-align:left;white-space:normal}
 .lbflag{color:#c9765c;font-size:9px;margin-top:2px}
 .lbempty{color:var(--txt-3);font-size:11px;padding:16px 0;text-align:center;line-height:1.6}
 
+/* ---------- first-battle field briefing ---------- */
+#mHowTo{background:rgba(5,7,10,.87);backdrop-filter:blur(8px)}
+#mHowTo .mhead{border-color:rgba(224,184,58,.28)}
+.howbody{display:flex;align-items:center;justify-content:center;overflow:hidden;padding:12px 14px}
+.howcard{width:min(680px,100%);border:1px solid #38424c;background:#11161c;
+  box-shadow:0 24px 70px rgba(0,0,0,.62);padding:clamp(12px,2.5vh,22px);position:relative}
+.howeyebrow{font-size:9px;letter-spacing:.16em;text-transform:uppercase;color:var(--amber);margin-bottom:5px}
+.howtitle{font-size:clamp(21px,5vh,32px);line-height:.95;color:#eef2f6}
+.howcopy{margin:8px 0 0;max-width:60ch;color:#b9c3ce;line-height:1.5;font-size:clamp(10px,1.7vh,12px)}
+.howmap{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;margin:clamp(12px,2.6vh,20px) 0 10px}
+.howpoint{min-height:58px;border:1px solid #2b3540;background:#0c1117;padding:7px 6px;position:relative;
+  color:#64717d;font-family:"Saira Condensed",sans-serif;font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+  display:flex;align-items:flex-end;line-height:1.05}
+.howpoint::before{content:'';position:absolute;top:9px;left:7px;width:18px;height:3px;background:#35414c}
+.howpoint.on{border-color:var(--amber);color:#edf2f7;background:#171a18;box-shadow:inset 0 0 0 1px rgba(224,184,58,.2)}
+.howpoint.on::before{width:calc(100% - 14px);background:var(--amber)}
+.howpoint.done{color:#aeb8c1}.howpoint.done::before{background:#7f6a24}
+.howfoot{display:flex;align-items:center;gap:8px;margin-top:14px;border-top:1px solid #29333d;padding-top:11px}
+.howprogress{font-size:10px;color:var(--txt-2);margin-right:auto}.howprogress b{color:#edf2f7;font-weight:600}
+.howback{min-width:44px;padding-left:10px;padding-right:10px}
+@media (prefers-reduced-motion:no-preference){.howcard{animation:briefing-in .28s cubic-bezier(.2,.9,.3,1) both}@keyframes briefing-in{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}}
+@media (max-height:430px){
+  .howbody{padding:6px 12px}.howcard{padding:10px 12px}.howmap{margin:9px 0 7px}.howpoint{min-height:45px;padding:5px;font-size:9px}.howpoint::before{top:6px;left:5px;width:13px}.howpoint.on::before{width:calc(100% - 10px)}
+  .howcopy{margin-top:5px;line-height:1.35}.howfoot{margin-top:9px;padding-top:8px}
+}
+@media (max-width:380px){.howmap{gap:3px}.howpoint{font-size:8px;word-break:break-word}}
+
 /* ---------- portrait split ---------- */
 body.split #sheet{position:relative;transform:none;height:auto;flex:1 1 auto;min-height:0;
   border-radius:0;box-shadow:none;border-top:1px solid var(--rule)}
@@ -667,6 +694,7 @@ body.split #nudge{display:none}
         </div>
       </header>
       <nav class="public-menu-panel" id="publicMenu" aria-label="Commander menu" hidden>
+        <button type="button" class="public-quiet" id="btnHowTo">How to play</button>
         <button type="button" class="public-quiet" id="btnHomeRanks">Leaderboard</button>
         <button type="button" class="public-quiet" id="btnPublicLogout">Sign out</button>
       </nav>
@@ -870,6 +898,25 @@ body.split #nudge{display:none}
   <h3>Rotate your phone</h3>
   <p>Breach is a wide battlefield — landscape gives you the whole lane with units big enough to actually see.</p>
   <button class="act primary" id="btnAnyway">Play in portrait anyway</button>
+</div>
+
+<div class="modal" id="mHowTo" role="dialog" aria-modal="true" aria-labelledby="howToHeading" aria-describedby="howToCopy">
+  <div class="mhead"><h3 id="howToHeading" tabindex="-1">Field briefing</h3>
+    <button class="act" id="btnHowToClose" data-close="mHowTo" aria-label="Close How to Play">Close</button></div>
+  <div class="mbody howbody">
+    <section class="howcard" aria-live="polite">
+      <div class="howeyebrow">How to play · field briefing</div>
+      <h2 class="disp howtitle" id="howToBeat"></h2>
+      <p class="howcopy" id="howToCopy"></p>
+      <div class="howmap" id="howToMap" aria-label="Five-step battle plan"></div>
+      <div class="howfoot">
+        <span class="howprogress" id="howToProgress"></span>
+        <button class="act howback" id="btnHowToBack" aria-label="Previous briefing step">Back</button>
+        <button class="act" id="btnHowToSkip">Skip briefing</button>
+        <button class="act primary" id="btnHowToNext">Next</button>
+      </div>
+    </section>
+  </div>
 </div>
 
 <div class="modal" id="mSetup">
@@ -3130,11 +3177,71 @@ document.querySelectorAll('.sheettabs button').forEach(b=>b.onclick=()=>{
   if(b.dataset.s==='log') drawLog();
 });
 
+/* PUBLIC-APP INTEGRATION: foundation calls window.breachPublicHooks.identityResolved(identity)
+   after a guest or account has resolved. The DOM event provides the same hook without coupling
+   this experience patch to PUB, API, allowance, or routing contracts. */
+/* HOW TO PLAY TEST SLICE START */
+function onboardingKey(identity){
+  if(!identity||!identity.kind||identity.id===undefined||identity.id===null) return '';
+  return `breach.howto.${identity.kind}.${identity.id}`;
+}
+function finishHowTo(identity,store=localStorage){
+  const key=onboardingKey(identity); if(!key) return false;
+  try{store.setItem(key,'1');return true;}catch(e){return false;}
+}
+function shouldShowHowTo(identity,store=localStorage){
+  const key=onboardingKey(identity); if(!key) return false;
+  try{return store.getItem(key)!=='1';}catch(e){return false;}
+}
+/* HOW TO PLAY TEST SLICE END */
+
 /* ----- modals ----- */
 const modal=(id,v)=>document.getElementById(id).classList.toggle('on',v);
 ['btnSetupOpen','btnSetupOpen2'].forEach(i=>document.getElementById(i).onclick=()=>modal('mSetup',true));
 ['btnUnitsOpen','btnUnitsOpen2'].forEach(i=>document.getElementById(i).onclick=()=>modal('mUnits',true));
 document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>modal(b.dataset.close,false));
+
+const HOW_TO_BEATS=[
+  {map:'coins',title:'Read your coins',copy:'Coins pay for each order. Keep the next purchase affordable so your army can move when the turn arrives.'},
+  {map:'economy',title:'Time your economy',copy:'Economy costs tempo now and pays more later. Upgrade when your base can survive the delay.'},
+  {map:'units',title:'Build your queue',copy:'Orders execute from left to right. If the first purchase is too expensive, everything behind it waits.'},
+  {map:'tower + stance',title:'Control the tower',copy:'Push attacks the base. Hold captures the tower for income and airstrikes. Your stance stays active until you change it.'},
+  {map:'counter + read',title:'Counter the enemy',copy:'Tank beats Gunner · Gunner beats AT · AT beats Tank. Choppers need Gunners or AT to stop them. Read the lane, then change your next order.'}
+];
+let HOW_TO_INDEX=0, HOW_TO_IDENTITY=null, HOW_TO_AUTOMATIC=false;
+function currentHowToIdentity(){return HOW_TO_IDENTITY||(window.PUB&&PUB.identity)||null;}
+function renderHowTo(){
+  const beat=HOW_TO_BEATS[HOW_TO_INDEX];
+  document.getElementById('howToBeat').textContent=beat.title;
+  document.getElementById('howToCopy').textContent=beat.copy;
+  document.getElementById('howToMap').innerHTML=HOW_TO_BEATS.map((item,index)=>
+    `<span class="howpoint ${index===HOW_TO_INDEX?'on':index<HOW_TO_INDEX?'done':''}"${index===HOW_TO_INDEX?' aria-current="step"':''}>${item.map}</span>`).join('');
+  document.getElementById('howToProgress').innerHTML=`Step <b>${HOW_TO_INDEX+1}</b> of ${HOW_TO_BEATS.length}`;
+  const back=document.getElementById('btnHowToBack'), next=document.getElementById('btnHowToNext');
+  back.disabled=HOW_TO_INDEX===0; back.setAttribute('aria-disabled',String(HOW_TO_INDEX===0));
+  next.textContent=HOW_TO_INDEX===HOW_TO_BEATS.length-1?'Choose difficulty':'Next';
+}
+function openHowTo({identity=null,automatic=false}={}){
+  HOW_TO_IDENTITY=identity||(window.PUB&&PUB.identity)||null; HOW_TO_AUTOMATIC=automatic; HOW_TO_INDEX=0;
+  renderHowTo(); modal('mHowTo',true); return true;
+}
+function closeHowTo({complete=false}={}){
+  const identity=currentHowToIdentity(); if(complete&&identity) finishHowTo(identity);
+  modal('mHowTo',false); HOW_TO_IDENTITY=null; HOW_TO_AUTOMATIC=false;
+}
+function advanceHowTo(){
+  if(HOW_TO_INDEX<HOW_TO_BEATS.length-1){HOW_TO_INDEX++;renderHowTo();return;}
+  closeHowTo({complete:true});
+  if(window.PUB&&typeof window.showPublicView==='function') window.showPublicView('home');
+}
+function skipHowTo(){closeHowTo({complete:true});}
+function maybeOpenHowTo(identity){if(shouldShowHowTo(identity)) openHowTo({identity,automatic:true});}
+document.getElementById('btnHowTo').onclick=()=>openHowTo();
+document.getElementById('btnHowToBack').onclick=()=>{if(HOW_TO_INDEX){HOW_TO_INDEX--;renderHowTo();}};
+document.getElementById('btnHowToSkip').onclick=skipHowTo;
+document.getElementById('btnHowToNext').onclick=advanceHowTo;
+window.breachPublicHooks={...(window.breachPublicHooks||{}),identityResolved:maybeOpenHowTo,openHowTo:()=>openHowTo()};
+document.addEventListener('breach:identity-resolved',event=>maybeOpenHowTo(event.detail));
 
 /* ----- fullscreen -----
    Installed as a PWA the manifest handles this, but most people just open the

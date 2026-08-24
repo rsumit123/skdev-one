@@ -71,6 +71,29 @@ function publicActionDocument(buttons){
   };
 }
 
+const readIndex=()=>fs.readFileSync(INDEX,'utf8');
+function loadHowToSlice(seed={}){
+  const html=readIndex();
+  const hit=html.match(/\/\* HOW TO PLAY TEST SLICE START \*\/([\s\S]*?)\/\* HOW TO PLAY TEST SLICE END \*\//);
+  assert.ok(hit,'How to Play test slice is present');
+  const localStorage=storage(seed);
+  return Function('localStorage',`${hit[1]};return {onboardingKey,finishHowTo,shouldShowHowTo};`)(localStorage);
+}
+
+test('onboarding completion is namespaced by current identity',()=>{
+  const ctx=loadHowToSlice();
+  assert.equal(ctx.onboardingKey({kind:'guest',id:'g1'}),'breach.howto.guest.g1');
+  assert.equal(ctx.onboardingKey({kind:'user',id:'u1'}),'breach.howto.user.u1');
+});
+
+test('onboarding completion prevents automatic reopening for only that identity',()=>{
+  const ctx=loadHowToSlice();
+  const user={kind:'user',id:'u1'};
+  ctx.finishHowTo(user);
+  assert.equal(ctx.shouldShowHowTo(user),false);
+  assert.equal(ctx.shouldShowHowTo({kind:'guest',id:'u1'}),true);
+});
+
 test('apiRequest includes cookies and the current guest token',async()=>{
   const calls=[];
   const ctx=loadSlice({
