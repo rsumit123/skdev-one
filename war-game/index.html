@@ -135,6 +135,66 @@ body:not(.live) #sheet{transform:translateY(100%);pointer-events:none}
   #banner{font-size:22px;gap:11px}
 }
 
+/* Public command shell. The battlefield stays behind it as context; the shell
+   itself is a flat steel docket, not a stack of floating product cards. */
+#title.public-title{align-items:stretch;justify-content:flex-start;padding:
+  calc(12px + var(--st)) calc(14px + var(--sr)) calc(14px + var(--sb)) calc(14px + var(--sl));
+  overflow:auto;background:rgba(5,7,10,.94)}
+.public-shell{width:min(100%,760px);margin:auto;min-height:100%;display:flex;flex-direction:column}
+.public-mast{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  border-bottom:1px solid var(--rule);padding:0 0 10px}
+.public-wordmark{font-family:"Saira Condensed",sans-serif;font-size:29px;font-weight:700;
+  letter-spacing:.2em;line-height:1;color:#f1f3f5;text-transform:uppercase}
+.public-mark{font-size:9px;line-height:1.4;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--txt-2);text-align:right}
+.public-screen{display:none;flex:1;min-height:0;padding:18px 0}
+.public-screen.on{display:flex;flex-direction:column}
+.public-kicker{color:var(--amber);font-size:9px;letter-spacing:.18em;text-transform:uppercase;margin-bottom:5px}
+.public-screen h1{font-family:"Saira Condensed",sans-serif;font-size:clamp(30px,7vw,49px);
+  line-height:.98;letter-spacing:.045em;text-transform:uppercase;color:#f2f4f6;margin:0}
+.public-lede{color:#a2acb7;line-height:1.55;max-width:560px;margin:9px 0 0}
+.auth-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:18px 0 0}
+.public-shell button,.public-shell input{font:inherit}
+.public-shell button{min-height:44px}
+.auth-switch{border:1px solid var(--rule);background:#0b0f14;color:#cbd3da;padding:10px 12px;
+  cursor:pointer;text-align:left}
+.auth-switch:hover,.auth-switch[aria-pressed="true"]{border-color:#7b672b;color:#fff;background:#17170f}
+.auth-switch:focus-visible,.public-shell input:focus-visible,.public-shell button:focus-visible{
+  outline:2px solid var(--amber);outline-offset:2px}
+.auth-panel{display:none;border-top:1px solid var(--rule);margin-top:14px;padding-top:14px}
+.auth-panel.on{display:block}
+.auth-panel form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;align-items:end}
+.auth-panel label{display:flex;flex-direction:column;gap:5px;color:#aab3bc;font-size:10px;
+  letter-spacing:.06em;text-align:left}
+.auth-panel label.auth-wide{grid-column:1/-1}
+.auth-panel input{width:100%;min-height:44px;border:1px solid #39434e;border-radius:0;
+  background:#090d12;color:#f3f5f7;padding:10px 11px;font-size:16px}
+.auth-panel input::placeholder{color:#5f6a75}
+.auth-submit{border:1px solid #9c8129;background:var(--amber);color:#151207;font-weight:600;
+  min-height:44px;padding:10px 14px;cursor:pointer}
+.auth-submit:disabled{opacity:.5;cursor:wait}
+.auth-help{font-size:10px;color:var(--txt-2);margin:9px 0 0;text-align:left}
+.auth-error{min-height:18px;color:#ef9b7e;font-size:11px;line-height:1.4;margin-top:8px;text-align:left}
+.public-secondary{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:auto;padding-top:16px}
+.public-quiet{border:1px solid var(--rule);background:transparent;color:#aeb7c0;padding:9px 13px;cursor:pointer}
+.public-retry{margin-top:16px;align-self:flex-start}
+.public-home-placeholder{border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);
+  margin-top:16px;padding:14px 0;color:#8e99a5;text-align:left}
+.legacy-entry{display:none}
+@media (max-width:560px){
+  .auth-actions{grid-template-columns:1fr}
+  .auth-panel form{grid-template-columns:1fr}
+  .auth-panel label.auth-wide{grid-column:auto}
+}
+@media (max-height:430px) and (orientation:landscape){
+  #title.public-title{padding-top:calc(7px + var(--st));padding-bottom:calc(7px + var(--sb))}
+  .public-mast{padding-bottom:6px}.public-wordmark{font-size:23px}
+  .public-screen{padding:9px 0}.public-screen h1{font-size:30px}.public-lede{margin-top:5px;line-height:1.35}
+  .auth-actions{margin-top:9px}.auth-panel{margin-top:8px;padding-top:8px}
+  .auth-panel form{gap:7px}.auth-panel input{min-height:44px;padding:8px 10px}
+  .auth-help,.auth-error{margin-top:4px}.public-secondary{padding-top:8px}
+}
+
 /* decision overlays */
 .ovcard{position:absolute;bottom:calc(var(--peek) + 26px);max-width:min(38%,300px);padding:8px 10px;border-radius:9px;
   border:1px solid;font-family:"Saira Condensed",sans-serif;font-size:13px;line-height:1.4;
@@ -527,17 +587,103 @@ body.split #nudge{display:none}
 
   <button id="resultsChip">&#9873; Results</button>
 
-  <div id="title">
-    <div class="tbrand">BREACH</div>
-    <div class="tsub">Two language models command opposing armies down one lane.
-      Same map, same economy, no fog of war — whoever reasons better wins.</div>
-    <div class="trow">
-      <button class="act primary" id="btnBegin">Start battle</button>
-      <button class="act" id="btnPickModels">Choose models</button>
-      <button class="act" id="btnRanksOpen">Leaderboard</button>
-      <button class="act" id="btnRivalsOpen">Rivals</button>
-    </div>
-    <div class="tnote">Runs scripted commanders by default. Seat real models in Setup with an OpenRouter key.</div>
+  <div id="title" class="public-title">
+    <main class="public-shell" aria-live="polite">
+      <header class="public-mast">
+        <div class="public-wordmark">BREACH</div>
+        <div class="public-mark">Tactical command<br>Public theatre</div>
+      </header>
+
+      <section class="public-screen on" id="publicBoot" data-public-screen="boot" aria-labelledby="bootTitle">
+        <div class="public-kicker">Establishing link</div>
+        <h1 id="bootTitle">Stand by, commander</h1>
+        <p class="public-lede">Checking your battle authorization.</p>
+        <button class="public-quiet public-retry" id="btnBootRetry" type="button" hidden>Try again</button>
+        <div class="auth-error" id="bootError" role="alert"></div>
+      </section>
+
+      <section class="public-screen" id="publicIdentity" data-public-screen="identity" aria-labelledby="identityTitle">
+        <div class="public-kicker">Identity clearance</div>
+        <h1 id="identityTitle">Choose your callsign</h1>
+        <p class="public-lede">Enter the breach as a guest, or keep your battles with an account.</p>
+        <div class="auth-actions" aria-label="Identity options">
+          <button type="button" class="auth-switch" data-auth-view="guest">Play as guest</button>
+          <button type="button" class="auth-switch" data-auth-view="signup">Create account</button>
+          <button type="button" class="auth-switch" data-auth-view="login">Sign in</button>
+        </div>
+
+        <div class="auth-panel" data-auth-panel="guest">
+          <form id="guestForm">
+            <label class="auth-wide" for="guestName">Public display name
+              <input id="guestName" name="displayName" required maxlength="24" autocomplete="nickname" aria-describedby="guestError" placeholder="Your callsign">
+            </label>
+            <button class="auth-submit" type="submit">Continue as guest</button>
+          </form>
+          <div class="auth-error" id="guestError" role="alert" aria-live="assertive"></div>
+        </div>
+
+        <div class="auth-panel" data-auth-panel="signup">
+          <form id="signupForm">
+            <label for="signupName">Public display name
+              <input id="signupName" name="displayName" required maxlength="24" autocomplete="nickname" aria-describedby="signupError" placeholder="Your callsign">
+            </label>
+            <label for="signupEmail">Email
+              <input id="signupEmail" name="email" type="email" required maxlength="254" autocomplete="email" aria-describedby="signupError" placeholder="you@example.com">
+            </label>
+            <label for="signupPassword">Password
+              <input id="signupPassword" name="password" type="password" required minlength="8" autocomplete="new-password" aria-describedby="signupError" placeholder="8 characters minimum">
+            </label>
+            <button class="auth-submit" type="submit">Create account</button>
+          </form>
+          <p class="auth-help">Password reset coming soon</p>
+          <div class="auth-error" id="signupError" role="alert" aria-live="assertive"></div>
+        </div>
+
+        <div class="auth-panel" data-auth-panel="login">
+          <form id="loginForm">
+            <label for="loginEmail">Email
+              <input id="loginEmail" name="email" type="email" required maxlength="254" autocomplete="email" aria-describedby="loginError" placeholder="you@example.com">
+            </label>
+            <label for="loginPassword">Password
+              <input id="loginPassword" name="password" type="password" required autocomplete="current-password" aria-describedby="loginError" placeholder="Your password">
+            </label>
+            <button class="auth-submit" type="submit">Sign in</button>
+          </form>
+          <p class="auth-help">Password reset coming soon</p>
+          <div class="auth-error" id="loginError" role="alert" aria-live="assertive"></div>
+        </div>
+
+        <div class="public-secondary">
+          <button type="button" class="public-quiet" id="btnPublicRanks">View leaderboard</button>
+        </div>
+      </section>
+
+      <section class="public-screen" id="publicHome" data-public-screen="home" aria-labelledby="homeTitle">
+        <div class="public-kicker">Battle command</div>
+        <h1 id="homeTitle">Welcome, <span id="publicName">Commander</span></h1>
+        <div class="public-home-placeholder">Daily battle authorization is loading.</div>
+        <div class="public-secondary">
+          <button type="button" class="public-quiet" id="btnPublicLogout">Sign out</button>
+        </div>
+        <div class="auth-error" id="homeError" role="alert" aria-live="assertive"></div>
+      </section>
+
+      <section class="public-screen" id="publicRanksPreview" data-public-screen="ranks" aria-labelledby="ranksPreviewTitle">
+        <div class="public-kicker">Global theatre</div>
+        <h1 id="ranksPreviewTitle">Leaderboard</h1>
+        <div class="public-home-placeholder">No battles yet. Choose a difficulty to enter the breach.</div>
+        <div class="public-secondary">
+          <button type="button" class="public-quiet" id="btnRanksBack">Back</button>
+        </div>
+      </section>
+
+      <div class="legacy-entry" aria-hidden="true">
+        <button id="btnBegin" type="button">Start battle</button>
+        <button id="btnPickModels" type="button">Choose models</button>
+        <button id="btnRanksOpen" type="button">Leaderboard</button>
+        <button id="btnRivalsOpen" type="button">Rivals</button>
+      </div>
+    </main>
   </div>
 
   <div class="ovcard a" id="ovA"></div>
@@ -769,16 +915,22 @@ function publicMessage(code){
 }
 async function apiRequest(path,{method='GET',body,headers={}}={}){
   const token=guestToken();
-  const response=await fetch(PUBLIC_API+path,{
-    method,
-    credentials:'include',
-    headers:{
-      ...(body?{'Content-Type':'application/json'}:{}),
-      ...(token?{'X-Breach-Guest':token}:{}),
-      ...headers
-    },
-    body:body?JSON.stringify(body):undefined
-  });
+  let response;
+  try{
+    response=await fetch(PUBLIC_API+path,{
+      method,
+      credentials:'include',
+      headers:{
+        ...(body?{'Content-Type':'application/json'}:{}),
+        ...(token?{'X-Breach-Guest':token}:{}),
+        ...headers
+      },
+      body:body?JSON.stringify(body):undefined
+    });
+  }catch(error){
+    const code='connection_error';
+    throw Object.assign(new Error(publicMessage(code)),{code,status:0,data:{code}});
+  }
   const data=await response.json().catch(()=>({code:'connection_error'}));
   if(!response.ok){
     const code=data&&typeof data.code==='string'?data.code:'connection_error';
@@ -786,7 +938,148 @@ async function apiRequest(path,{method='GET',body,headers={}}={}){
   }
   return data;
 }
+function acceptPublicSession(data){
+  setIdentity(data.identity);
+  setAllowance(data.allowance);
+  PUB.view='home';
+  return {view:'home',identity:PUB.identity,allowance:PUB.allowance};
+}
+async function bootPublicApp(){
+  try{
+    return acceptPublicSession(await apiRequest('/v1/me'));
+  }catch(error){
+    if(error.status!==401)throw error;
+    setIdentity(null);
+    setAllowance(null);
+    PUB.view='identity';
+    return {view:'identity'};
+  }
+}
+async function submitGuest(displayName){
+  const data=await apiRequest('/v1/guests',{method:'POST',body:{displayName}});
+  localStorage.setItem('breach.guestToken',data.guestToken);
+  return acceptPublicSession(data);
+}
+async function submitSignup({displayName,email,password}){
+  const data=await apiRequest('/v1/auth/signup',{
+    method:'POST',body:{displayName,email,password}
+  });
+  return acceptPublicSession(data);
+}
+async function submitLogin({email,password}){
+  const data=await apiRequest('/v1/auth/login',{method:'POST',body:{email,password}});
+  return acceptPublicSession(data);
+}
+async function logout(){
+  await apiRequest('/v1/auth/logout',{method:'POST'});
+  setIdentity(null);
+  setAllowance(null);
+  PUB.game=null;
+  PUB.difficulty=null;
+  PUB.view='identity';
+  return {view:'identity'};
+}
 /* PUBLIC APP TEST SLICE END */
+
+function setPublicBusy(busy){
+  PUB.busy=!!busy;
+  document.querySelectorAll('.public-shell form button[type="submit"]').forEach(button=>button.disabled=PUB.busy);
+}
+function showPublicView(view){
+  PUB.view=view;
+  document.querySelectorAll('[data-public-screen]').forEach(screen=>{
+    screen.classList.toggle('on',screen.dataset.publicScreen===view);
+  });
+  if(view==='home'&&PUB.identity){
+    document.getElementById('publicName').textContent=PUB.identity.displayName;
+  }
+  document.getElementById('title').scrollTop=0;
+}
+function openAuthPanel(view){
+  document.querySelectorAll('[data-auth-panel]').forEach(panel=>{
+    panel.classList.toggle('on',panel.dataset.authPanel===view);
+  });
+  document.querySelectorAll('[data-auth-view]').forEach(button=>{
+    button.setAttribute('aria-pressed',String(button.dataset.authView===view));
+  });
+  const panel=document.querySelector(`[data-auth-panel="${view}"]`);
+  if(panel){
+    const first=panel.querySelector('input');
+    if(first)setTimeout(()=>first.focus(),0);
+  }
+}
+function setAuthError(id,message){
+  document.getElementById(id).textContent=message||'';
+}
+function showBootRetry(message){
+  setAuthError('bootError',message);
+  document.getElementById('btnBootRetry').hidden=false;
+}
+function renderPublicIdentityHome(){
+  if(!PUB.identity)return;
+  document.getElementById('publicName').textContent=PUB.identity.displayName;
+}
+async function bootPublicUI(){
+  showPublicView('boot');
+  document.getElementById('btnBootRetry').hidden=true;
+  setAuthError('bootError','');
+  try{
+    const result=await bootPublicApp();
+    if(result.view==='home')renderPublicIdentityHome();
+    showPublicView(result.view);
+  }catch(error){
+    showBootRetry(error.message);
+  }
+}
+async function runAuthAction(errorId,passwordInput,action){
+  setAuthError(errorId,'');
+  setPublicBusy(true);
+  try{
+    const result=await action();
+    if(passwordInput)passwordInput.value='';
+    renderPublicIdentityHome();
+    showPublicView(result.view);
+  }catch(error){
+    if(passwordInput)passwordInput.value='';
+    setAuthError(errorId,error.message);
+  }finally{
+    setPublicBusy(false);
+  }
+}
+
+document.querySelectorAll('[data-auth-view]').forEach(button=>{
+  button.addEventListener('click',()=>openAuthPanel(button.dataset.authView));
+});
+document.getElementById('guestForm').addEventListener('submit',event=>{
+  event.preventDefault();
+  const form=event.currentTarget;
+  runAuthAction('guestError',null,()=>submitGuest(form.elements.displayName.value.trim()));
+});
+document.getElementById('signupForm').addEventListener('submit',event=>{
+  event.preventDefault();
+  const form=event.currentTarget;
+  runAuthAction('signupError',form.elements.password,()=>submitSignup({
+    displayName:form.elements.displayName.value.trim(),
+    email:form.elements.email.value.trim(),
+    password:form.elements.password.value
+  }));
+});
+document.getElementById('loginForm').addEventListener('submit',event=>{
+  event.preventDefault();
+  const form=event.currentTarget;
+  runAuthAction('loginError',form.elements.password,()=>submitLogin({
+    email:form.elements.email.value.trim(),password:form.elements.password.value
+  }));
+});
+document.getElementById('btnPublicLogout').addEventListener('click',async()=>{
+  setAuthError('homeError','');
+  setPublicBusy(true);
+  try{showPublicView((await logout()).view);}catch(error){setAuthError('homeError',error.message);}
+  finally{setPublicBusy(false);}
+});
+document.getElementById('btnBootRetry').addEventListener('click',bootPublicUI);
+document.getElementById('btnPublicRanks').addEventListener('click',()=>showPublicView('ranks'));
+document.getElementById('btnRanksBack').addEventListener('click',()=>showPublicView(PUB.identity?'home':'identity'));
 
 /* ============================================================
    1. RULES
@@ -3346,12 +3639,13 @@ setInterval(()=>{
   box.addEventListener('input',save); chk.addEventListener('change',save);
 })();
 
-/* boot — attract screen only. No match runs until the user starts one, so a
-   configured pairing is never contaminated by scripted opening decisions. */
+/* Boot the untouched battlefield core behind the public identity shell. No
+   match runs until the user starts one, so setup cannot contaminate a battle. */
 buildTable(); refreshNames(); newGame(42); seedAttract(); applyMode();
 fit(); paintHUD(); drawLog();
 RUNNING=false; document.getElementById('btnPlay').textContent='▶';
 RAF=requestAnimationFrame(frame);
+bootPublicUI();
 </script>
 </body>
 </html>
