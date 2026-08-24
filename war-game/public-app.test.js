@@ -30,6 +30,8 @@ function loadSlice(overrides={}){
   const context=vm.createContext({
     fetch:overrides.fetch||(async()=>jsonResponse(200,{})),
     localStorage,
+    document:overrides.document,
+    AbortController,
     URL,
     Date,
     Math,
@@ -40,10 +42,23 @@ function loadSlice(overrides={}){
   const exports=['PUB','guestToken','dossierKey','setIdentity','setAllowance','quotaView',
     'difficultyAccess','publicMessage','apiRequest','bootPublicApp','submitGuest','submitSignup',
     'submitLogin','logout','exhaustionAction','formatCountdown','countdownRefreshDue',
-    'loadDifficulties','startDifficulty'];
+    'loadDifficulties','startDifficulty','setPublicBusy','difficultyButtonDisabled',
+    'refreshPublicSession'];
   const expose=exports.map(name=>`${JSON.stringify(name)}:typeof ${name}==='undefined'?undefined:${name}`).join(',');
   vm.runInContext(`${source.slice(start,end+END.length)}\nglobalThis.__slice={${expose}};`,context);
   return {...context.__slice,localStorage};
+}
+
+function publicActionDocument(buttons){
+  return {
+    querySelectorAll(selector){
+      if(selector==='.public-shell button')return buttons;
+      if(selector==='.public-shell form button[type="submit"]'){
+        return buttons.filter(button=>button.type==='submit');
+      }
+      return [];
+    }
+  };
 }
 
 test('apiRequest includes cookies and the current guest token',async()=>{
@@ -259,6 +274,136 @@ test('hard selection by a guest never creates a game',async()=>{
   const result=await ctx.startDifficulty('hard');
   assert.equal(calls,0);
   assert.deepEqual({...result},{view:'signup',code:'difficulty_requires_account'});
+});
+
+test('busy state disables every public session action, including locked and navigation controls',()=>{
+  const buttons=[
+    {label:'guest',type:'submit',disabled:false},
+    {label:'locked hard',type:'button',disabled:false},
+    {label:'sign out',type:'button',disabled:false},
+    {label:'menu',type:'button',disabled:false},
+    {label:'auth navigation',type:'button',disabled:false},
+    {label:'medium',type:'button',disabled:false}
+  ];
+  const ctx=loadSlice({document:publicActionDocument(buttons)});
+  ctx.setPublicBusy(true);
+  assert.deepEqual(buttons.map(button=>button.disabled),[true,true,true,true,true,true]);
+});
+
+test('home rendering keeps locked Hard disabled while another session action is busy',()=>{
+  const ctx=loadSlice();
+  const guest={kind:'guest',id:'g1'};
+  assert.equal(ctx.difficultyButtonDisabled(guest,{remaining:3},'hard',true),true);
+  assert.equal(ctx.difficultyButtonDisabled(guest,{remaining:3},'hard',false),false);
+  assert.equal(ctx.difficultyButtonDisabled(guest,{remaining:0},'medium',false),true);
+});
+
+test('a delayed game response cannot replace a newer logout session',async()=>{
+  let resolveGame;
+  const gameResponse=new Promise(resolve=>{resolveGame=resolve;});
+  const ctx=loadSlice({fetch:async(url)=>{
+    if(url.endsWith('/v1/games'))return gameResponse;
+    return {ok:true,status:204,json:async()=>{throw new Error('no body');}};
+  }});
+  ctx.setIdentity({kind:'user',id:'u1',displayName:'Rahul',isAdmin:false});
+  ctx.setAllowance({remaining:10,resetsAt:'2026-08-25T00:00:00+05:30'});
+  const pending=ctx.startDifficulty('medium');
+  await Promise.resolve();
+  await ctx.logout();
+  resolveGame(jsonResponse(201,{
+    gameId:'gms_stale',difficulty:'medium',
+    opponent:{id:'qwen/qwen3.7-flash',name:'Qwen 3.7 Flash'},humanSide:0,
+    gamesRemaining:9,resetsAt:'2026-08-25T00:00:00+05:30',
+    expiresAt:'2026-08-24T15:30:00+00:00'
+  }));
+  const result=await pending;
+  assert.equal(result.view,'stale');
+  assert.equal(ctx.PUB.view,'identity');
+  assert.equal(ctx.PUB.identity,null);
+  assert.equal(ctx.PUB.game,null);
+  assert.equal(ctx.PUB.allowance,null);
+});
+
+test('post-boot 401 expires the current account session but preserves its separate guest continuation',async()=>{
+  const ctx=loadSlice({
+    localStorage:storage({'breach.guestToken':'guest-continuation'}),
+    fetch:async()=>jsonResponse(401,{code:'authentication_required',detail:'private'})
+  });
+  ctx.setIdentity({kind:'user',id:'u1',displayName:'Rahul',isAdmin:false});
+  ctx.setAllowance({remaining:10,resetsAt:'2026-08-25T00:00:00+05:30'});
+  ctx.PUB.game={gameId:'old'};
+  await assert.rejects(
+    ctx.startDifficulty('medium'),
+    error=>error.code==='authentication_required'
+      && error.message==='Your session expired. Sign in or continue as a guest.'
+      && !error.message.includes('private')
+  );
+  assert.equal(ctx.PUB.view,'identity');
+  assert.equal(ctx.PUB.identity,null);
+  assert.equal(ctx.PUB.allowance,null);
+  assert.equal(ctx.PUB.game,null);
+  assert.equal(ctx.guestToken(),'guest-continuation');
+});
+
+test('invalid login credentials do not expire an existing guest identity',async()=>{
+  const ctx=loadSlice({
+    localStorage:storage({'breach.guestToken':'active-guest'}),
+    fetch:async()=>jsonResponse(401,{code:'invalid_credentials'})
+  });
+  ctx.setIdentity({kind:'guest',id:'g1',displayName:'Guest1:Rahul',isAdmin:false});
+  await assert.rejects(
+    ctx.submitLogin({email:'rahul@example.com',password:'wrong-pass'}),
+    error=>error.code==='invalid_credentials'
+  );
+  assert.equal(ctx.PUB.identity.kind,'guest');
+  assert.equal(ctx.guestToken(),'active-guest');
+});
+
+test('guest token persistence failures fall back to a safe current-tab session',async()=>{
+  const calls=[];
+  const brokenStorage={
+    getItem(){throw new Error('localStorage read denied');},
+    setItem(){throw new Error('localStorage quota exceeded');},
+    removeItem(){throw new Error('localStorage remove denied');}
+  };
+  const ctx=loadSlice({localStorage:brokenStorage,fetch:async(url,options)=>{
+    calls.push([url,options]);
+    if(url.endsWith('/v1/guests'))return jsonResponse(201,{
+      guestToken:'memory-token',
+      identity:{kind:'guest',id:'g1',displayName:'Guest1:Rahul',isAdmin:false},
+      allowance:{remaining:3,limit:3,resetsAt:'2026-08-25T00:00:00+05:30'}
+    });
+    return jsonResponse(200,{ok:true});
+  }});
+  const result=await ctx.submitGuest('Rahul');
+  await ctx.apiRequest('/v1/difficulties');
+  assert.equal(result.view,'home');
+  assert.equal(ctx.PUB.identity.displayName,'Guest1:Rahul');
+  assert.equal(calls[1][1].headers['X-Breach-Guest'],'memory-token');
+});
+
+test('periodic 401 clears an in-memory guest token even when storage removal fails',async()=>{
+  let expired=false;
+  const brokenStorage={
+    getItem(){throw new Error('read denied');},
+    setItem(){throw new Error('write denied');},
+    removeItem(){throw new Error('remove denied');}
+  };
+  const ctx=loadSlice({localStorage:brokenStorage,fetch:async url=>{
+    if(url.endsWith('/v1/guests'))return jsonResponse(201,{
+      guestToken:'memory-token',
+      identity:{kind:'guest',id:'g1',displayName:'Guest1:Rahul',isAdmin:false},
+      allowance:{remaining:3,limit:3,resetsAt:'2026-08-25T00:00:00+05:30'}
+    });
+    expired=true;
+    return jsonResponse(401,{code:'authentication_required'});
+  }});
+  await ctx.submitGuest('Rahul');
+  await assert.rejects(ctx.refreshPublicSession(),error=>error.code==='authentication_required');
+  assert.equal(expired,true);
+  assert.equal(ctx.guestToken(),'');
+  assert.equal(ctx.PUB.identity,null);
+  assert.equal(ctx.PUB.view,'identity');
 });
 
 module.exports={jsonResponse,loadSlice,storage};

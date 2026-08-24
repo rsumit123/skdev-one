@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
 <meta name="theme-color" content="#0b1017">
-<meta name="description" content="Breach — two language models command opposing armies in a lane battle. A benchmark harness that looks like a game.">
+<meta name="description" content="Breach is a daily tactical battle where you command an army against an AI opponent.">
 <title>Breach — two AIs, one lane</title>
 <link rel="manifest" href="/war-game/manifest.webmanifest">
 <link rel="icon" href="/war-game/icon-192.png" sizes="192x192">
@@ -683,6 +683,7 @@ body.split #nudge{display:none}
         <div class="public-kicker">Identity clearance</div>
         <h1 id="identityTitle">Choose your callsign</h1>
         <p class="public-lede">Enter the breach as a guest, or keep your battles with an account.</p>
+        <div class="auth-error" id="identityError" role="alert" aria-live="assertive"></div>
         <div class="auth-actions" aria-label="Identity options">
           <button type="button" class="auth-switch" data-auth-view="guest">Play as guest</button>
           <button type="button" class="auth-switch" data-auth-view="signup">Create account</button>
@@ -1404,16 +1405,41 @@ function baseAgent(St,s){
    ------------------------------------------------------------ */
 /* PUBLIC APP TEST SLICE START */
 const PUBLIC_API='https://breach-api.skdev.one';
-const PUB={identity:null,allowance:null,difficulties:null,game:null,difficulty:null,view:'boot',busy:false};
+const PUB={identity:null,allowance:null,difficulties:null,game:null,difficulty:null,view:'boot',busy:false,generation:0};
+let MEMORY_GUEST_TOKEN='';
+const PUBLIC_REQUESTS=new Set();
 
 function guestToken(){
-  try{return localStorage.getItem('breach.guestToken')||'';}catch(e){return '';}
+  try{
+    const stored=localStorage.getItem('breach.guestToken');
+    if(stored)MEMORY_GUEST_TOKEN=stored;
+  }catch(error){}
+  return MEMORY_GUEST_TOKEN;
+}
+function guestTokenSet(token){
+  MEMORY_GUEST_TOKEN=String(token||'');
+  try{localStorage.setItem('breach.guestToken',MEMORY_GUEST_TOKEN);}catch(error){}
+  return MEMORY_GUEST_TOKEN;
+}
+function guestTokenClear(){
+  MEMORY_GUEST_TOKEN='';
+  try{localStorage.removeItem('breach.guestToken');}catch(error){}
+}
+function invalidatePublicGeneration(){
+  PUB.generation++;
+  PUBLIC_REQUESTS.forEach(controller=>controller.abort());
+  PUBLIC_REQUESTS.clear();
+  return PUB.generation;
 }
 function dossierKey(identity,model){
   return `breach.dossier.${identity.kind}.${identity.id}.${model}`;
 }
 function setIdentity(identity){
-  PUB.identity=identity?{...identity}:null;
+  const next=identity?{...identity}:null;
+  const currentKey=PUB.identity?`${PUB.identity.kind}:${PUB.identity.id}`:'';
+  const nextKey=next?`${next.kind}:${next.id}`:'';
+  if(currentKey!==nextKey)invalidatePublicGeneration();
+  PUB.identity=next;
   return PUB.identity;
 }
 function setAllowance(allowance){
@@ -1437,6 +1463,11 @@ function countdownRefreshDue(allowance,nowMs,refreshedAt){
 function difficultyAccess(identity,difficulty){
   return difficulty!=='hard'||!!(identity&&identity.kind==='user');
 }
+function difficultyButtonDisabled(identity,allowance,difficulty,busy){
+  const locked=!difficultyAccess(identity,difficulty);
+  const exhausted=!!(allowance&&allowance.remaining===0);
+  return !!busy||(!locked&&exhausted);
+}
 function exhaustionAction(identity){
   return identity&&identity.kind==='user'?'pro_coming_soon':'create_account';
 }
@@ -1448,11 +1479,24 @@ function publicMessage(code){
     invalid_credentials:'That email or password did not match.',
     invalid_request:'Check the highlighted details and try again.',
     active_session_exists:'You already have a battle in progress.',
+    authentication_required:'Your session expired. Sign in or continue as a guest.',
+    session_required:'Your session expired. Sign in or continue as a guest.',
     session_expired:'Your battle session expired. Choose a difficulty to start again.',
     try_again_later:'Too many attempts. Wait a moment and try again.'
   })[code]||'Something interrupted the connection. Please try again.';
 }
-async function apiRequest(path,{method='GET',body,headers={}}={}){
+function expirePublicSession(){
+  const guestWasCurrent=PUB.identity&&PUB.identity.kind==='guest';
+  if(guestWasCurrent)guestTokenClear();
+  invalidatePublicGeneration();
+  PUB.identity=null;
+  PUB.allowance=null;
+  PUB.difficulties=null;
+  PUB.game=null;
+  PUB.difficulty=null;
+  PUB.view='identity';
+}
+async function apiRequest(path,{method='GET',body,headers={},authScope='establish',signal}={}){
   const token=guestToken();
   let response;
   try{
@@ -1464,7 +1508,8 @@ async function apiRequest(path,{method='GET',body,headers={}}={}){
         ...(token?{'X-Breach-Guest':token}:{}),
         ...headers
       },
-      body:body?JSON.stringify(body):undefined
+      body:body?JSON.stringify(body):undefined,
+      ...(signal?{signal}:{})
     });
   }catch(error){
     const code='connection_error';
@@ -1472,7 +1517,11 @@ async function apiRequest(path,{method='GET',body,headers={}}={}){
   }
   const data=await response.json().catch(()=>({code:'connection_error'}));
   if(!response.ok){
-    const code=data&&typeof data.code==='string'?data.code:'connection_error';
+    let code=data&&typeof data.code==='string'?data.code:'connection_error';
+    if(response.status===401&&authScope==='session'){
+      expirePublicSession();
+      code='authentication_required';
+    }
     throw Object.assign(new Error(publicMessage(code)),{code,status:response.status,data});
   }
   return data;
@@ -1485,7 +1534,7 @@ function acceptPublicSession(data){
 }
 async function bootPublicApp(){
   try{
-    return acceptPublicSession(await apiRequest('/v1/me'));
+    return acceptPublicSession(await apiRequest('/v1/me',{authScope:'boot'}));
   }catch(error){
     if(error.status!==401)throw error;
     setIdentity(null);
@@ -1496,7 +1545,7 @@ async function bootPublicApp(){
 }
 async function submitGuest(displayName){
   const data=await apiRequest('/v1/guests',{method:'POST',body:{displayName}});
-  localStorage.setItem('breach.guestToken',data.guestToken);
+  guestTokenSet(data.guestToken);
   return acceptPublicSession(data);
 }
 async function submitSignup({displayName,email,password}){
@@ -1510,44 +1559,59 @@ async function submitLogin({email,password}){
   return acceptPublicSession(data);
 }
 async function logout(){
-  await apiRequest('/v1/auth/logout',{method:'POST'});
-  setIdentity(null);
-  setAllowance(null);
-  PUB.game=null;
-  PUB.difficulty=null;
-  PUB.view='identity';
+  expirePublicSession();
+  try{await apiRequest('/v1/auth/logout',{method:'POST'});}catch(error){
+    if(error.status!==401)throw error;
+  }
   return {view:'identity'};
 }
 async function loadDifficulties(){
-  const data=await apiRequest('/v1/difficulties');
+  const data=await apiRequest('/v1/difficulties',{authScope:'session'});
   PUB.difficulties=Array.isArray(data.difficulties)?data.difficulties.map(item=>({...item})):[];
   return PUB.difficulties;
+}
+async function refreshPublicSession(){
+  const generation=PUB.generation;
+  const data=await apiRequest('/v1/me',{authScope:'session'});
+  if(generation!==PUB.generation)return {view:'stale'};
+  setIdentity(data.identity);
+  setAllowance(data.allowance);
+  return {view:'home',identity:PUB.identity,allowance:PUB.allowance};
 }
 async function startDifficulty(difficulty){
   if(!difficultyAccess(PUB.identity,difficulty)){
     return {view:'signup',code:'difficulty_requires_account'};
   }
+  const generation=PUB.generation;
+  const controller=new AbortController();
+  PUBLIC_REQUESTS.add(controller);
   try{
-    const data=await apiRequest('/v1/games',{method:'POST',body:{difficulty}});
+    const data=await apiRequest('/v1/games',{
+      method:'POST',body:{difficulty},authScope:'session',signal:controller.signal
+    });
+    if(generation!==PUB.generation||controller.signal.aborted)return {view:'stale'};
     PUB.difficulty=data.difficulty;
     PUB.game={...data};
     setAllowance({remaining:data.gamesRemaining,resetsAt:data.resetsAt});
     PUB.view='matchup';
     return {view:'matchup',game:PUB.game};
   }catch(error){
+    if(error.code==='authentication_required')throw error;
+    if(generation!==PUB.generation||controller.signal.aborted)return {view:'stale'};
     if(error.code==='tier_unavailable'&&error.data&&Number.isInteger(error.data.gamesRemaining)){
       setAllowance({remaining:error.data.gamesRemaining,resetsAt:error.data.resetsAt});
     }
     PUB.game=null;
     throw error;
+  }finally{
+    PUBLIC_REQUESTS.delete(controller);
   }
 }
-/* PUBLIC APP TEST SLICE END */
-
 function setPublicBusy(busy){
   PUB.busy=!!busy;
-  document.querySelectorAll('.public-shell form button[type="submit"]').forEach(button=>button.disabled=PUB.busy);
+  document.querySelectorAll('.public-shell button').forEach(button=>button.disabled=PUB.busy);
 }
+/* PUBLIC APP TEST SLICE END */
 function showPublicView(view){
   PUB.view=view;
   document.querySelectorAll('[data-public-screen]').forEach(screen=>{
@@ -1591,6 +1655,18 @@ function showBootRetry(message){
   setAuthError('bootError',message);
   document.getElementById('btnBootRetry').hidden=false;
 }
+function stopResetCountdown(){
+  if(RESET_TIMER){clearInterval(RESET_TIMER);RESET_TIMER=null;}
+}
+function showSessionExpiredUI(error){
+  if(!error||error.code!=='authentication_required')return false;
+  stopResetCountdown();
+  setPublicBusy(false);
+  setAuthError('homeError','');
+  setAuthError('identityError',error.message);
+  showPublicView('identity');
+  return true;
+}
 function renderPublicIdentityHome(){
   if(!PUB.identity)return;
   document.getElementById('publicName').textContent=PUB.identity.displayName;
@@ -1600,10 +1676,13 @@ async function bootPublicUI(){
   showPublicView('boot');
   document.getElementById('btnBootRetry').hidden=true;
   setAuthError('bootError','');
+  setAuthError('identityError','');
   try{
     const result=await bootPublicApp();
     if(result.view==='home'){
-      try{await loadDifficulties();}catch(error){}
+      try{await loadDifficulties();}catch(error){
+        if(showSessionExpiredUI(error))return;
+      }
       renderPublicIdentityHome();
     }
     showPublicView(result.view);
@@ -1613,11 +1692,14 @@ async function bootPublicUI(){
 }
 async function runAuthAction(errorId,passwordInput,action){
   setAuthError(errorId,'');
+  setAuthError('identityError','');
   setPublicBusy(true);
   try{
     const result=await action();
     if(passwordInput)passwordInput.value='';
-    try{await loadDifficulties();}catch(error){}
+    try{await loadDifficulties();}catch(error){
+      if(showSessionExpiredUI(error))return;
+    }
     renderPublicIdentityHome();
     showPublicView(result.view);
   }catch(error){
@@ -1646,6 +1728,7 @@ function renderExhaustion(){
     message.textContent='Create an account for 10 games a day';
     const button=document.createElement('button');
     button.type='button';button.className='public-quiet';button.textContent='Create account';
+    button.disabled=PUB.busy;
     button.addEventListener('click',showSignupForHard);
     box.append(strong,message,button);
   }else{
@@ -1674,31 +1757,34 @@ function renderHome(){
     if(locked){
       button.firstChild.nodeValue='Create an account to unlock Hard ';
       small.textContent='Account required';
-      button.disabled=false;
+      button.disabled=difficultyButtonDisabled(PUB.identity,allowance,difficulty,PUB.busy);
     }else{
       button.firstChild.nodeValue=`Choose ${PUBLIC_DIFFICULTIES[difficulty].label} `;
       small.textContent='Uses 1 game';
-      button.disabled=exhausted||PUB.busy;
+      button.disabled=difficultyButtonDisabled(PUB.identity,allowance,difficulty,PUB.busy);
     }
   });
   renderExhaustion();
 }
 function startResetCountdown(){
-  if(RESET_TIMER){clearInterval(RESET_TIMER);RESET_TIMER=null;}
+  stopResetCountdown();
   const tick=async()=>{
     if(!PUB.allowance)return;
     renderHome();
     if(!countdownRefreshDue(PUB.allowance,Date.now(),RESET_REFRESHED_AT))return;
     RESET_REFRESHED_AT=PUB.allowance.resetsAt;
     try{
-      const data=await apiRequest('/v1/me');
-      setIdentity(data.identity);setAllowance(data.allowance);renderHome();
-    }catch(error){setAuthError('homeError',error.message);}
+      const result=await refreshPublicSession();
+      if(result.view==='home')renderHome();
+    }catch(error){
+      if(!showSessionExpiredUI(error))setAuthError('homeError',error.message);
+    }
   };
   tick();
   RESET_TIMER=setInterval(tick,1000);
 }
 function showSignupForHard(){
+  if(PUB.busy)return;
   showPublicView('identity');
   openAuthPanel('signup');
 }
@@ -1709,11 +1795,13 @@ function showMatchup(game){
   showPublicView('matchup');
 }
 function showGameStartError(error){
+  if(showSessionExpiredUI(error))return;
   renderHome();
   setAuthError('homeError',error.message);
   showPublicView('home');
 }
 async function startDifficultyUI(difficulty){
+  if(PUB.busy)return;
   if(!difficultyAccess(PUB.identity,difficulty)){showSignupForHard();return;}
   setAuthError('homeError','');
   setPublicBusy(true);renderHome();
@@ -1725,15 +1813,17 @@ async function startDifficultyUI(difficulty){
 }
 
 document.querySelectorAll('[data-auth-view]').forEach(button=>{
-  button.addEventListener('click',()=>openAuthPanel(button.dataset.authView));
+  button.addEventListener('click',()=>{if(!PUB.busy)openAuthPanel(button.dataset.authView);});
 });
 document.getElementById('guestForm').addEventListener('submit',event=>{
   event.preventDefault();
+  if(PUB.busy)return;
   const form=event.currentTarget;
   runAuthAction('guestError',null,()=>submitGuest(form.elements.displayName.value.trim()));
 });
 document.getElementById('signupForm').addEventListener('submit',event=>{
   event.preventDefault();
+  if(PUB.busy)return;
   const form=event.currentTarget;
   runAuthAction('signupError',form.elements.password,()=>submitSignup({
     displayName:form.elements.displayName.value.trim(),
@@ -1743,30 +1833,34 @@ document.getElementById('signupForm').addEventListener('submit',event=>{
 });
 document.getElementById('loginForm').addEventListener('submit',event=>{
   event.preventDefault();
+  if(PUB.busy)return;
   const form=event.currentTarget;
   runAuthAction('loginError',form.elements.password,()=>submitLogin({
     email:form.elements.email.value.trim(),password:form.elements.password.value
   }));
 });
 document.getElementById('btnPublicLogout').addEventListener('click',async()=>{
+  if(PUB.busy)return;
   setAuthError('homeError','');
   setPublicBusy(true);
   try{showPublicView((await logout()).view);}catch(error){setAuthError('homeError',error.message);}
   finally{setPublicBusy(false);}
 });
-document.getElementById('btnBootRetry').addEventListener('click',bootPublicUI);
-document.getElementById('btnPublicRanks').addEventListener('click',()=>showPublicView('ranks'));
-document.getElementById('btnRanksBack').addEventListener('click',()=>showPublicView(PUB.identity?'home':'identity'));
-document.getElementById('btnHomeRanks').addEventListener('click',()=>showPublicView('ranks'));
+document.getElementById('btnBootRetry').addEventListener('click',()=>{if(!PUB.busy)bootPublicUI();});
+document.getElementById('btnPublicRanks').addEventListener('click',()=>{if(!PUB.busy)showPublicView('ranks');});
+document.getElementById('btnRanksBack').addEventListener('click',()=>{if(!PUB.busy)showPublicView(PUB.identity?'home':'identity');});
+document.getElementById('btnHomeRanks').addEventListener('click',()=>{if(!PUB.busy)showPublicView('ranks');});
 document.getElementById('btnPublicMenu').addEventListener('click',event=>{
+  if(PUB.busy)return;
   const menu=document.getElementById('publicMenu'),open=menu.hidden;
   menu.hidden=!open;event.currentTarget.setAttribute('aria-expanded',String(open));
 });
 document.querySelectorAll('button[data-difficulty]').forEach(button=>{
   button.addEventListener('click',()=>startDifficultyUI(button.dataset.difficulty));
 });
-document.getElementById('btnMatchupBack').addEventListener('click',()=>showPublicView('home'));
+document.getElementById('btnMatchupBack').addEventListener('click',()=>{if(!PUB.busy)showPublicView('home');});
 document.getElementById('btnEnterBattle').addEventListener('click',()=>{
+  if(PUB.busy)return;
   if(!PUB.game){setAuthError('matchupError',publicMessage('session_expired'));return;}
   if(Date.parse(PUB.game.expiresAt)<=Date.now()){
     setAuthError('matchupError',publicMessage('session_expired'));return;
