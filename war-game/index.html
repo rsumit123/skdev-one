@@ -3208,7 +3208,11 @@ function shouldShowHowTo(identity,store=localStorage){
   try{return store.getItem(key)!=='1';}catch(e){return true;}
 }
 function howToDismissOptions(automatic){return {complete:!!automatic};}
-function onPublicIdentityResolved(identity){return maybeOpenHowTo(identity);}
+function onPublicIdentityResolved(identity){
+  const key=onboardingKey(identity),active=currentHowToResolution();
+  if(key&&active&&active.open&&active.automatic&&onboardingKey(active.identity)===key) return false;
+  return maybeOpenHowTo(identity);
+}
 function mountHowToReplay(container,doc=document){
   if(!container||typeof container.querySelector!=='function') return null;
   const existing=container.querySelector('[data-how-to-replay]'); if(existing) return existing;
@@ -3311,6 +3315,11 @@ const HOW_TO_BEATS=[
   {map:'counter + read',title:'Counter the enemy',copy:'Tank beats Gunner · Gunner beats AT · AT beats Tank. Choppers need Gunners or AT to stop them. Read the lane, then change your next order.'}
 ];
 let HOW_TO_INDEX=0, HOW_TO_IDENTITY=null, HOW_TO_AUTOMATIC=false;
+function currentHowToResolution(){
+  const dialog=document.getElementById('mHowTo');
+  return {identity:HOW_TO_IDENTITY,automatic:HOW_TO_AUTOMATIC,
+    open:!!dialog&&dialog.classList.contains('on')};
+}
 function currentHowToIdentity(){return HOW_TO_IDENTITY||(typeof PUB!=='undefined'&&PUB.identity)||null;}
 function renderHowTo(){
   const beat=HOW_TO_BEATS[HOW_TO_INDEX];

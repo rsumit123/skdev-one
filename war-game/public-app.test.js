@@ -18,7 +18,6 @@ function storage(initial={}){
     removeItem:key=>values.delete(key)
   };
 }
-
 function jsonResponse(status,data){
   return {ok:status>=200&&status<300,status,json:async()=>data};
 }
@@ -72,17 +71,17 @@ function publicActionDocument(buttons){
 }
 
 const readIndex=()=>fs.readFileSync(INDEX,'utf8');
-function loadHowToSlice(seed={}){
+function loadHowToSlice(seed={},runtime={}){
   const html=readIndex();
   const hit=html.match(/\/\* HOW TO PLAY TEST SLICE START \*\/([\s\S]*?)\/\* HOW TO PLAY TEST SLICE END \*\//);
   assert.ok(hit,'How to Play test slice is present');
   const localStorage=storage(seed);
-  return Function('localStorage',`${hit[1]};return {
+  return Function('localStorage','maybeOpenHowTo','currentHowToResolution',`${hit[1]};return {
     onboardingKey,finishHowTo,shouldShowHowTo,
     howToDismissOptions:typeof howToDismissOptions==='undefined'?undefined:howToDismissOptions,
     onPublicIdentityResolved:typeof onPublicIdentityResolved==='undefined'?undefined:onPublicIdentityResolved,
     mountHowToReplay:typeof mountHowToReplay==='undefined'?undefined:mountHowToReplay
-  };`)(localStorage);
+  };`)(localStorage,runtime.maybeOpenHowTo||(()=>false),runtime.currentHowToResolution||(()=>null));
 }
 function loadDialogSlice(){
   const html=readIndex();
@@ -635,6 +634,31 @@ test('public integration exposes identity and replay hooks with foundation seams
   assert.match(html,/breach:identity-resolved/);
   assert.match(html,/FOUNDATION CALL SITE: acceptPublicSession/);
   assert.match(html,/FOUNDATION CALL SITE: publicMenu/);
+});
+
+test('duplicate identity resolution preserves an in-progress automatic onboarding session',()=>{
+  const user={kind:'user',id:'u7'};
+  let session={open:false,automatic:false,identity:null};
+  let step=4,activeOpener='account-menu',dialogOpener=null,openCount=0;
+  const ctx=loadHowToSlice({}, {
+    currentHowToResolution:()=>session,
+    maybeOpenHowTo(identity){
+      openCount++;step=0;dialogOpener=activeOpener;
+      session={open:true,automatic:true,identity};
+      return true;
+    }
+  });
+
+  assert.equal(ctx.onPublicIdentityResolved(user),true);
+  step=2;activeOpener='refreshed-session-button';
+  assert.equal(ctx.onPublicIdentityResolved({...user}),false);
+  assert.equal(step,2);
+  assert.equal(dialogOpener,'account-menu');
+  assert.equal(openCount,1);
+
+  session.open=false;
+  assert.equal(ctx.onPublicIdentityResolved({kind:'guest',id:'g8'}),true);
+  assert.equal(openCount,2);
 });
 
 test('replay hook mounts one permanent How to Play action',()=>{
