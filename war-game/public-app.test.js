@@ -39,7 +39,8 @@ function loadSlice(overrides={}){
   });
   const exports=['PUB','guestToken','dossierKey','setIdentity','setAllowance','quotaView',
     'difficultyAccess','publicMessage','apiRequest','bootPublicApp','submitGuest','submitSignup',
-    'submitLogin','logout','exhaustionAction','formatCountdown'];
+    'submitLogin','logout','exhaustionAction','formatCountdown','countdownRefreshDue',
+    'loadDifficulties','startDifficulty'];
   const expose=exports.map(name=>`${JSON.stringify(name)}:typeof ${name}==='undefined'?undefined:${name}`).join(',');
   vm.runInContext(`${source.slice(start,end+END.length)}\nglobalThis.__slice={${expose}};`,context);
   return {...context.__slice,localStorage};
@@ -182,6 +183,82 @@ test('logout clears account state and restores the separate guest continuation p
   assert.equal(ctx.PUB.allowance,null);
   assert.equal(ctx.guestToken(),'g-token');
   assert.equal(result.view,'identity');
+});
+
+test('guest sees hard as locked and registered user sees it enabled',()=>{
+  const ctx=loadSlice();
+  assert.equal(ctx.difficultyAccess({kind:'guest'},'hard'),false);
+  assert.equal(ctx.difficultyAccess({kind:'user'},'hard'),true);
+});
+
+test('quota exhaustion produces guest signup and user Pro states',()=>{
+  const ctx=loadSlice();
+  assert.equal(ctx.exhaustionAction({kind:'guest'}),'create_account');
+  assert.equal(ctx.exhaustionAction({kind:'user'}),'pro_coming_soon');
+});
+
+test('countdown formatting is stable and reset refresh is requested once per timestamp',()=>{
+  const ctx=loadSlice();
+  assert.equal(ctx.formatCountdown(15482),'04:18:02');
+  assert.equal(ctx.formatCountdown(0),'00:00:00');
+  const allowance={remaining:0,resetsAt:'2026-08-25T00:00:00+05:30'};
+  const after=Date.parse('2026-08-25T00:00:01+05:30');
+  assert.equal(ctx.countdownRefreshDue(allowance,after,''),true);
+  assert.equal(ctx.countdownRefreshDue(allowance,after,allowance.resetsAt),false);
+});
+
+test('difficulty metadata comes from the identity-scoped endpoint',async()=>{
+  const calls=[];
+  const ctx=loadSlice({fetch:async(...args)=>{
+    calls.push(args);
+    return jsonResponse(200,{difficulties:[
+      {id:'easy',name:'Easy',requiresAccount:false},
+      {id:'medium',name:'Medium',requiresAccount:false},
+      {id:'hard',name:'Hard',requiresAccount:true}
+    ]});
+  }});
+  const difficulties=await ctx.loadDifficulties();
+  assert.equal(calls[0][0],'https://breach-api.skdev.one/v1/difficulties');
+  assert.deepEqual(Array.from(difficulties,item=>item.id),['easy','medium','hard']);
+});
+
+test('starting a difficulty sends no client-selected model and builds reveal state',async()=>{
+  const calls=[];
+  const ctx=loadSlice({fetch:async(...args)=>{
+    calls.push(args);
+    return jsonResponse(201,{
+      gameId:'gms_1',difficulty:'medium',
+      opponent:{id:'qwen/qwen3.7-flash',name:'Qwen 3.7 Flash'},humanSide:0,
+      gamesRemaining:2,resetsAt:'2026-08-25T00:00:00+05:30',
+      expiresAt:'2026-08-24T15:30:00+00:00'
+    });
+  }});
+  ctx.setIdentity({kind:'guest',id:'g1',displayName:'Guest1:Rahul',isAdmin:false});
+  const result=await ctx.startDifficulty('medium');
+  assert.deepEqual(JSON.parse(calls[0][1].body),{difficulty:'medium'});
+  assert.equal(calls[0][1].body.includes('model'),false);
+  assert.equal(ctx.PUB.game.opponent.name,'Qwen 3.7 Flash');
+  assert.equal(ctx.PUB.allowance.remaining,2);
+  assert.equal(result.view,'matchup');
+});
+
+test('a fully unavailable tier restores the server-refunded allowance',async()=>{
+  const ctx=loadSlice({fetch:async()=>jsonResponse(503,{
+    code:'tier_unavailable',gamesRemaining:3,resetsAt:'2026-08-25T00:00:00+05:30'
+  })});
+  ctx.setIdentity({kind:'guest',id:'g1',displayName:'Guest1:Rahul',isAdmin:false});
+  await assert.rejects(ctx.startDifficulty('easy'),error=>error.code==='tier_unavailable');
+  assert.equal(ctx.PUB.allowance.remaining,3);
+  assert.equal(ctx.PUB.game,null);
+});
+
+test('hard selection by a guest never creates a game',async()=>{
+  let calls=0;
+  const ctx=loadSlice({fetch:async()=>{calls++;return jsonResponse(201,{});}});
+  ctx.setIdentity({kind:'guest',id:'g1',displayName:'Guest1:Rahul',isAdmin:false});
+  const result=await ctx.startDifficulty('hard');
+  assert.equal(calls,0);
+  assert.deepEqual({...result},{view:'signup',code:'difficulty_requires_account'});
 });
 
 module.exports={jsonResponse,loadSlice,storage};
