@@ -190,3 +190,25 @@ v1–v3 economy wording; **v4** eco reprice 45→36 + base gun 6→2; **v5** Rai
 - The user plays mostly on **mobile, landscape**; keep it mobile-first.
 - Keep the clean model-vs-model **benchmark** uncontaminated by play features (memory/dossiers are human-facing; the tower is stamped v8).
 - When analysing games, pull them from the backend (`/v1/matches`) — no manual file sharing.
+
+---
+
+## 13. Public app — accounts, quotas, server-run models (launched 2026-08-24)
+
+Breach now has TWO faces in the one `index.html`:
+- **The public game** — the default face for real players. Accounts (guest or registered), a daily game allowance, difficulty tiers, and **the server runs the models** (players do NOT bring their own OpenRouter key). Public copy uses battle language, no API/provider/storage jargon.
+- **The benchmark** — the owner-only Benchmark Lab (model-vs-model, mock, the tools this whole doc describes), gated behind `/v1/me` `isAdmin===true`. The v8 tower simulator is unchanged and still the core; bench gate stays +0.0pp.
+
+**Backend** (`~/work/breach-api/`, branch `feature/breach-accounts-backend`, deployed on `ssh-social`): the legacy stdlib `app.py` was replaced by a **FastAPI** app (`app/` package) with SQLite. Key modules: `identity.py` (session cookie for registered users, `X-Breach-Guest` header for guests), `quota.py` (atomic IST-midnight daily allowance — **3/day guest, 10/day registered**), `games.py` + `routes_games.py` (server-owned game sessions and decisions), `openrouter.py` (bounded transport, one shared 30s deadline, stable failure codes, model-health three-strike), `prompt_v8.py` (server-side v8 prompt/memory/`extract_json`/`sanitize_decision`), `migrations.py` (additive schema, runs on startup), `legacy.py` (compatibility `POST /v1/matches` + old leaderboard reads), `routes_admin.py` (owner benchmark sessions).
+
+**Tiers** (`app/config.py` `MODEL_TIERS`): easy = nova-lite-v1 / nova-2-lite-v1 / phi-4; medium = gemini-3.5-flash-lite / qwen3.7-flash; hard = gemini-3.7-flash (registered only).
+
+**Public API** (all under `/v1`, `Origin: https://skdev.one` required for mutations): `POST /guests {displayName}`, `POST /auth/{signup,login,logout}`, `GET /me`, `GET /difficulties`, `POST /games`, `POST /games/{id}/complete`, `GET /history`, `GET /leaderboards/{players,models,recent}`. Legacy `GET /v1/{matches,standings}` + `POST /v1/matches` remain during compatibility.
+
+**Compatibility & cutover**: the backend deployed with `BREACH_LEGACY_PUBLIC_READS=true` + `BREACH_LEGACY_WRITES=true` so the old frontend kept working during the swap. **After the new frontend is confirmed live, flip both to `false`** (edit `~/breach-api-new/.env` on the host, `docker compose up -d`) to close anonymous reads/writes. The old frontend's direct `POST /v1/matches` writes stop then — acceptable once the public app is the only client.
+
+**Deploy notes** (host `ssh-social`, dir `~/breach-api-new`, compose project `breach-api`, same volume `breach-api_breach-data`, port 8050 loopback, nginx unchanged): `.env` holds the real `OPENROUTER_API_KEY` (never commit it) and `FORWARDED_ALLOW_IPS=172.17.0.1` (the Docker gateway). Backups live in `~/breach-backups/`. Provider gate: `docker compose run --rm breach-api python -m scripts.provider_smoke` must print `PASS`. Full predeploy ceremony (`scripts/predeploy_gate.py`, reviewed-source binding, recovery manifest) exists for a high-stakes cutover; the launch used the pragmatic path (DB backup + compatibility mode + additive migration + provider smoke) because there were no real users yet.
+
+**Backend tests**: `cd ~/work/breach-api/.worktrees/breach-accounts-backend && python3 -m pytest -q` (380+ passing). **Frontend public tests**: `node --test war-game/public-app.test.js` (71 passing). The mandatory `index.html` gate (syntax/dup/secret + `bench.js gate`) is unchanged and still required.
+
+**Owner migration**: register `rsumit123@gmail.com` through the public signup, then `docker compose exec breach-api python scripts/assign_owner_matches.py --email rsumit123@gmail.com --db /data/breach.db` (idempotent — grants admin, assigns historical unowned matches once).

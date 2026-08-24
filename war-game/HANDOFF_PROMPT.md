@@ -45,3 +45,5 @@ command, not another unit.
 Start by confirming you've read DEVELOPMENT.md and summarizing the current game
 state (units, economy, tower, memory/dossiers, the open `stall` exploit) back to
 the owner, then ask what to build.
+
+> NOTE (2026-08-24): Breach now has a public account-based game (guests/registered, daily quotas, server-run models) plus an owner-only Benchmark Lab. See DEVELOPMENT.md §13 and the backend at ~/work/breach-api (feature/breach-accounts-backend, FastAPI). The benchmark tooling in this doc is unchanged.
