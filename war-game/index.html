@@ -728,6 +728,66 @@ body.split #nudge{display:none}
 </div>
 
 <script>
+/* PUBLIC APP TEST SLICE START */
+const PUBLIC_API='https://breach-api.skdev.one';
+const PUB={identity:null,allowance:null,game:null,difficulty:null,view:'boot',busy:false};
+
+function guestToken(){
+  try{return localStorage.getItem('breach.guestToken')||'';}catch(e){return '';}
+}
+function dossierKey(identity,model){
+  return `breach.dossier.${identity.kind}.${identity.id}.${model}`;
+}
+function setIdentity(identity){
+  PUB.identity=identity?{...identity}:null;
+  return PUB.identity;
+}
+function setAllowance(allowance){
+  PUB.allowance=allowance?{...allowance}:null;
+  return PUB.allowance;
+}
+function quotaView(allowance,nowMs){
+  return {
+    remaining:allowance.remaining,
+    seconds:Math.max(0,Math.ceil((Date.parse(allowance.resetsAt)-nowMs)/1000))
+  };
+}
+function difficultyAccess(identity,difficulty){
+  return difficulty!=='hard'||!!(identity&&identity.kind==='user');
+}
+function publicMessage(code){
+  return ({
+    quota_exhausted:'You have used today\'s free games.',
+    tier_unavailable:'That AI commander is temporarily unavailable. Your game was refunded.',
+    difficulty_requires_account:'Create an account to unlock Hard.',
+    invalid_credentials:'That email or password did not match.',
+    invalid_request:'Check the highlighted details and try again.',
+    active_session_exists:'You already have a battle in progress.',
+    session_expired:'Your battle session expired. Choose a difficulty to start again.',
+    try_again_later:'Too many attempts. Wait a moment and try again.'
+  })[code]||'Something interrupted the connection. Please try again.';
+}
+async function apiRequest(path,{method='GET',body,headers={}}={}){
+  const token=guestToken();
+  const response=await fetch(PUBLIC_API+path,{
+    method,
+    credentials:'include',
+    headers:{
+      ...(body?{'Content-Type':'application/json'}:{}),
+      ...(token?{'X-Breach-Guest':token}:{}),
+      ...headers
+    },
+    body:body?JSON.stringify(body):undefined
+  });
+  const data=await response.json().catch(()=>({code:'connection_error'}));
+  if(!response.ok){
+    const code=data&&typeof data.code==='string'?data.code:'connection_error';
+    throw Object.assign(new Error(publicMessage(code)),{code,status:response.status,data});
+  }
+  return data;
+}
+/* PUBLIC APP TEST SLICE END */
+
 /* ============================================================
    1. RULES
    ============================================================ */
