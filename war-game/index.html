@@ -101,6 +101,7 @@ canvas#field{display:block;width:100%;height:100%}
 #bannerX{position:absolute;top:5px;right:7px;width:30px;height:30px;border:0;border-radius:50%;
   background:rgba(255,255,255,.08);color:#c3ccd6;font-size:21px;line-height:1;cursor:pointer;
   font-family:system-ui,sans-serif;padding:0;display:flex;align-items:center;justify-content:center}
+#bannerX,#resultsChip{min-width:44px;min-height:44px}
 #bannerX:hover{background:rgba(255,255,255,.16);color:#fff}
 #bannerX:active{transform:scale(.92)}
 .brow{display:flex;gap:9px;flex-wrap:wrap;justify-content:center}
@@ -570,7 +571,7 @@ body.split .ovcard{display:none}
 /* In split mode the battlefield is small, so only the transport controls stay
    on it — setup and units move into the sheet footer where there is room. */
 body.split #fabs{top:auto;bottom:38px;flex-direction:row;gap:6px;max-height:none}
-body.split .fab{width:34px;height:34px;font-size:11px}
+body.split .fab{width:44px;height:44px;font-size:11px}
 body.split #btnSetupOpen,body.split #btnUnitsOpen{display:none}
 body.split #ticker{bottom:0}
 body.split #nudge{display:none}
@@ -591,7 +592,7 @@ body.split #nudge{display:none}
   .clockwrap small{font-size:7.5px}
   #hudTop{top:calc(4px + var(--st))}
   #fabs{top:calc(44px + var(--st));gap:5px;max-height:calc(100% - 62px - var(--st) - var(--sb))}
-  .fab{width:32px;height:32px;font-size:11px}
+  .fab{width:44px;height:44px;font-size:11px}
   .ovcard{bottom:calc(var(--peek) + 12px);font-size:11px;padding:5px 7px;max-width:min(33%,230px);
     max-height:52%;overflow:hidden;border-radius:7px}
   .ovh{font-size:8.5px;margin-bottom:2px}
@@ -611,7 +612,7 @@ body.split #nudge{display:none}
   #mini{display:flex}
   #fabs{flex-direction:row;flex-wrap:wrap;align-content:flex-start;top:auto;
     bottom:calc(var(--peek) + 24px);right:calc(5px + var(--sr));gap:4px;max-height:none}
-  .fab{width:29px;height:29px;font-size:10px}
+  .fab{width:44px;height:44px;font-size:10px}
   .hpstack{max-width:min(42%,180px)}
   .hpname{width:50px;font-size:9px}
   .hpnum{font-size:8px;width:22px}
@@ -688,6 +689,7 @@ body.split #nudge{display:none}
 
   <button id="resultsChip">&#9873; Results</button>
 
+  <!-- PUBLIC MARKUP START -->
   <div id="title" class="public-title">
     <main class="public-shell" aria-live="polite">
       <header class="public-mast">
@@ -698,7 +700,6 @@ body.split #nudge{display:none}
         </div>
       </header>
       <nav class="public-menu-panel" id="publicMenu" aria-label="Commander menu" hidden>
-        <button type="button" class="public-quiet" id="btnHowTo">How to play</button>
         <button type="button" class="public-quiet" id="btnHomeRanks">Leaderboard</button>
         <button type="button" class="public-quiet" id="btnPublicLogout">Sign out</button>
       </nav>
@@ -835,6 +836,7 @@ body.split #nudge{display:none}
       </div>
     </main>
   </div>
+  <!-- PUBLIC MARKUP END -->
 
   <div class="ovcard a" id="ovA"></div>
   <div class="ovcard b" id="ovB"></div>
@@ -900,7 +902,7 @@ body.split #nudge{display:none}
     <rect x="30" y="16" width="16" height="40" rx="2" fill="#1d2630"/>
     <circle cx="38" cy="62" r="2.4" fill="#7b8692"/>
   </svg>
-  <h3 id="rotateTitle">Rotate your phone</h3>
+  <h3 id="rotateTitle" tabindex="-1">Rotate your phone</h3>
   <p>Breach is a wide battlefield — landscape gives you the whole lane with units big enough to actually see.</p>
   <button class="act primary" id="btnAnyway">Play in portrait anyway</button>
 </div>
@@ -1736,6 +1738,7 @@ function renderPublicIdentityHome(){
   if(!PUB.identity)return;
   document.getElementById('publicName').textContent=PUB.identity.displayName;
   renderHome();
+  window.breachPublicHooks?.onPublicIdentityResolved(PUB.identity);
 }
 async function bootPublicUI(){
   showPublicView('boot');
@@ -3147,7 +3150,7 @@ function applyMode(){
   const portrait=window.matchMedia('(orientation: portrait)').matches;
   const narrow=window.innerWidth<720;
   const gate=LIVE&&portrait&&narrow&&!FORCED;
-  document.getElementById('rotate').style.display=gate?'flex':'none';
+  setRotateDialog(gate);
   document.body.classList.toggle('split',LIVE&&portrait&&narrow&&FORCED);
   if(!gate) setTimeout(()=>{fit();draw();},60);
   if(window.checkNudge) window.checkNudge();
@@ -3189,47 +3192,112 @@ document.querySelectorAll('.sheettabs button').forEach(b=>b.onclick=()=>{
    after a guest or account has resolved. The DOM event provides the same hook without coupling
    this experience patch to PUB, API, allowance, or routing contracts. */
 /* HOW TO PLAY TEST SLICE START */
+const HOW_TO_SESSION_SEEN=new Set();
 function onboardingKey(identity){
   if(!identity||!identity.kind||identity.id===undefined||identity.id===null) return '';
   return `breach.howto.${identity.kind}.${identity.id}`;
 }
 function finishHowTo(identity,store=localStorage){
   const key=onboardingKey(identity); if(!key) return false;
+  HOW_TO_SESSION_SEEN.add(key);
   try{store.setItem(key,'1');return true;}catch(e){return false;}
 }
 function shouldShowHowTo(identity,store=localStorage){
   const key=onboardingKey(identity); if(!key) return false;
-  try{return store.getItem(key)!=='1';}catch(e){return false;}
+  if(HOW_TO_SESSION_SEEN.has(key)) return false;
+  try{return store.getItem(key)!=='1';}catch(e){return true;}
+}
+function howToDismissOptions(automatic){return {complete:!!automatic};}
+function onPublicIdentityResolved(identity){return maybeOpenHowTo(identity);}
+function mountHowToReplay(container,doc=document){
+  if(!container||typeof container.querySelector!=='function') return null;
+  const existing=container.querySelector('[data-how-to-replay]'); if(existing) return existing;
+  const button=doc.createElement('button');
+  button.type='button';button.className='public-quiet';button.textContent='How to Play';
+  button.dataset.howToReplay='';
+  button.addEventListener('click',()=>{
+    if(typeof closePublicMenu==='function') closePublicMenu();
+    openHowTo();
+  });
+  container.insertBefore(button,container.querySelector('#btnPublicLogout'));
+  return button;
 }
 /* HOW TO PLAY TEST SLICE END */
 
 /* ----- modals ----- */
-let modalOpener=null;
+/* DIALOG FOCUS TEST SLICE START */
+function trapFocusTarget(active,items,backwards){
+  if(!items.length) return null;
+  const index=items.indexOf(active);
+  if(index<0) return backwards?items.at(-1):items[0];
+  if(backwards&&index===0) return items.at(-1);
+  if(!backwards&&index===items.length-1) return items[0];
+  return null;
+}
+function pushDialogFrame(stack,dialog,opener){
+  const prior=stack.findIndex(frame=>frame.dialog===dialog);
+  if(prior>=0) stack.splice(prior,1);
+  const frame={dialog,opener};stack.push(frame);return frame;
+}
+function popDialogFrame(stack,dialog){
+  const index=stack.findIndex(frame=>frame.dialog===dialog);
+  return index<0?null:stack.splice(index,1)[0];
+}
+/* DIALOG FOCUS TEST SLICE END */
+const DIALOG_STACK=[];
+function topDialog(){return DIALOG_STACK.length?DIALOG_STACK.at(-1).dialog:null;}
+function dialogItems(dialog){
+  return [...dialog.querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[href],[tabindex]:not([tabindex="-1"])')]
+    .filter(item=>item.offsetParent!==null);
+}
 function focusModal(modalEl){
   const target=modalEl.querySelector('[data-autofocus],[aria-invalid="true"],h1,h2,h3,[role="heading"],button,input,select,[tabindex]');
   if(target){if(target.matches('h1,h2,h3')) target.setAttribute('tabindex','-1');target.focus({preventScroll:true});}
 }
+function openDialogScope(dialog,opener=document.activeElement){
+  const source=opener instanceof HTMLElement?opener:null;
+  pushDialogFrame(DIALOG_STACK,dialog,source);focusModal(dialog);
+}
+function closeDialogScope(dialog){
+  const wasTop=topDialog()===dialog,frame=popDialogFrame(DIALOG_STACK,dialog);
+  if(!wasTop) return;
+  const next=topDialog(),opener=frame&&frame.opener;
+  if(next){
+    if(opener&&next.contains(opener)) opener.focus({preventScroll:true});
+    else focusModal(next);
+  }else if(opener&&document.contains(opener)) opener.focus({preventScroll:true});
+}
+function setRotateDialog(open){
+  const rotate=document.getElementById('rotate'),shown=rotate.style.display==='flex';
+  if(open&&!shown){rotate.style.display='flex';openDialogScope(rotate);}
+  else if(!open&&shown){rotate.style.display='none';closeDialogScope(rotate);}
+}
 function modal(id,v,opener=document.activeElement){
   const el=document.getElementById(id); if(!el) return;
-  if(v){modalOpener=opener instanceof HTMLElement?opener:null;el.classList.add('on');focusModal(el);}
-  else {el.classList.remove('on');if(modalOpener&&document.contains(modalOpener)) modalOpener.focus({preventScroll:true});modalOpener=null;}
+  if(v){el.classList.add('on');openDialogScope(el,opener);}
+  else {el.classList.remove('on');closeDialogScope(el);}
 }
 ['btnSetupOpen','btnSetupOpen2'].forEach(i=>document.getElementById(i).onclick=()=>modal('mSetup',true));
 ['btnUnitsOpen','btnUnitsOpen2'].forEach(i=>document.getElementById(i).onclick=()=>modal('mUnits',true));
-document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>modal(b.dataset.close,false));
+document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>{
+  if(b.dataset.close==='mHowTo') closeHowTo(howToDismissOptions(HOW_TO_AUTOMATIC));
+  else modal(b.dataset.close,false);
+});
 document.querySelectorAll('.modal').forEach(el=>{
   el.setAttribute('role','dialog');el.setAttribute('aria-modal','true');
   const heading=el.querySelector('.mhead h3'); if(heading){if(!heading.id)heading.id=`${el.id}Title`;el.setAttribute('aria-labelledby',heading.id);}
 });
 document.addEventListener('keydown',e=>{
-  const open=[...document.querySelectorAll('.modal.on')].at(-1); if(!open) return;
-  if(e.key==='Escape'){e.preventDefault();modal(open.id,false);return;}
+  const open=topDialog(); if(!open) return;
+  if(e.key==='Escape'){
+    e.preventDefault();
+    if(open.id==='mHowTo') closeHowTo(howToDismissOptions(HOW_TO_AUTOMATIC));
+    else if(open.classList.contains('modal')) modal(open.id,false);
+    return;
+  }
   if(e.key!=='Tab') return;
-  const items=[...open.querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[href],[tabindex]:not([tabindex="-1"])')]
-    .filter(x=>x.offsetParent!==null); if(!items.length)return;
-  const first=items[0],last=items.at(-1);
-  if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}
-  else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}
+  const target=trapFocusTarget(document.activeElement,dialogItems(open),e.shiftKey);
+  if(target){e.preventDefault();target.focus();}
 });
 Object.entries({btnFull:'Toggle fullscreen',btnSpeed:'Change battle speed',btnReset2:'Reset battle',btnSetupOpen:'Open setup',btnRanksFab:'Open leaderboard',btnUnitsOpen:'Open unit guide'}).forEach(([id,label])=>{
     const el=document.getElementById(id);if(el&&!el.getAttribute('aria-label'))el.setAttribute('aria-label',label);
@@ -3243,7 +3311,7 @@ const HOW_TO_BEATS=[
   {map:'counter + read',title:'Counter the enemy',copy:'Tank beats Gunner · Gunner beats AT · AT beats Tank. Choppers need Gunners or AT to stop them. Read the lane, then change your next order.'}
 ];
 let HOW_TO_INDEX=0, HOW_TO_IDENTITY=null, HOW_TO_AUTOMATIC=false;
-function currentHowToIdentity(){return HOW_TO_IDENTITY||(window.PUB&&PUB.identity)||null;}
+function currentHowToIdentity(){return HOW_TO_IDENTITY||(typeof PUB!=='undefined'&&PUB.identity)||null;}
 function renderHowTo(){
   const beat=HOW_TO_BEATS[HOW_TO_INDEX];
   document.getElementById('howToBeat').textContent=beat.title;
@@ -3256,7 +3324,7 @@ function renderHowTo(){
   next.textContent=HOW_TO_INDEX===HOW_TO_BEATS.length-1?'Choose difficulty':'Next';
 }
 function openHowTo({identity=null,automatic=false}={}){
-  HOW_TO_IDENTITY=identity||(window.PUB&&PUB.identity)||null; HOW_TO_AUTOMATIC=automatic; HOW_TO_INDEX=0;
+  HOW_TO_IDENTITY=identity||(typeof PUB!=='undefined'&&PUB.identity)||null; HOW_TO_AUTOMATIC=automatic; HOW_TO_INDEX=0;
   renderHowTo(); modal('mHowTo',true); return true;
 }
 function closeHowTo({complete=false}={}){
@@ -3266,16 +3334,24 @@ function closeHowTo({complete=false}={}){
 function advanceHowTo(){
   if(HOW_TO_INDEX<HOW_TO_BEATS.length-1){HOW_TO_INDEX++;renderHowTo();return;}
   closeHowTo({complete:true});
-  if(window.PUB&&typeof window.showPublicView==='function') window.showPublicView('home');
+  if(typeof PUB!=='undefined'&&typeof showPublicView==='function') showPublicView('home');
 }
 function skipHowTo(){closeHowTo({complete:true});}
 function maybeOpenHowTo(identity){if(shouldShowHowTo(identity)) openHowTo({identity,automatic:true});}
-document.getElementById('btnHowTo').onclick=()=>openHowTo();
+const legacyHowToButton=document.getElementById('btnHowTo');
+if(legacyHowToButton) legacyHowToButton.onclick=()=>openHowTo();
 document.getElementById('btnHowToBack').onclick=()=>{if(HOW_TO_INDEX){HOW_TO_INDEX--;renderHowTo();}};
 document.getElementById('btnHowToSkip').onclick=skipHowTo;
 document.getElementById('btnHowToNext').onclick=advanceHowTo;
-window.breachPublicHooks={...(window.breachPublicHooks||{}),identityResolved:maybeOpenHowTo,openHowTo:()=>openHowTo()};
-document.addEventListener('breach:identity-resolved',event=>maybeOpenHowTo(event.detail));
+/* FOUNDATION CALL SITE: acceptPublicSession(data) resolves identity and allowance;
+   renderPublicIdentityHome then calls window.breachPublicHooks?.onPublicIdentityResolved(PUB.identity). */
+/* FOUNDATION CALL SITE: publicMenu, after its DOM exists:
+   window.breachPublicHooks?.mountHowToReplay(document.getElementById('publicMenu')). */
+window.breachPublicHooks={...(window.breachPublicHooks||{}),
+  identityResolved:onPublicIdentityResolved,onPublicIdentityResolved,mountHowToReplay,openHowTo:()=>openHowTo()};
+document.addEventListener('breach:identity-resolved',event=>onPublicIdentityResolved(event.detail));
+const publicReplayMenu=document.getElementById('publicMenu');
+if(publicReplayMenu) mountHowToReplay(publicReplayMenu);
 
 /* ----- fullscreen -----
    Installed as a PWA the manifest handles this, but most people just open the
