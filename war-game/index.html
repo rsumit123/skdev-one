@@ -450,7 +450,7 @@ body:not(.live) #sheet{display:none}
 
 /* ---------- modals ---------- */
 .modal{position:fixed;inset:0;z-index:50;background:#0a0e14;display:none;flex-direction:column;
-  padding-top:var(--st);padding-bottom:var(--sb)}
+  padding:var(--st) var(--sr) var(--sb) var(--sl)}
 .modal.on{display:flex}
 .mhead{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--rule);flex:none}
 .mhead h3{font-size:16px;color:#eef2f6;flex:1}
@@ -460,13 +460,16 @@ body:not(.live) #sheet{display:none}
 .crow{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
 .cw2{font-family:"Saira Condensed",sans-serif;font-size:13px;letter-spacing:.05em;width:61px;flex:none;font-weight:700}
 select,input{background:#0b1016;border:1px solid #333d47;color:var(--txt);border-radius:5px;padding:7px 8px;
-  font-family:"IBM Plex Mono",monospace;font-size:12px;min-width:0}
+  font-family:"IBM Plex Mono",monospace;font-size:12px;min-width:0;min-height:44px}
 select{flex:1}
 .act{background:#1a222b;border:1px solid #39434e;color:#dfe6ee;border-radius:6px;padding:9px 13px;
   font-family:"Saira Condensed",sans-serif;font-size:13px;letter-spacing:.07em;text-transform:uppercase;
-  cursor:pointer;font-weight:700}
+  cursor:pointer;font-weight:700;min-height:44px}
 .act.primary{background:var(--amber);color:#20180a;border-color:var(--amber)}
 .act:active{transform:scale(.97)}
+.act[aria-disabled="true"],.act:disabled{opacity:.5;cursor:not-allowed}
+button:focus-visible,input:focus-visible,select:focus-visible,[tabindex]:focus-visible{
+  outline:2px solid var(--amber);outline-offset:2px}
 .tout{font-size:10px;color:var(--txt-2);margin-top:7px;line-height:1.5;word-break:break-word}
 .warnbox{font-size:9.5px;color:var(--txt-3);margin-top:8px;line-height:1.55;border-left:2px solid #333d47;padding-left:8px}
 .inline{font-size:10px;color:var(--txt-2)}
@@ -555,6 +558,7 @@ table.lb td:first-child{text-align:left;white-space:normal}
   .howcopy{margin-top:5px;line-height:1.35}.howfoot{margin-top:9px;padding-top:8px}
 }
 @media (max-width:380px){.howmap{gap:3px}.howpoint{font-size:8px;word-break:break-word}}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;scroll-behavior:auto!important;transition-duration:.01ms!important}}
 
 /* ---------- portrait split ---------- */
 body.split #sheet{position:relative;transform:none;height:auto;flex:1 1 auto;min-height:0;
@@ -870,7 +874,7 @@ body.split #nudge{display:none}
 <div id="sheet">
   <div id="grab"><span class="glabel">Thinking &amp; log</span></div>
   <div class="sheettabs">
-    <button class="on" data-s="feed">Thinking</button>
+    <button class="on" data-s="feed" aria-current="page">Thinking</button>
     <button data-s="log">Full log</button>
   </div>
   <div class="sheetbody">
@@ -889,17 +893,20 @@ body.split #nudge{display:none}
   </div>
 </div>
 
-<div id="rotate">
+<!-- PUBLIC MARKUP START -->
+<div id="rotate" role="dialog" aria-modal="true" aria-labelledby="rotateTitle">
   <svg width="76" height="76" viewBox="0 0 76 76" fill="none">
     <rect x="24" y="8" width="28" height="60" rx="5" stroke="#7b8692" stroke-width="2.5"/>
     <rect x="30" y="16" width="16" height="40" rx="2" fill="#1d2630"/>
     <circle cx="38" cy="62" r="2.4" fill="#7b8692"/>
   </svg>
-  <h3>Rotate your phone</h3>
+  <h3 id="rotateTitle">Rotate your phone</h3>
   <p>Breach is a wide battlefield — landscape gives you the whole lane with units big enough to actually see.</p>
   <button class="act primary" id="btnAnyway">Play in portrait anyway</button>
 </div>
+<!-- PUBLIC MARKUP END -->
 
+<!-- PUBLIC MARKUP START -->
 <div class="modal" id="mHowTo" role="dialog" aria-modal="true" aria-labelledby="howToHeading" aria-describedby="howToCopy">
   <div class="mhead"><h3 id="howToHeading" tabindex="-1">Field briefing</h3>
     <button class="act" id="btnHowToClose" data-close="mHowTo" aria-label="Close How to Play">Close</button></div>
@@ -918,6 +925,7 @@ body.split #nudge{display:none}
     </section>
   </div>
 </div>
+<!-- PUBLIC MARKUP END -->
 
 <div class="modal" id="mSetup">
   <div class="mhead"><h3>Setup</h3>
@@ -3171,7 +3179,7 @@ window.addEventListener('pointerup',e=>{
 try{ const s0=localStorage.getItem('breach.sheet'); if(s0!==null) setSheet(+s0); }catch(e){}
 document.querySelectorAll('.sheettabs button').forEach(b=>b.onclick=()=>{
   TAB=b.dataset.s==='log'?'log':'battle';
-  document.querySelectorAll('.sheettabs button').forEach(x=>x.classList.toggle('on',x===b));
+  document.querySelectorAll('.sheettabs button').forEach(x=>{x.classList.toggle('on',x===b);x.toggleAttribute('aria-current',x===b);});
   document.getElementById('feed').classList.toggle('on',b.dataset.s==='feed');
   document.getElementById('log').classList.toggle('on',b.dataset.s==='log');
   if(b.dataset.s==='log') drawLog();
@@ -3196,10 +3204,36 @@ function shouldShowHowTo(identity,store=localStorage){
 /* HOW TO PLAY TEST SLICE END */
 
 /* ----- modals ----- */
-const modal=(id,v)=>document.getElementById(id).classList.toggle('on',v);
+let modalOpener=null;
+function focusModal(modalEl){
+  const target=modalEl.querySelector('[data-autofocus],[aria-invalid="true"],h1,h2,h3,[role="heading"],button,input,select,[tabindex]');
+  if(target){if(target.matches('h1,h2,h3')) target.setAttribute('tabindex','-1');target.focus({preventScroll:true});}
+}
+function modal(id,v,opener=document.activeElement){
+  const el=document.getElementById(id); if(!el) return;
+  if(v){modalOpener=opener instanceof HTMLElement?opener:null;el.classList.add('on');focusModal(el);}
+  else {el.classList.remove('on');if(modalOpener&&document.contains(modalOpener)) modalOpener.focus({preventScroll:true});modalOpener=null;}
+}
 ['btnSetupOpen','btnSetupOpen2'].forEach(i=>document.getElementById(i).onclick=()=>modal('mSetup',true));
 ['btnUnitsOpen','btnUnitsOpen2'].forEach(i=>document.getElementById(i).onclick=()=>modal('mUnits',true));
 document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>modal(b.dataset.close,false));
+document.querySelectorAll('.modal').forEach(el=>{
+  el.setAttribute('role','dialog');el.setAttribute('aria-modal','true');
+  const heading=el.querySelector('.mhead h3'); if(heading){if(!heading.id)heading.id=`${el.id}Title`;el.setAttribute('aria-labelledby',heading.id);}
+});
+document.addEventListener('keydown',e=>{
+  const open=[...document.querySelectorAll('.modal.on')].at(-1); if(!open) return;
+  if(e.key==='Escape'){e.preventDefault();modal(open.id,false);return;}
+  if(e.key!=='Tab') return;
+  const items=[...open.querySelectorAll('button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[href],[tabindex]:not([tabindex="-1"])')]
+    .filter(x=>x.offsetParent!==null); if(!items.length)return;
+  const first=items[0],last=items.at(-1);
+  if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}
+  else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}
+});
+Object.entries({btnFull:'Toggle fullscreen',btnSpeed:'Change battle speed',btnReset2:'Reset battle',btnSetupOpen:'Open setup',btnRanksFab:'Open leaderboard',btnUnitsOpen:'Open unit guide'}).forEach(([id,label])=>{
+    const el=document.getElementById(id);if(el&&!el.getAttribute('aria-label'))el.setAttribute('aria-label',label);
+  });
 
 const HOW_TO_BEATS=[
   {map:'coins',title:'Read your coins',copy:'Coins pay for each order. Keep the next purchase affordable so your army can move when the turn arrives.'},

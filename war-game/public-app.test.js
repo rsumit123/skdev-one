@@ -80,6 +80,12 @@ function loadHowToSlice(seed={}){
   return Function('localStorage',`${hit[1]};return {onboardingKey,finishHowTo,shouldShowHowTo};`)(localStorage);
 }
 
+function publicMarkup(html){
+  const sections=[...html.matchAll(/<!-- PUBLIC MARKUP START -->([\s\S]*?)<!-- PUBLIC MARKUP END -->/g)];
+  assert.ok(sections.length,'public markup boundary is present');
+  return sections.map(section=>section[1]).join('\n');
+}
+
 test('onboarding completion is namespaced by current identity',()=>{
   const ctx=loadHowToSlice();
   assert.equal(ctx.onboardingKey({kind:'guest',id:'g1'}),'breach.howto.guest.g1');
@@ -572,6 +578,21 @@ test('the pure public-app slice has no DOM dependency',()=>{
   const source=fs.readFileSync(INDEX,'utf8');
   const slice=source.slice(source.indexOf(START),source.indexOf(END));
   assert.equal(/\b(?:document|window)\b/.test(slice),false);
+});
+
+test('public markup omits developer-facing copy',()=>{
+  const html=publicMarkup(readIndex());
+  for(const forbidden of ['OpenRouter key','results.json','localStorage','Vulcan/Cobalt','Copy log',
+    'cached tokens','prompt version','API URL','Clear local']){
+    assert.equal(html.includes(forbidden),false,forbidden);
+  }
+});
+
+test('public controls declare touch targets, safe-area spacing, and visible focus',()=>{
+  const html=readIndex();
+  assert.match(html,/\.act\{[^}]*min-height:44px/s);
+  assert.match(html,/padding:var\(--st\) var\(--sr\) var\(--sb\) var\(--sl\)/);
+  assert.match(html,/button:focus-visible/);
 });
 
 module.exports={jsonResponse,loadSlice,storage};
