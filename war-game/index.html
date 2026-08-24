@@ -123,9 +123,9 @@ canvas#field{display:block;width:100%;height:100%}
 body.live #title{display:none}
 body:not(.live) #ticker,body:not(.live) #fabs,body:not(.live) .ovcard,
 body:not(.live) #mini,body:not(.live) #hudTop{display:none}
-/* the sheet remembers how far it was open; keep it stowed on the title screen
-   so it can never cover the start buttons */
-body:not(.live) #sheet{transform:translateY(100%);pointer-events:none}
+/* The legacy battle log is absent from the public shell's visual and
+   accessibility trees; its state returns unchanged when a battle begins. */
+body:not(.live) #sheet{display:none}
 @media (max-height:400px){
   .tbrand{font-size:min(11vw,40px)}
   .tsub{font-size:11px;max-width:360px;line-height:1.45}
@@ -147,6 +147,12 @@ body:not(.live) #sheet{transform:translateY(100%);pointer-events:none}
   letter-spacing:.2em;line-height:1;color:#f1f3f5;text-transform:uppercase}
 .public-mark{font-size:9px;line-height:1.4;letter-spacing:.14em;text-transform:uppercase;
   color:var(--txt-2);text-align:right}
+.public-mast-tools{display:flex;align-items:center;gap:10px}
+.public-menu-button{border:1px solid #4a5560;background:#0a0e13;color:#d4dbe1;padding:8px 12px;
+  min-width:64px;cursor:pointer;text-transform:uppercase;letter-spacing:.08em;font-size:10px}
+.public-menu-panel{display:flex;justify-content:flex-end;gap:8px;border-bottom:1px solid var(--rule);
+  padding:8px 0;background:#080c10}
+.public-menu-panel[hidden],.public-menu-button[hidden]{display:none}
 .public-screen{display:none;flex:1;min-height:0;padding:18px 0}
 .public-screen.on{display:flex;flex-direction:column}
 .public-kicker{color:var(--amber);font-size:9px;letter-spacing:.18em;text-transform:uppercase;margin-bottom:5px}
@@ -180,11 +186,69 @@ body:not(.live) #sheet{transform:translateY(100%);pointer-events:none}
 .public-retry{margin-top:16px;align-self:flex-start}
 .public-home-placeholder{border-top:1px solid var(--rule);border-bottom:1px solid var(--rule);
   margin-top:16px;padding:14px 0;color:#8e99a5;text-align:left}
+.battle-authorization{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:18px;align-items:end;
+  border-top:2px solid var(--amber);border-bottom:1px solid #665a2a;padding:12px 0 13px;
+  position:relative;text-align:left}
+.authorization-stamp{position:absolute;right:0;top:-8px;background:#17170f;
+  color:var(--amber);border:1px solid #665a2a;padding:2px 6px;font-size:8px;letter-spacing:.15em}
+.battle-authorization h1{font-size:clamp(28px,6vw,44px);overflow-wrap:anywhere}
+.authorization-quota{text-align:right;display:flex;flex-direction:column;gap:5px;min-width:260px}
+.authorization-quota strong{color:#f0d77c;font-family:"Saira Condensed",sans-serif;font-size:20px;
+  letter-spacing:.035em;text-transform:uppercase}
+.authorization-quota span{font-size:9px;color:var(--txt-2);text-transform:uppercase;letter-spacing:.08em}
+.difficulty-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;margin:17px 0 7px;text-align:left}
+.difficulty-heading h2{font-family:"Saira Condensed",sans-serif;font-size:25px;line-height:1;
+  text-transform:uppercase;letter-spacing:.06em;color:#e7eaed;margin:0}
+.difficulty-heading p{max-width:285px;font-size:9.5px;line-height:1.4;color:var(--txt-2);margin:0;text-align:right}
+.difficulty-list{border-top:1px solid var(--rule)}
+.difficulty-row{display:grid;grid-template-columns:minmax(170px,.85fr) minmax(230px,1.4fr) minmax(155px,.65fr);
+  gap:12px;align-items:center;text-align:left;border-bottom:1px solid var(--rule);padding:10px 0;position:relative}
+.difficulty-row::before{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:#505a64;opacity:0}
+.difficulty-row:hover::before{opacity:1}
+.difficulty-level{display:flex;flex-direction:column;gap:1px}
+.difficulty-level span{font-family:"Saira Condensed",sans-serif;text-transform:uppercase;letter-spacing:.1em;
+  color:var(--amber);font-size:19px;font-weight:700}
+.difficulty-level b{font-family:"Saira Condensed",sans-serif;font-size:16px;letter-spacing:.025em;color:#dbe0e5}
+.difficulty-row p{color:#8d98a4;font-size:10px;line-height:1.4;margin:0}
+.difficulty-row button{border:1px solid #756525;background:#17170f;color:#f0d77c;cursor:pointer;
+  padding:7px 10px;text-align:left;font-weight:600}
+.difficulty-row button small{display:block;color:#978a55;font-size:8px;font-weight:400;letter-spacing:.08em;
+  margin-top:2px;text-transform:uppercase}
+.difficulty-row.locked{opacity:.72}.difficulty-row.locked button{border-color:#414a53;background:#0b0f14;color:#bac2ca}
+.difficulty-row.locked button small{color:#7b8692}
+.difficulty-row.exhausted button{opacity:.45;cursor:not-allowed}
+.exhaustion-state{border-left:2px solid var(--amber);background:#0c1014;padding:11px 12px;margin-top:12px;
+  text-align:left;color:#bdc5cd;line-height:1.45}
+.exhaustion-state strong{display:block;font-family:"Saira Condensed",sans-serif;font-size:20px;
+  color:#f0d77c;text-transform:uppercase;letter-spacing:.04em}
+.exhaustion-state button{margin-top:8px}
+.matchup-screen{justify-content:center;position:relative;text-align:center;overflow:hidden}
+.matchup-screen .public-kicker{margin-top:16px}
+.matchup-screen h1{max-width:680px;margin-left:auto;margin-right:auto;font-size:clamp(34px,8vw,66px)}
+.matchup-screen h1 span{color:#fff}
+.matchup-rails{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:12px;width:100%;
+  margin-bottom:14px}
+.matchup-rails span{height:5px;background:var(--A);box-shadow:0 0 0 1px #57291d}
+.matchup-rails span:last-child{background:var(--B);box-shadow:0 0 0 1px #234b65}
+.matchup-rails i{font-family:"Saira Condensed",sans-serif;font-style:normal;font-size:20px;color:var(--amber)}
+.matchup-tier{display:inline-flex;align-self:center;margin-top:12px;border:1px solid #786824;color:#f0d77c;
+  padding:6px 14px;text-transform:uppercase;font-family:"Saira Condensed",sans-serif;font-weight:700;
+  font-size:19px;letter-spacing:.12em}
+.matchup-screen .public-lede{align-self:center}
+.matchup-actions{display:flex;justify-content:center;gap:9px;flex-wrap:wrap;margin-top:18px}
+.matchup-enter{border:1px solid #a98a27;background:var(--amber);color:#151207;padding:10px 20px;
+  cursor:pointer;font-weight:600;min-width:180px}
 .legacy-entry{display:none}
 @media (max-width:560px){
   .auth-actions{grid-template-columns:1fr}
   .auth-panel form{grid-template-columns:1fr}
   .auth-panel label.auth-wide{grid-column:auto}
+  .public-mark{display:none}
+  .battle-authorization{grid-template-columns:1fr;gap:8px;align-items:start}
+  .authorization-quota{text-align:left;min-width:0}
+  .difficulty-heading{display:block}.difficulty-heading p{text-align:left;margin-top:5px}
+  .difficulty-row{grid-template-columns:1fr;padding:12px 0;gap:6px}
+  .difficulty-row button{width:100%}
 }
 @media (max-height:430px) and (orientation:landscape){
   #title.public-title{padding-top:calc(7px + var(--st));padding-bottom:calc(7px + var(--sb))}
@@ -193,6 +257,12 @@ body:not(.live) #sheet{transform:translateY(100%);pointer-events:none}
   .auth-actions{margin-top:9px}.auth-panel{margin-top:8px;padding-top:8px}
   .auth-panel form{gap:7px}.auth-panel input{min-height:44px;padding:8px 10px}
   .auth-help,.auth-error{margin-top:4px}.public-secondary{padding-top:8px}
+  .battle-authorization{padding:7px 0;gap:12px}.battle-authorization h1{font-size:28px}
+  .authorization-quota strong{font-size:17px}.difficulty-heading{margin:9px 0 5px}
+  .difficulty-heading h2{font-size:20px}.difficulty-row{padding:6px 0}
+  .difficulty-level span{font-size:16px}.difficulty-level b{font-size:14px}
+  .matchup-screen .public-kicker{margin-top:8px}.matchup-screen h1{font-size:38px}
+  .matchup-rails{margin-bottom:7px}.matchup-actions{margin-top:10px}
 }
 
 /* decision overlays */
@@ -591,8 +661,15 @@ body.split #nudge{display:none}
     <main class="public-shell" aria-live="polite">
       <header class="public-mast">
         <div class="public-wordmark">BREACH</div>
-        <div class="public-mark">Tactical command<br>Public theatre</div>
+        <div class="public-mast-tools">
+          <div class="public-mark">Tactical command<br>Public theatre</div>
+          <button class="public-menu-button" id="btnPublicMenu" type="button" aria-expanded="false" aria-controls="publicMenu" hidden>Menu</button>
+        </div>
       </header>
+      <nav class="public-menu-panel" id="publicMenu" aria-label="Commander menu" hidden>
+        <button type="button" class="public-quiet" id="btnHomeRanks">Leaderboard</button>
+        <button type="button" class="public-quiet" id="btnPublicLogout">Sign out</button>
+      </nav>
 
       <section class="public-screen on" id="publicBoot" data-public-screen="boot" aria-labelledby="bootTitle">
         <div class="public-kicker">Establishing link</div>
@@ -659,13 +736,53 @@ body.split #nudge{display:none}
       </section>
 
       <section class="public-screen" id="publicHome" data-public-screen="home" aria-labelledby="homeTitle">
-        <div class="public-kicker">Battle command</div>
-        <h1 id="homeTitle">Welcome, <span id="publicName">Commander</span></h1>
-        <div class="public-home-placeholder">Daily battle authorization is loading.</div>
-        <div class="public-secondary">
-          <button type="button" class="public-quiet" id="btnPublicLogout">Sign out</button>
+        <section class="battle-authorization" aria-labelledby="homeTitle">
+          <span class="authorization-stamp" aria-hidden="true">AUTHORIZED</span>
+          <div class="authorization-copy">
+            <div class="public-kicker">Daily battle authorization</div>
+            <h1 id="homeTitle"><span id="publicName">Commander</span></h1>
+          </div>
+          <div class="authorization-quota">
+            <strong id="publicQuota">— games left · Resets in --:--:--</strong>
+            <span>Daily limit resets at midnight IST</span>
+          </div>
+        </section>
+        <div class="difficulty-heading">
+          <div><span class="public-kicker">Opponent class</span><h2>Choose your difficulty</h2></div>
+          <p>The commander is revealed after your game is authorized.</p>
         </div>
+        <div class="difficulty-list" id="difficultyList">
+          <article class="difficulty-row" data-difficulty-card="easy">
+            <div class="difficulty-level"><span>Easy</span><b>Learn the battlefield</b></div>
+            <p>Nova Lite · Nova 2 Lite · Phi-4</p>
+            <button type="button" data-difficulty="easy">Choose Easy <small>Uses 1 game</small></button>
+          </article>
+          <article class="difficulty-row" data-difficulty-card="medium">
+            <div class="difficulty-level"><span>Medium</span><b>Expect counterplay</b></div>
+            <p>Gemini 3.5 Flash Lite · Qwen 3.7 Flash</p>
+            <button type="button" data-difficulty="medium">Choose Medium <small>Uses 1 game</small></button>
+          </article>
+          <article class="difficulty-row" data-difficulty-card="hard">
+            <div class="difficulty-level"><span>Hard</span><b>Face the benchmark leader</b></div>
+            <p>Gemini 3.7 Flash</p>
+            <button type="button" data-difficulty="hard">Choose Hard <small>Uses 1 game</small></button>
+          </article>
+        </div>
+        <div class="exhaustion-state" id="exhaustionState" hidden></div>
         <div class="auth-error" id="homeError" role="alert" aria-live="assertive"></div>
+      </section>
+
+      <section class="public-screen matchup-screen" id="publicMatchup" data-public-screen="matchup" aria-labelledby="matchupTitle">
+        <div class="matchup-rails" aria-hidden="true"><span></span><i>VS</i><span></span></div>
+        <div class="public-kicker">Battle authorization confirmed</div>
+        <h1 id="matchupTitle">Your opponent: <span id="matchupOpponent">Unknown commander</span></h1>
+        <div class="matchup-tier" id="matchupDifficulty">—</div>
+        <p class="public-lede">Your daily game is now reserved. Leaving this screen does not restore it.</p>
+        <div class="matchup-actions">
+          <button type="button" class="matchup-enter" id="btnEnterBattle">Enter battle</button>
+          <button type="button" class="public-quiet" id="btnMatchupBack">Back to command</button>
+        </div>
+        <div class="auth-error" id="matchupError" role="alert" aria-live="assertive"></div>
       </section>
 
       <section class="public-screen" id="publicRanksPreview" data-public-screen="ranks" aria-labelledby="ranksPreviewTitle">
@@ -874,213 +991,6 @@ body.split #nudge{display:none}
 </div>
 
 <script>
-/* PUBLIC APP TEST SLICE START */
-const PUBLIC_API='https://breach-api.skdev.one';
-const PUB={identity:null,allowance:null,game:null,difficulty:null,view:'boot',busy:false};
-
-function guestToken(){
-  try{return localStorage.getItem('breach.guestToken')||'';}catch(e){return '';}
-}
-function dossierKey(identity,model){
-  return `breach.dossier.${identity.kind}.${identity.id}.${model}`;
-}
-function setIdentity(identity){
-  PUB.identity=identity?{...identity}:null;
-  return PUB.identity;
-}
-function setAllowance(allowance){
-  PUB.allowance=allowance?{...allowance}:null;
-  return PUB.allowance;
-}
-function quotaView(allowance,nowMs){
-  return {
-    remaining:allowance.remaining,
-    seconds:Math.max(0,Math.ceil((Date.parse(allowance.resetsAt)-nowMs)/1000))
-  };
-}
-function difficultyAccess(identity,difficulty){
-  return difficulty!=='hard'||!!(identity&&identity.kind==='user');
-}
-function publicMessage(code){
-  return ({
-    quota_exhausted:'You have used today\'s free games.',
-    tier_unavailable:'That AI commander is temporarily unavailable. Your game was refunded.',
-    difficulty_requires_account:'Create an account to unlock Hard.',
-    invalid_credentials:'That email or password did not match.',
-    invalid_request:'Check the highlighted details and try again.',
-    active_session_exists:'You already have a battle in progress.',
-    session_expired:'Your battle session expired. Choose a difficulty to start again.',
-    try_again_later:'Too many attempts. Wait a moment and try again.'
-  })[code]||'Something interrupted the connection. Please try again.';
-}
-async function apiRequest(path,{method='GET',body,headers={}}={}){
-  const token=guestToken();
-  let response;
-  try{
-    response=await fetch(PUBLIC_API+path,{
-      method,
-      credentials:'include',
-      headers:{
-        ...(body?{'Content-Type':'application/json'}:{}),
-        ...(token?{'X-Breach-Guest':token}:{}),
-        ...headers
-      },
-      body:body?JSON.stringify(body):undefined
-    });
-  }catch(error){
-    const code='connection_error';
-    throw Object.assign(new Error(publicMessage(code)),{code,status:0,data:{code}});
-  }
-  const data=await response.json().catch(()=>({code:'connection_error'}));
-  if(!response.ok){
-    const code=data&&typeof data.code==='string'?data.code:'connection_error';
-    throw Object.assign(new Error(publicMessage(code)),{code,status:response.status,data});
-  }
-  return data;
-}
-function acceptPublicSession(data){
-  setIdentity(data.identity);
-  setAllowance(data.allowance);
-  PUB.view='home';
-  return {view:'home',identity:PUB.identity,allowance:PUB.allowance};
-}
-async function bootPublicApp(){
-  try{
-    return acceptPublicSession(await apiRequest('/v1/me'));
-  }catch(error){
-    if(error.status!==401)throw error;
-    setIdentity(null);
-    setAllowance(null);
-    PUB.view='identity';
-    return {view:'identity'};
-  }
-}
-async function submitGuest(displayName){
-  const data=await apiRequest('/v1/guests',{method:'POST',body:{displayName}});
-  localStorage.setItem('breach.guestToken',data.guestToken);
-  return acceptPublicSession(data);
-}
-async function submitSignup({displayName,email,password}){
-  const data=await apiRequest('/v1/auth/signup',{
-    method:'POST',body:{displayName,email,password}
-  });
-  return acceptPublicSession(data);
-}
-async function submitLogin({email,password}){
-  const data=await apiRequest('/v1/auth/login',{method:'POST',body:{email,password}});
-  return acceptPublicSession(data);
-}
-async function logout(){
-  await apiRequest('/v1/auth/logout',{method:'POST'});
-  setIdentity(null);
-  setAllowance(null);
-  PUB.game=null;
-  PUB.difficulty=null;
-  PUB.view='identity';
-  return {view:'identity'};
-}
-/* PUBLIC APP TEST SLICE END */
-
-function setPublicBusy(busy){
-  PUB.busy=!!busy;
-  document.querySelectorAll('.public-shell form button[type="submit"]').forEach(button=>button.disabled=PUB.busy);
-}
-function showPublicView(view){
-  PUB.view=view;
-  document.querySelectorAll('[data-public-screen]').forEach(screen=>{
-    screen.classList.toggle('on',screen.dataset.publicScreen===view);
-  });
-  if(view==='home'&&PUB.identity){
-    document.getElementById('publicName').textContent=PUB.identity.displayName;
-  }
-  document.getElementById('title').scrollTop=0;
-}
-function openAuthPanel(view){
-  document.querySelectorAll('[data-auth-panel]').forEach(panel=>{
-    panel.classList.toggle('on',panel.dataset.authPanel===view);
-  });
-  document.querySelectorAll('[data-auth-view]').forEach(button=>{
-    button.setAttribute('aria-pressed',String(button.dataset.authView===view));
-  });
-  const panel=document.querySelector(`[data-auth-panel="${view}"]`);
-  if(panel){
-    const first=panel.querySelector('input');
-    if(first)setTimeout(()=>first.focus(),0);
-  }
-}
-function setAuthError(id,message){
-  document.getElementById(id).textContent=message||'';
-}
-function showBootRetry(message){
-  setAuthError('bootError',message);
-  document.getElementById('btnBootRetry').hidden=false;
-}
-function renderPublicIdentityHome(){
-  if(!PUB.identity)return;
-  document.getElementById('publicName').textContent=PUB.identity.displayName;
-}
-async function bootPublicUI(){
-  showPublicView('boot');
-  document.getElementById('btnBootRetry').hidden=true;
-  setAuthError('bootError','');
-  try{
-    const result=await bootPublicApp();
-    if(result.view==='home')renderPublicIdentityHome();
-    showPublicView(result.view);
-  }catch(error){
-    showBootRetry(error.message);
-  }
-}
-async function runAuthAction(errorId,passwordInput,action){
-  setAuthError(errorId,'');
-  setPublicBusy(true);
-  try{
-    const result=await action();
-    if(passwordInput)passwordInput.value='';
-    renderPublicIdentityHome();
-    showPublicView(result.view);
-  }catch(error){
-    if(passwordInput)passwordInput.value='';
-    setAuthError(errorId,error.message);
-  }finally{
-    setPublicBusy(false);
-  }
-}
-
-document.querySelectorAll('[data-auth-view]').forEach(button=>{
-  button.addEventListener('click',()=>openAuthPanel(button.dataset.authView));
-});
-document.getElementById('guestForm').addEventListener('submit',event=>{
-  event.preventDefault();
-  const form=event.currentTarget;
-  runAuthAction('guestError',null,()=>submitGuest(form.elements.displayName.value.trim()));
-});
-document.getElementById('signupForm').addEventListener('submit',event=>{
-  event.preventDefault();
-  const form=event.currentTarget;
-  runAuthAction('signupError',form.elements.password,()=>submitSignup({
-    displayName:form.elements.displayName.value.trim(),
-    email:form.elements.email.value.trim(),
-    password:form.elements.password.value
-  }));
-});
-document.getElementById('loginForm').addEventListener('submit',event=>{
-  event.preventDefault();
-  const form=event.currentTarget;
-  runAuthAction('loginError',form.elements.password,()=>submitLogin({
-    email:form.elements.email.value.trim(),password:form.elements.password.value
-  }));
-});
-document.getElementById('btnPublicLogout').addEventListener('click',async()=>{
-  setAuthError('homeError','');
-  setPublicBusy(true);
-  try{showPublicView((await logout()).view);}catch(error){setAuthError('homeError',error.message);}
-  finally{setPublicBusy(false);}
-});
-document.getElementById('btnBootRetry').addEventListener('click',bootPublicUI);
-document.getElementById('btnPublicRanks').addEventListener('click',()=>showPublicView('ranks'));
-document.getElementById('btnRanksBack').addEventListener('click',()=>showPublicView(PUB.identity?'home':'identity'));
-
 /* ============================================================
    1. RULES
    ============================================================ */
@@ -1492,6 +1402,381 @@ function baseAgent(St,s){
    so sim time and wall time are fully decoupled and a slow
    model is never punished for being slow.
    ------------------------------------------------------------ */
+/* PUBLIC APP TEST SLICE START */
+const PUBLIC_API='https://breach-api.skdev.one';
+const PUB={identity:null,allowance:null,difficulties:null,game:null,difficulty:null,view:'boot',busy:false};
+
+function guestToken(){
+  try{return localStorage.getItem('breach.guestToken')||'';}catch(e){return '';}
+}
+function dossierKey(identity,model){
+  return `breach.dossier.${identity.kind}.${identity.id}.${model}`;
+}
+function setIdentity(identity){
+  PUB.identity=identity?{...identity}:null;
+  return PUB.identity;
+}
+function setAllowance(allowance){
+  PUB.allowance=allowance?{...allowance}:null;
+  return PUB.allowance;
+}
+function quotaView(allowance,nowMs){
+  return {
+    remaining:allowance.remaining,
+    seconds:Math.max(0,Math.ceil((Date.parse(allowance.resetsAt)-nowMs)/1000))
+  };
+}
+function formatCountdown(seconds){
+  const value=Math.max(0,Math.floor(Number(seconds)||0));
+  const pad=n=>String(n).padStart(2,'0');
+  return `${pad(Math.floor(value/3600))}:${pad(Math.floor(value%3600/60))}:${pad(value%60)}`;
+}
+function countdownRefreshDue(allowance,nowMs,refreshedAt){
+  return quotaView(allowance,nowMs).seconds===0&&refreshedAt!==allowance.resetsAt;
+}
+function difficultyAccess(identity,difficulty){
+  return difficulty!=='hard'||!!(identity&&identity.kind==='user');
+}
+function exhaustionAction(identity){
+  return identity&&identity.kind==='user'?'pro_coming_soon':'create_account';
+}
+function publicMessage(code){
+  return ({
+    quota_exhausted:'You have used today\'s free games.',
+    tier_unavailable:'That AI commander is temporarily unavailable. Your game was refunded.',
+    difficulty_requires_account:'Create an account to unlock Hard.',
+    invalid_credentials:'That email or password did not match.',
+    invalid_request:'Check the highlighted details and try again.',
+    active_session_exists:'You already have a battle in progress.',
+    session_expired:'Your battle session expired. Choose a difficulty to start again.',
+    try_again_later:'Too many attempts. Wait a moment and try again.'
+  })[code]||'Something interrupted the connection. Please try again.';
+}
+async function apiRequest(path,{method='GET',body,headers={}}={}){
+  const token=guestToken();
+  let response;
+  try{
+    response=await fetch(PUBLIC_API+path,{
+      method,
+      credentials:'include',
+      headers:{
+        ...(body?{'Content-Type':'application/json'}:{}),
+        ...(token?{'X-Breach-Guest':token}:{}),
+        ...headers
+      },
+      body:body?JSON.stringify(body):undefined
+    });
+  }catch(error){
+    const code='connection_error';
+    throw Object.assign(new Error(publicMessage(code)),{code,status:0,data:{code}});
+  }
+  const data=await response.json().catch(()=>({code:'connection_error'}));
+  if(!response.ok){
+    const code=data&&typeof data.code==='string'?data.code:'connection_error';
+    throw Object.assign(new Error(publicMessage(code)),{code,status:response.status,data});
+  }
+  return data;
+}
+function acceptPublicSession(data){
+  setIdentity(data.identity);
+  setAllowance(data.allowance);
+  PUB.view='home';
+  return {view:'home',identity:PUB.identity,allowance:PUB.allowance};
+}
+async function bootPublicApp(){
+  try{
+    return acceptPublicSession(await apiRequest('/v1/me'));
+  }catch(error){
+    if(error.status!==401)throw error;
+    setIdentity(null);
+    setAllowance(null);
+    PUB.view='identity';
+    return {view:'identity'};
+  }
+}
+async function submitGuest(displayName){
+  const data=await apiRequest('/v1/guests',{method:'POST',body:{displayName}});
+  localStorage.setItem('breach.guestToken',data.guestToken);
+  return acceptPublicSession(data);
+}
+async function submitSignup({displayName,email,password}){
+  const data=await apiRequest('/v1/auth/signup',{
+    method:'POST',body:{displayName,email,password}
+  });
+  return acceptPublicSession(data);
+}
+async function submitLogin({email,password}){
+  const data=await apiRequest('/v1/auth/login',{method:'POST',body:{email,password}});
+  return acceptPublicSession(data);
+}
+async function logout(){
+  await apiRequest('/v1/auth/logout',{method:'POST'});
+  setIdentity(null);
+  setAllowance(null);
+  PUB.game=null;
+  PUB.difficulty=null;
+  PUB.view='identity';
+  return {view:'identity'};
+}
+async function loadDifficulties(){
+  const data=await apiRequest('/v1/difficulties');
+  PUB.difficulties=Array.isArray(data.difficulties)?data.difficulties.map(item=>({...item})):[];
+  return PUB.difficulties;
+}
+async function startDifficulty(difficulty){
+  if(!difficultyAccess(PUB.identity,difficulty)){
+    return {view:'signup',code:'difficulty_requires_account'};
+  }
+  try{
+    const data=await apiRequest('/v1/games',{method:'POST',body:{difficulty}});
+    PUB.difficulty=data.difficulty;
+    PUB.game={...data};
+    setAllowance({remaining:data.gamesRemaining,resetsAt:data.resetsAt});
+    PUB.view='matchup';
+    return {view:'matchup',game:PUB.game};
+  }catch(error){
+    if(error.code==='tier_unavailable'&&error.data&&Number.isInteger(error.data.gamesRemaining)){
+      setAllowance({remaining:error.data.gamesRemaining,resetsAt:error.data.resetsAt});
+    }
+    PUB.game=null;
+    throw error;
+  }
+}
+/* PUBLIC APP TEST SLICE END */
+
+function setPublicBusy(busy){
+  PUB.busy=!!busy;
+  document.querySelectorAll('.public-shell form button[type="submit"]').forEach(button=>button.disabled=PUB.busy);
+}
+function showPublicView(view){
+  PUB.view=view;
+  document.querySelectorAll('[data-public-screen]').forEach(screen=>{
+    screen.classList.toggle('on',screen.dataset.publicScreen===view);
+  });
+  if(view==='home'&&PUB.identity){
+    document.getElementById('publicName').textContent=PUB.identity.displayName;
+  }
+  const menuButton=document.getElementById('btnPublicMenu');
+  menuButton.hidden=view!=='home';
+  if(view!=='home')closePublicMenu();
+  if(view==='home'){
+    renderHome();
+    startResetCountdown();
+  }else if(RESET_TIMER){
+    clearInterval(RESET_TIMER);RESET_TIMER=null;
+  }
+  document.getElementById('title').scrollTop=0;
+}
+function closePublicMenu(){
+  const menu=document.getElementById('publicMenu'),button=document.getElementById('btnPublicMenu');
+  menu.hidden=true;button.setAttribute('aria-expanded','false');
+}
+function openAuthPanel(view){
+  document.querySelectorAll('[data-auth-panel]').forEach(panel=>{
+    panel.classList.toggle('on',panel.dataset.authPanel===view);
+  });
+  document.querySelectorAll('[data-auth-view]').forEach(button=>{
+    button.setAttribute('aria-pressed',String(button.dataset.authView===view));
+  });
+  const panel=document.querySelector(`[data-auth-panel="${view}"]`);
+  if(panel){
+    const first=panel.querySelector('input');
+    if(first)setTimeout(()=>first.focus(),0);
+  }
+}
+function setAuthError(id,message){
+  document.getElementById(id).textContent=message||'';
+}
+function showBootRetry(message){
+  setAuthError('bootError',message);
+  document.getElementById('btnBootRetry').hidden=false;
+}
+function renderPublicIdentityHome(){
+  if(!PUB.identity)return;
+  document.getElementById('publicName').textContent=PUB.identity.displayName;
+  renderHome();
+}
+async function bootPublicUI(){
+  showPublicView('boot');
+  document.getElementById('btnBootRetry').hidden=true;
+  setAuthError('bootError','');
+  try{
+    const result=await bootPublicApp();
+    if(result.view==='home'){
+      try{await loadDifficulties();}catch(error){}
+      renderPublicIdentityHome();
+    }
+    showPublicView(result.view);
+  }catch(error){
+    showBootRetry(error.message);
+  }
+}
+async function runAuthAction(errorId,passwordInput,action){
+  setAuthError(errorId,'');
+  setPublicBusy(true);
+  try{
+    const result=await action();
+    if(passwordInput)passwordInput.value='';
+    try{await loadDifficulties();}catch(error){}
+    renderPublicIdentityHome();
+    showPublicView(result.view);
+  }catch(error){
+    if(passwordInput)passwordInput.value='';
+    setAuthError(errorId,error.message);
+  }finally{
+    setPublicBusy(false);
+    if(PUB.view==='home')renderHome();
+  }
+}
+
+const PUBLIC_DIFFICULTIES={
+  easy:{label:'Easy'},medium:{label:'Medium'},hard:{label:'Hard'}
+};
+let RESET_TIMER=null,RESET_REFRESHED_AT='';
+
+function renderExhaustion(){
+  const box=document.getElementById('exhaustionState');
+  box.replaceChildren();
+  if(!PUB.allowance||PUB.allowance.remaining>0){box.hidden=true;return;}
+  box.hidden=false;
+  const strong=document.createElement('strong');
+  const message=document.createElement('span');
+  if(exhaustionAction(PUB.identity)==='create_account'){
+    strong.textContent='Daily games used';
+    message.textContent='Create an account for 10 games a day';
+    const button=document.createElement('button');
+    button.type='button';button.className='public-quiet';button.textContent='Create account';
+    button.addEventListener('click',showSignupForHard);
+    box.append(strong,message,button);
+  }else{
+    strong.textContent='Breach Pro — coming soon';
+    message.textContent="You've used today's free games. More games are coming with Breach Pro.";
+    box.append(strong,message);
+  }
+}
+function renderHome(){
+  if(!PUB.identity)return;
+  document.getElementById('publicName').textContent=PUB.identity.displayName;
+  const allowance=PUB.allowance;
+  if(allowance){
+    const view=quotaView(allowance,Date.now());
+    const games=view.remaining===1?'1 game left':`${view.remaining} games left`;
+    document.getElementById('publicQuota').textContent=`${games} · Resets in ${formatCountdown(view.seconds)}`;
+  }
+  document.querySelectorAll('[data-difficulty-card]').forEach(card=>{
+    const difficulty=card.dataset.difficultyCard;
+    const button=card.querySelector('button[data-difficulty]');
+    const small=button.querySelector('small');
+    const locked=!difficultyAccess(PUB.identity,difficulty);
+    const exhausted=!!(allowance&&allowance.remaining===0);
+    card.classList.toggle('locked',locked);
+    card.classList.toggle('exhausted',exhausted&&!locked);
+    if(locked){
+      button.firstChild.nodeValue='Create an account to unlock Hard ';
+      small.textContent='Account required';
+      button.disabled=false;
+    }else{
+      button.firstChild.nodeValue=`Choose ${PUBLIC_DIFFICULTIES[difficulty].label} `;
+      small.textContent='Uses 1 game';
+      button.disabled=exhausted||PUB.busy;
+    }
+  });
+  renderExhaustion();
+}
+function startResetCountdown(){
+  if(RESET_TIMER){clearInterval(RESET_TIMER);RESET_TIMER=null;}
+  const tick=async()=>{
+    if(!PUB.allowance)return;
+    renderHome();
+    if(!countdownRefreshDue(PUB.allowance,Date.now(),RESET_REFRESHED_AT))return;
+    RESET_REFRESHED_AT=PUB.allowance.resetsAt;
+    try{
+      const data=await apiRequest('/v1/me');
+      setIdentity(data.identity);setAllowance(data.allowance);renderHome();
+    }catch(error){setAuthError('homeError',error.message);}
+  };
+  tick();
+  RESET_TIMER=setInterval(tick,1000);
+}
+function showSignupForHard(){
+  showPublicView('identity');
+  openAuthPanel('signup');
+}
+function showMatchup(game){
+  document.getElementById('matchupOpponent').textContent=game.opponent.name;
+  document.getElementById('matchupDifficulty').textContent=PUBLIC_DIFFICULTIES[game.difficulty].label;
+  setAuthError('matchupError','');
+  showPublicView('matchup');
+}
+function showGameStartError(error){
+  renderHome();
+  setAuthError('homeError',error.message);
+  showPublicView('home');
+}
+async function startDifficultyUI(difficulty){
+  if(!difficultyAccess(PUB.identity,difficulty)){showSignupForHard();return;}
+  setAuthError('homeError','');
+  setPublicBusy(true);renderHome();
+  try{
+    const result=await startDifficulty(difficulty);
+    if(result.view==='matchup')showMatchup(result.game);
+  }catch(error){showGameStartError(error);}
+  finally{setPublicBusy(false);if(PUB.view==='home')renderHome();}
+}
+
+document.querySelectorAll('[data-auth-view]').forEach(button=>{
+  button.addEventListener('click',()=>openAuthPanel(button.dataset.authView));
+});
+document.getElementById('guestForm').addEventListener('submit',event=>{
+  event.preventDefault();
+  const form=event.currentTarget;
+  runAuthAction('guestError',null,()=>submitGuest(form.elements.displayName.value.trim()));
+});
+document.getElementById('signupForm').addEventListener('submit',event=>{
+  event.preventDefault();
+  const form=event.currentTarget;
+  runAuthAction('signupError',form.elements.password,()=>submitSignup({
+    displayName:form.elements.displayName.value.trim(),
+    email:form.elements.email.value.trim(),
+    password:form.elements.password.value
+  }));
+});
+document.getElementById('loginForm').addEventListener('submit',event=>{
+  event.preventDefault();
+  const form=event.currentTarget;
+  runAuthAction('loginError',form.elements.password,()=>submitLogin({
+    email:form.elements.email.value.trim(),password:form.elements.password.value
+  }));
+});
+document.getElementById('btnPublicLogout').addEventListener('click',async()=>{
+  setAuthError('homeError','');
+  setPublicBusy(true);
+  try{showPublicView((await logout()).view);}catch(error){setAuthError('homeError',error.message);}
+  finally{setPublicBusy(false);}
+});
+document.getElementById('btnBootRetry').addEventListener('click',bootPublicUI);
+document.getElementById('btnPublicRanks').addEventListener('click',()=>showPublicView('ranks'));
+document.getElementById('btnRanksBack').addEventListener('click',()=>showPublicView(PUB.identity?'home':'identity'));
+document.getElementById('btnHomeRanks').addEventListener('click',()=>showPublicView('ranks'));
+document.getElementById('btnPublicMenu').addEventListener('click',event=>{
+  const menu=document.getElementById('publicMenu'),open=menu.hidden;
+  menu.hidden=!open;event.currentTarget.setAttribute('aria-expanded',String(open));
+});
+document.querySelectorAll('button[data-difficulty]').forEach(button=>{
+  button.addEventListener('click',()=>startDifficultyUI(button.dataset.difficulty));
+});
+document.getElementById('btnMatchupBack').addEventListener('click',()=>showPublicView('home'));
+document.getElementById('btnEnterBattle').addEventListener('click',()=>{
+  if(!PUB.game){setAuthError('matchupError',publicMessage('session_expired'));return;}
+  if(Date.parse(PUB.game.expiresAt)<=Date.now()){
+    setAuthError('matchupError',publicMessage('session_expired'));return;
+  }
+  /* Task 5 replaces the legacy commander with the authorized server seat.
+     Keep this single entry hook so integration does not fork the renderer. */
+  goLive();
+});
+
+
 const CMD=[{kind:'script',model:''},{kind:'script',model:''}];
 // what each side submitted last time, and what actually spawned since — fed
 // back into the next prompt so a model can notice its tank never appeared
@@ -2691,9 +2976,9 @@ let FORCED=false;
 function applyMode(){
   const portrait=window.matchMedia('(orientation: portrait)').matches;
   const narrow=window.innerWidth<720;
-  const gate=portrait&&narrow&&!FORCED;
+  const gate=LIVE&&portrait&&narrow&&!FORCED;
   document.getElementById('rotate').style.display=gate?'flex':'none';
-  document.body.classList.toggle('split',portrait&&narrow&&FORCED);
+  document.body.classList.toggle('split',LIVE&&portrait&&narrow&&FORCED);
   if(!gate) setTimeout(()=>{fit();draw();},60);
   if(window.checkNudge) window.checkNudge();
 }
@@ -3049,7 +3334,7 @@ function goLive(){
   LIVE=true; document.body.classList.add('live');
   reset(); RUNNING=true; last=0;
   document.getElementById('btnPlay').textContent='❚❚';
-  fit(); draw(performance.now()); wakeFabs();
+  applyMode();fit(); draw(performance.now()); wakeFabs();
 }
 document.getElementById('btnBegin').onclick=goLive;
 document.getElementById('btnPickModels').onclick=()=>modal('mSetup',true);
