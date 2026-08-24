@@ -37,12 +37,16 @@ function loadSlice(overrides={}){
     Math,
     Error,
     Object,
-    JSON
+    JSON,
+    buildBattleView:overrides.buildBattleView||(()=>({}))
   });
   const exports=['PUB','guestToken','dossierKey','setIdentity','setAllowance','quotaView',
     'difficultyAccess','publicMessage','apiRequest','bootPublicApp','submitGuest','submitSignup',
     'submitLogin','logout','exhaustionAction','formatCountdown','countdownRefreshDue',
-    'loadDifficulties','startDifficulty','difficultyButtonDisabled','refreshPublicSession'];
+    'loadDifficulties','startDifficulty','difficultyButtonDisabled','refreshPublicSession',
+    'battleViewForServer','publicCommanders','serverDecisionState','completionOutcome',
+    'recentBattleText','relativeBattleTime','writePublicName','publicHistoryRow','publicPlayerRow',
+    'publicAiRow','resultCardState','requestPublicDecision','completePublicGame'];
   const expose=exports.map(name=>`${JSON.stringify(name)}:typeof ${name}==='undefined'?undefined:${name}`).join(',');
   vm.runInContext(`${source.slice(start,end+END.length)}\nglobalThis.__slice={${expose}};`,context);
   return {...context.__slice,localStorage};
@@ -54,7 +58,7 @@ function loadDomSlice(PUB,document){
   assert.notEqual(start,-1,'public DOM test slice start marker must exist');
   assert.notEqual(end,-1,'public DOM test slice end marker must exist');
   const context=vm.createContext({PUB,document});
-  vm.runInContext(`${source.slice(start,end+DOM_END.length)}\nglobalThis.__dom={setPublicBusy};`,context);
+  vm.runInContext(`${source.slice(start,end+DOM_END.length)}\nglobalThis.__dom={setPublicBusy,setPublicHidden};`,context);
   return context.__dom;
 }
 
@@ -347,6 +351,17 @@ test('home rendering keeps locked Hard disabled while another session action is 
   assert.equal(ctx.difficultyButtonDisabled(guest,{remaining:3},'hard',true),true);
   assert.equal(ctx.difficultyButtonDisabled(guest,{remaining:3},'hard',false),false);
   assert.equal(ctx.difficultyButtonDisabled(guest,{remaining:0},'medium',false),true);
+});
+
+test('public hidden state overrides flex layout when switching ranking tabs',()=>{
+  const element={hidden:false,style:{display:'flex'}};
+  const dom=loadDomSlice({busy:false},publicActionDocument([]));
+  dom.setPublicHidden(element,true);
+  assert.equal(element.hidden,true);
+  assert.equal(element.style.display,'none');
+  dom.setPublicHidden(element,false);
+  assert.equal(element.hidden,false);
+  assert.equal(element.style.display,'');
 });
 
 test('a delayed game response cannot replace a newer logout session',async()=>{
@@ -677,6 +692,113 @@ test('replay hook mounts one permanent How to Play action',()=>{
   assert.equal(first.type,'button');
   assert.equal(first.dataset.howToReplay,'');
   assert.equal(first.listener[0],'click');
+});
+
+test('public decision sends the exact battle view with turn and side but no model or key',()=>{
+  const base={time:12,myCoins:41,tower:{heldBy:'neutral'}};
+  const ctx=loadSlice({buildBattleView:()=>base});
+  const body=ctx.battleViewForServer({privateState:true},1,4,{games:1,modelWins:0,humanWins:1,read:'rushes',plan:'hold'});
+  assert.deepEqual(JSON.parse(JSON.stringify(body)),{
+    time:12,myCoins:41,tower:{heldBy:'neutral'},turn:4,side:1,
+    dossier:{games:1,modelWins:0,humanWins:1,read:'rushes',plan:'hold'}
+  });
+  assert.equal('model' in body,false);
+  assert.equal('apiKey' in body,false);
+  assert.equal(JSON.stringify(body).includes('sk-or-'),false);
+});
+
+test('public commander assignment uses only the server-selected opponent and side',()=>{
+  const ctx=loadSlice();
+  const cmd=ctx.publicCommanders({humanSide:0,opponent:{id:'google/gemini-3.7-flash',name:'Gemini 3.7 Flash'}});
+  assert.deepEqual(JSON.parse(JSON.stringify(cmd)),[
+    {kind:'human',model:'human'},
+    {kind:'server',model:'google/gemini-3.7-flash'}
+  ]);
+  const reversed=ctx.publicCommanders({humanSide:1,opponent:{id:'m1',name:'One'}});
+  assert.deepEqual(Array.from(reversed,item=>item.kind),['server','human']);
+});
+
+test('server timeout auto-play resets strikes while other stable provider codes increment them',()=>{
+  const ctx=loadSlice();
+  const timeout=ctx.serverDecisionState({queue:[],stance:null,why:'fallback',autoPlayed:true,providerCode:'timeout'},['at'],'hold');
+  assert.deepEqual(JSON.parse(JSON.stringify(timeout)),{
+    queue:['at'],stance:'hold',why:'fallback',autoPlayed:true,timedOut:true,failed:true,strike:'reset',providerCode:'timeout'
+  });
+  for(const code of ['rate_limited','provider_unavailable','invalid_response']){
+    const failed=ctx.serverDecisionState({queue:[],stance:null,why:'fallback',autoPlayed:true,providerCode:code},['inf','gun'],'push');
+    assert.equal(failed.strike,'increment');
+    assert.equal(failed.providerCode,code);
+    assert.deepEqual(Array.from(failed.queue),['inf','gun']);
+  }
+});
+
+test('normal server decision preserves server queue and never marks a fallback',()=>{
+  const ctx=loadSlice();
+  const result=ctx.serverDecisionState({queue:['tank'],stance:'hold',why:'counter',autoPlayed:false,providerCode:null},['inf'],'push');
+  assert.deepEqual(JSON.parse(JSON.stringify(result)),{
+    queue:['tank'],stance:'hold',why:'counter',autoPlayed:false,timedOut:false,failed:false,strike:'reset',providerCode:null
+  });
+});
+
+test('completion outcome accepts idempotent matches and keeps failed results local',()=>{
+  const ctx=loadSlice();
+  assert.deepEqual({...ctx.completionOutcome({id:91,stored:false,debrief:null,dossierUpdate:null})},{status:'saved',matchId:91});
+  assert.deepEqual({...ctx.completionOutcome(null,'session_expired')},{status:'local_only',message:'Battle complete. This result could not join your online history.'});
+});
+
+test('recent battle copy is concise and contains no diagnostic metadata',()=>{
+  const ctx=loadSlice();
+  assert.equal(ctx.recentBattleText({player:'Rahul',opponent:'Gemini 3.7 Flash',difficulty:'hard',result:'win'}),'Rahul defeated Gemini 3.7 Flash · Hard');
+  assert.equal(ctx.recentBattleText({player:'Rahul',opponent:'Gemini 3.7 Flash',difficulty:'hard',result:'loss'}),'Gemini 3.7 Flash defeated Rahul · Hard');
+  assert.equal(ctx.recentBattleText({player:'Rahul',opponent:'Gemini 3.7 Flash',difficulty:'hard',result:'draw'}),'Rahul drew with Gemini 3.7 Flash · Hard');
+  assert.equal(/seed|prompt|latency|token|error/i.test(ctx.recentBattleText({player:'Seed',opponent:'Prompt',difficulty:'easy',result:'win'}).replace('Seed','Player').replace('Prompt','Commander')),false);
+});
+
+test('leaderboard names are written as text instead of HTML',()=>{
+  const ctx=loadSlice();
+  const target={textContent:''};
+  ctx.writePublicName(target,'<img src=x onerror=alert(1)>');
+  assert.equal(target.textContent,'<img src=x onerror=alert(1)>');
+});
+
+test('public projections allow only approved history and leaderboard fields',()=>{
+  const ctx=loadSlice();
+  const privateFields={email:'private@example.com',seed:42,promptVersion:8,providerError:'secret'};
+  assert.deepEqual(Object.keys(ctx.publicHistoryRow({id:1,opponent:'Nova',difficulty:'easy',result:'win',playedAt:'2026-08-24T10:00:00Z',remainingBaseHp:321,...privateFields})),
+    ['id','opponent','difficulty','result','playedAt','remainingBaseHp']);
+  assert.deepEqual(Object.keys(ctx.publicPlayerRow({rank:1,displayName:'Rahul',wins:4,losses:2,winRate:66.7,...privateFields})),
+    ['rank','displayName','wins','losses','winRate']);
+  assert.deepEqual(Object.keys(ctx.publicAiRow({name:'Nova',difficulty:'easy',matches:9,wins:3,winRate:33.3,...privateFields})),
+    ['name','difficulty','matches','wins','winRate']);
+});
+
+test('relative battle time handles recent, old, and malformed timestamps',()=>{
+  const ctx=loadSlice();
+  const now=Date.parse('2026-08-24T12:00:00Z');
+  assert.equal(ctx.relativeBattleTime('2026-08-24T11:59:30Z',now),'just now');
+  assert.equal(ctx.relativeBattleTime('2026-08-24T11:57:00Z',now),'3m ago');
+  assert.equal(ctx.relativeBattleTime('2026-08-24T09:00:00Z',now),'3h ago');
+  assert.equal(ctx.relativeBattleTime('not-a-date',now),'');
+});
+
+test('result card state is player-relative and discloses the next game cost',()=>{
+  const ctx=loadSlice();
+  const state=ctx.resultCardState({humanSide:1,opponent:{name:'Gemini 3.7 Flash'},difficulty:'hard'},1,[0,275],{remaining:6,resetsAt:'2026-08-25T00:00:00+05:30'});
+  assert.deepEqual(JSON.parse(JSON.stringify(state)),{
+    result:'Victory',opponent:'Gemini 3.7 Flash',difficulty:'Hard',remainingBaseHp:275,
+    gamesRemaining:6,resetsAt:'2026-08-25T00:00:00+05:30',rematchLabel:'Rematch (uses 1 game)'
+  });
+});
+
+test('decision and completion requests stay inside the owned game session',async()=>{
+  const calls=[];
+  const ctx=loadSlice({fetch:async(...args)=>{calls.push(args);return jsonResponse(200,{id:9});}});
+  await ctx.requestPublicDecision({gameId:'gms a/b'},{turn:2,side:1,time:8});
+  await ctx.completePublicGame({gameId:'gms a/b'},{game:'breach',difficulty:'easy'});
+  assert.equal(calls[0][0],'https://breach-api.skdev.one/v1/games/gms%20a%2Fb/decisions');
+  assert.equal(calls[1][0],'https://breach-api.skdev.one/v1/games/gms%20a%2Fb/complete');
+  assert.equal(calls[0][1].body,'{"turn":2,"side":1,"time":8}');
+  assert.equal(calls[1][1].body,'{"game":"breach","difficulty":"easy"}');
 });
 
 test('public markup omits developer-facing copy',()=>{
