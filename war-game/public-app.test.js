@@ -77,7 +77,18 @@ function loadHowToSlice(seed={}){
   const hit=html.match(/\/\* HOW TO PLAY TEST SLICE START \*\/([\s\S]*?)\/\* HOW TO PLAY TEST SLICE END \*\//);
   assert.ok(hit,'How to Play test slice is present');
   const localStorage=storage(seed);
-  return Function('localStorage',`${hit[1]};return {onboardingKey,finishHowTo,shouldShowHowTo};`)(localStorage);
+  return Function('localStorage',`${hit[1]};return {
+    onboardingKey,finishHowTo,shouldShowHowTo,
+    howToDismissOptions:typeof howToDismissOptions==='undefined'?undefined:howToDismissOptions,
+    onPublicIdentityResolved:typeof onPublicIdentityResolved==='undefined'?undefined:onPublicIdentityResolved,
+    mountHowToReplay:typeof mountHowToReplay==='undefined'?undefined:mountHowToReplay
+  };`)(localStorage);
+}
+function loadDialogSlice(){
+  const html=readIndex();
+  const hit=html.match(/\/\* DIALOG FOCUS TEST SLICE START \*\/([\s\S]*?)\/\* DIALOG FOCUS TEST SLICE END \*\//);
+  assert.ok(hit,'dialog focus test slice is present');
+  return Function(`${hit[1]};return {trapFocusTarget,pushDialogFrame,popDialogFrame};`)();
 }
 
 function publicMarkup(html){
@@ -580,8 +591,73 @@ test('the pure public-app slice has no DOM dependency',()=>{
   assert.equal(/\b(?:document|window)\b/.test(slice),false);
 });
 
+test('storage failure falls back to session memory after completion',()=>{
+  const ctx=loadHowToSlice();
+  const broken={getItem(){throw new Error('blocked');},setItem(){throw new Error('blocked');}};
+  const guest={kind:'guest',id:'g7'};
+  assert.equal(ctx.shouldShowHowTo(guest,broken),true);
+  assert.equal(ctx.finishHowTo(guest,broken),false);
+  assert.equal(ctx.shouldShowHowTo(guest,broken),false);
+});
+
+test('automatic Close and Escape use completion semantics while replay dismissal does not',()=>{
+  const ctx=loadHowToSlice();
+  assert.equal(ctx.howToDismissOptions(true).complete,true);
+  assert.equal(ctx.howToDismissOptions(false).complete,false);
+});
+
+test('focus trap wraps from a tabindex minus-one heading anchor',()=>{
+  const ctx=loadDialogSlice();
+  const heading={},close={},next={};
+  assert.equal(ctx.trapFocusTarget(heading,[close,next],true),next);
+  assert.equal(ctx.trapFocusTarget(heading,[close,next],false),close);
+  assert.equal(ctx.trapFocusTarget(close,[close,next],true),next);
+  assert.equal(ctx.trapFocusTarget(next,[close,next],false),close);
+});
+
+test('nested dialog frames preserve each opener independently',()=>{
+  const ctx=loadDialogSlice();
+  const stack=[],setup={},picker={},titleButton={},modelButton={};
+  ctx.pushDialogFrame(stack,setup,titleButton);
+  ctx.pushDialogFrame(stack,picker,modelButton);
+  assert.equal(ctx.popDialogFrame(stack,picker).opener,modelButton);
+  assert.equal(ctx.popDialogFrame(stack,setup).opener,titleButton);
+  assert.equal(stack.length,0);
+});
+
+test('public integration exposes identity and replay hooks with foundation seams',()=>{
+  const ctx=loadHowToSlice();
+  assert.equal(typeof ctx.onPublicIdentityResolved,'function');
+  assert.equal(ctx.onPublicIdentityResolved.length,1);
+  assert.equal(typeof ctx.mountHowToReplay,'function');
+  assert.equal(ctx.mountHowToReplay.length,1);
+  const html=readIndex();
+  assert.match(html,/breach:identity-resolved/);
+  assert.match(html,/FOUNDATION CALL SITE: acceptPublicSession/);
+  assert.match(html,/FOUNDATION CALL SITE: publicMenu/);
+});
+
+test('replay hook mounts one permanent How to Play action',()=>{
+  const ctx=loadHowToSlice();
+  let mounted=null;
+  const logout={id:'btnPublicLogout'};
+  const container={
+    querySelector(selector){return selector==='[data-how-to-replay]'?mounted:selector==='#btnPublicLogout'?logout:null;},
+    insertBefore(node,before){assert.equal(before,logout);mounted=node;}
+  };
+  const doc={createElement(){return {dataset:{},addEventListener(type,handler){this.listener=[type,handler];}};}};
+  const first=ctx.mountHowToReplay(container,doc);
+  const second=ctx.mountHowToReplay(container,doc);
+  assert.equal(first,second);
+  assert.equal(first.textContent,'How to Play');
+  assert.equal(first.type,'button');
+  assert.equal(first.dataset.howToReplay,'');
+  assert.equal(first.listener[0],'click');
+});
+
 test('public markup omits developer-facing copy',()=>{
   const html=publicMarkup(readIndex());
+  assert.match(html,/id="title"/);
   for(const forbidden of ['OpenRouter key','results.json','localStorage','Vulcan/Cobalt','Copy log',
     'cached tokens','prompt version','API URL','Clear local']){
     assert.equal(html.includes(forbidden),false,forbidden);
@@ -593,6 +669,9 @@ test('public controls declare touch targets, safe-area spacing, and visible focu
   assert.match(html,/\.act\{[^}]*min-height:44px/s);
   assert.match(html,/padding:var\(--st\) var\(--sr\) var\(--sb\) var\(--sl\)/);
   assert.match(html,/button:focus-visible/);
+  assert.match(html,/#bannerX,#resultsChip\{[^}]*min-width:44px;min-height:44px/s);
+  assert.match(html,/body\.split \.fab\{width:44px;height:44px/s);
+  assert.doesNotMatch(html,/\.fab\{width:(?:29|32|34)px;height:(?:29|32|34)px/);
 });
 
 module.exports={jsonResponse,loadSlice,storage};
