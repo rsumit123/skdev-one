@@ -1809,10 +1809,20 @@ async function startDifficulty(difficulty){
   const generation=PUB.generation;
   const controller=new AbortController();
   PUBLIC_REQUESTS.add(controller);
+  const attempt=()=>apiRequest('/v1/games',{
+    method:'POST',body:{difficulty},authScope:'session',signal:controller.signal});
   try{
-    const data=await apiRequest('/v1/games',{
-      method:'POST',body:{difficulty},authScope:'session',signal:controller.signal
-    });
+    let data;
+    try{ data=await attempt(); }
+    catch(error){
+      // A battle the browser navigated away from cannot be resumed (its live
+      // state is gone), so an "active session" here is a dead-end. Clear it and
+      // retry once so tapping a difficulty just works instead of getting stuck.
+      if(error.code==='active_session_exists'){
+        try{ await apiRequest('/v1/games/abandon',{method:'POST',body:{},authScope:'session',signal:controller.signal}); }catch(e){}
+        data=await attempt();
+      } else throw error;
+    }
     if(generation!==PUB.generation||controller.signal.aborted)return {view:'stale'};
     PUB.difficulty=data.difficulty;
     PUB.game={...data};
@@ -2066,11 +2076,16 @@ async function startDifficultyUI(difficulty){
   if(!difficultyAccess(PUB.identity,difficulty)){showSignupForHard();return;}
   setAuthError('homeError','');
   setPublicBusy(true);renderHome();
+  // visible loading feedback on the tapped button (setPublicBusy only disables)
+  const btn=document.querySelector('[data-difficulty="'+difficulty+'"]');
+  const orig=btn?btn.innerHTML:'';
+  if(btn)btn.innerHTML='Deploying…';
   try{
     const result=await startDifficulty(difficulty);
     if(result.view==='matchup')showMatchup(result.game);
+    else if(result.view==='signup')showSignupForHard();
   }catch(error){showGameStartError(error);}
-  finally{setPublicBusy(false);if(PUB.view==='home')renderHome();}
+  finally{setPublicBusy(false);if(btn)btn.innerHTML=orig;if(PUB.view==='home')renderHome();}
 }
 
 function publicListEmpty(target,message){
