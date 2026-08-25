@@ -363,12 +363,29 @@ body:not(.live) #sheet{display:none}
   margin-left:7px;vertical-align:baseline}
 
 /* ---------- human order picker (fair mode) ---------- */
-#picker{position:absolute;left:0;right:0;bottom:0;z-index:22;display:none;flex-direction:column;gap:5px;
-  background:linear-gradient(0deg,rgba(7,11,16,.97),rgba(7,11,16,.93));
-  border-top:1px solid rgba(224,184,58,.35);box-shadow:0 -12px 34px rgba(0,0,0,.6);
-  padding:8px calc(10px + var(--sr)) calc(8px + var(--sb)) calc(10px + var(--sl));
-  max-height:62%;overflow-y:auto}
+/* Command panel: a fixed header + a scrollable middle + a PINNED action footer,
+   so "Send orders" is always reachable no matter how short the screen. Layout
+   adapts by orientation — a right-side panel in landscape (uses the plentiful
+   width, full height, battlefield still visible on the left) and a bottom sheet
+   in portrait (uses the plentiful height). */
+#picker{position:absolute;z-index:22;display:none;flex-direction:column;
+  background:linear-gradient(0deg,rgba(9,13,19,.985),rgba(9,13,19,.95));
+  box-shadow:0 0 40px rgba(0,0,0,.65)}
 #picker.on{display:flex}
+.pkscroll{flex:1 1 auto;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;
+  display:flex;flex-direction:column;gap:6px;padding-right:2px}
+.pkhead{flex:none}
+/* portrait / default: bottom sheet */
+#picker{left:0;right:0;bottom:0;top:auto;max-height:70%;
+  border-top:1px solid rgba(224,184,58,.4);border-radius:15px 15px 0 0;
+  padding:11px calc(12px + var(--sr)) calc(10px + var(--sb)) calc(12px + var(--sl));gap:7px}
+/* landscape: right-side command panel, full height */
+@media (orientation:landscape){
+  #picker{right:0;top:0;bottom:0;left:auto;width:min(360px,46vw);max-height:none;
+    border-left:1px solid rgba(224,184,58,.4);border-top:none;border-radius:16px 0 0 16px;
+    padding:13px calc(15px + var(--sr)) calc(13px + var(--sb)) 15px;gap:8px}
+}
+.pkrow{flex:none;margin-top:4px}
 .pkhead{display:flex;align-items:center;gap:8px}
 .pkwho{font-family:"Saira Condensed",sans-serif;font-size:13px;letter-spacing:.13em;
   text-transform:uppercase;color:var(--amber);font-weight:700}
@@ -399,11 +416,15 @@ body:not(.live) #sheet{display:none}
 .pkrow{display:flex;gap:7px}
 .pkrow .act{flex:1;padding:9px}
 @media (max-height:400px){
-  #picker{max-height:74%;gap:4px;padding-top:6px}
+  /* short screens: tighten only. The full-height landscape panel sets its own
+     positioning above; do NOT re-cap #picker max-height here or it fights it. */
+  #picker{gap:4px}
   .pku{padding:4px;flex:1 1 66px;min-width:62px}
   .pku .n{font-size:10.5px}.pku .c{font-size:9px}
   .pkhint{font-size:9px}
 }
+/* portrait on a short screen still wants a height cap so it doesn't cover all */
+@media (orientation:portrait) and (max-height:520px){ #picker{max-height:74%} }
 
 /* ---------- sheet ---------- */
 #sheet{position:fixed;left:0;right:0;bottom:0;height:min(62dvh,420px);background:#0c1117;
@@ -706,14 +727,16 @@ body.split #nudge{display:none}
       <span class="pkwho">Your orders</span>
       <span class="pkcoins"><span class="pkdot"></span><b id="pkCoins">0</b><small id="pkInc"></small></span>
     </div>
-    <div class="pkhint" id="pkHint"></div>
-    <div class="pkstance" id="pkStance">
-      <button class="stbtn on" data-st="push">&#9876;&#65039; Push their base</button>
-      <button class="stbtn" data-st="hold">&#128737;&#65039; Hold the tower</button>
+    <div class="pkscroll">
+      <div class="pkhint" id="pkHint"></div>
+      <div class="pkstance" id="pkStance">
+        <button class="stbtn on" data-st="push">&#9876;&#65039; Push their base</button>
+        <button class="stbtn" data-st="hold">&#128737;&#65039; Hold the tower</button>
+      </div>
+      <div class="pkgrid" id="pkGrid"></div>
+      <div class="pkq" id="pkQueue"></div>
+      <div class="pkwarn" id="pkWarn"></div>
     </div>
-    <div class="pkgrid" id="pkGrid"></div>
-    <div class="pkq" id="pkQueue"></div>
-    <div class="pkwarn" id="pkWarn"></div>
     <div class="pkrow">
       <button class="act" id="pkClear">Clear</button>
       <button class="act primary" id="pkGo">Send orders</button>
