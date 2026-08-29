@@ -115,6 +115,12 @@ canvas#field{display:block;width:100%;height:100%}
 body.public-battle .benchmark-result-actions{display:none}
 body:not(.public-battle) .public-result-actions,body:not(.public-battle) .public-result-meta,
 body:not(.public-battle) .public-result-status{display:none!important}
+/* PvP (human vs human) gets its own result set — no models/difficulty/quota here */
+body:not(.pvp-battle) .pvp-result-actions{display:none!important}
+body.pvp-battle .benchmark-result-actions,body.pvp-battle .public-result-actions,
+body.pvp-battle .public-result-meta,body.pvp-battle .public-result-status{display:none!important}
+/* keep any result modal inside the viewport in portrait instead of running under the sheet */
+#banner{max-height:80vh;overflow-y:auto;overscroll-behavior:contain}
 body.public-battle #btnSetupOpen,body.public-battle #btnRanksFab,body.public-battle #btnUnitsOpen,
 body.public-battle #btnSetupOpen2,body.public-battle #btnRanks2,body.public-battle #btnUnitsOpen2,
 body.public-battle #btnCopyAnalysis,body.public-battle #btnExport2{display:none}
@@ -768,6 +774,11 @@ body.split #nudge{display:none}
     <div class="brow brow2 benchmark-result-actions">
       <button class="act" id="btnSeeLog">Results &amp; log</button>
       <button class="act" id="btnCopyEnd">Copy log</button>
+    </div>
+    <div class="brow pvp-result-actions">
+      <button class="act primary" id="btnPvpRematch">Rematch</button>
+      <button class="act" id="btnPvpCopyLog">Copy log</button>
+      <button class="act" id="btnPvpHome">Home</button>
     </div>
   </div>
 
@@ -2135,6 +2146,7 @@ function onPvpGameStart(data){
   PVP.active=true;PVP.mySide=data.yourSide;PVP.opponentName=data.opponent||'Opponent';
   PVP.turn=0;PVP._pending={};PVP._desynced=false;
   CMD[0]={kind:'pvp',model:'human'};CMD[1]={kind:'pvp',model:'human'};
+  document.body.classList.add('pvp-battle');
   const you=data.you||'You';
   SIDE[0].name=data.yourSide===0?you:PVP.opponentName;
   SIDE[1].name=data.yourSide===1?you:PVP.opponentName;
@@ -2156,6 +2168,24 @@ function bindPvp(){
     if(navigator.clipboard)navigator.clipboard.writeText(c).then(()=>showToast('Code copied',{type:'success',ms:1500}),()=>{});});
   const jc=document.getElementById('pvpJoinCode');
   if(jc)jc.addEventListener('keydown',e=>{if(e.key==='Enter')pvpJoin();});
+  // end-of-game result actions (PvP)
+  on('btnPvpRematch',async()=>{
+    if(!PVP.isHost){showToast('Only the host can start a rematch.',{type:'info'});return;}
+    setPublicBusy(true);
+    try{const res=await emitAck('game:rematch',{});if(!res.ok)showToast(pvpMsg(res.code),{type:'error'});}
+    catch(e){showToast('Could not start the rematch.',{type:'error'});}
+    finally{setPublicBusy(false);}
+    // on success the server broadcasts game:start → onPvpGameStart restarts both
+  });
+  on('btnPvpCopyLog',(e)=>{try{copyAnalysis(e.target||e.currentTarget);}catch(err){}});
+  on('btnPvpHome',pvpLeaveToHome);
+}
+function pvpLeaveToHome(){
+  PVP.leave();
+  RUNNING=false;LIVE=false;
+  document.body.classList.remove('live','pvp-battle','public-battle');
+  showResults(false);
+  showPublicView('home');
 }
 bindPvp();
 
@@ -2566,7 +2596,23 @@ async function finishPublicGame(){
     renderPublicResultCard(completionOutcome(null,error.code).message);
   }
 }
+function PVP_END_GAME(){
+  RUNNING=false;if(typeof wakeFabs==='function')wakeFabs();
+  const b=document.getElementById('banner'),bt=document.getElementById('bannerTxt');
+  b.style.display='flex';
+  const outcome=S.win===null?'Draw':(S.win===PVP.mySide?'Victory':'Defeat');
+  bt.textContent=outcome;
+  bt.style.color=outcome==='Victory'?'#74ab7c':outcome==='Defeat'?'#ef9b7e':'#fff';
+  // CSS (body.pvp-battle) shows .pvp-result-actions and hides the public/benchmark rows
+  document.getElementById('publicResultMeta').hidden=true;
+  document.getElementById('publicResultStatus').hidden=true;
+  document.getElementById('btnCompletionRetry').hidden=true;
+  const rb=document.getElementById('btnPvpRematch');
+  if(rb)rb.textContent=PVP.isHost?'Rematch':'Rematch (host only)';
+  document.getElementById('btnPlay').textContent='Start';SHAKE=Math.max(SHAKE,9);
+}
 endGame=function(){
+  if(PVP.active){PVP_END_GAME();return;}
   if(!isPublicBattle()){BENCHMARK_END_GAME();return;}
   RUNNING=false;if(typeof wakeFabs==='function')wakeFabs();
   const banner=document.getElementById('banner');banner.style.display='flex';
@@ -4489,7 +4535,7 @@ function showResults(v){
 document.getElementById('bannerX').onclick=()=>{ showResults(false); wakeFabs(); };
 document.getElementById('resultsChip').onclick=()=>showResults(true);
 function leavePublicBattle(view){
-  RUNNING=false;LIVE=false;document.body.classList.remove('live','public-battle');
+  RUNNING=false;LIVE=false;document.body.classList.remove('live','public-battle','pvp-battle');
   showResults(false);showPublicView(view);
 }
 document.getElementById('btnCompletionRetry').onclick=()=>finishPublicGame();

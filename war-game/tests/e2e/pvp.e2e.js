@@ -1,4 +1,4 @@
-const { chromium } = require(process.env.PLAYWRIGHT_PKG || '@playwright/test');
+const { chromium } = require('/Users/rsumit123/work/charade-chat/frontend/node_modules/@playwright/test');
 const URL='http://127.0.0.1:8055/index.html?api=http://127.0.0.1:8050';
 const log=(...a)=>console.log(...a);
 
@@ -83,6 +83,31 @@ async function boot(ctx,name){
     const desyncA=await A.evaluate(()=>PVP._desynced), desyncB=await B.evaluate(()=>PVP._desynced);
     check(!desyncA&&!desyncB,'no desync flagged on either client');
 
+
+    log('6. End the game, check PvP result UI, and rematch…');
+    // force game-over on both clients (deterministic UI test); PVP_END_GAME runs
+    for(const [pg,nm] of [[A,'A'],[B,'B']]){
+      await pg.evaluate(()=>{ S.over=true; S.win=0; endGame(); });
+    }
+    // benchmark row (Change models etc.) must be hidden; pvp row shown
+    const benchHiddenA=await A.evaluate(()=>getComputedStyle(document.querySelector('.benchmark-result-actions')).display==='none');
+    const pvpShownA=await A.evaluate(()=>getComputedStyle(document.querySelector('.pvp-result-actions')).display!=='none');
+    const changeModelsHidden=await A.evaluate(()=>{const b=document.getElementById('btnNewModels');return !b.offsetParent;});
+    check(benchHiddenA,'benchmark result row (Change models) is hidden in PvP');
+    check(pvpShownA,'PvP result row is shown');
+    check(changeModelsHidden,'Change models button is not visible to players');
+    const hostLabel=await A.evaluate(()=>document.getElementById('btnPvpRematch').textContent);
+    const joinLabel=await B.evaluate(()=>document.getElementById('btnPvpRematch').textContent);
+    check(hostLabel==='Rematch','host sees an active Rematch button');
+    check(/host only/.test(joinLabel),'joiner sees Rematch marked host-only');
+    // host clicks Rematch -> both restart via game:start
+    await A.click('#btnPvpRematch');
+    await A.waitForFunction(()=>PVP.turn===0 && !S.over && document.body.classList.contains('live'),{timeout:20000});
+    await B.waitForFunction(()=>PVP.turn===0 && !S.over && document.body.classList.contains('live'),{timeout:20000});
+    check(true,'rematch restarted both clients at a fresh turn 0, in-game');
+    const seed2A=await A.evaluate(()=>document.getElementById('seed').value);
+    const seed2B=await B.evaluate(()=>document.getElementById('seed').value);
+    check(seed2A===seed2B && seed2A, 'rematch gave both the same new seed: '+seed2A);
     log(failed?'\nE2E RESULT: FAILURES ABOVE':'\nE2E RESULT: ALL CHECKS PASSED');
   }catch(e){
     failed=true; log('E2E ERROR:',e.message);
