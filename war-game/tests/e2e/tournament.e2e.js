@@ -92,6 +92,16 @@ const onBoard=p=>p.evaluate(()=>document.getElementById('publicTourney').classLi
     const champ=await H.evaluate(()=>document.getElementById('champName').textContent);
     check(champ && champ!=='—', 'champion overlay shows on all clients: '+champ);
 
+
+    log('7. Tournament saved to history (players + champion + timestamp)…');
+    await H.waitForTimeout(500);
+    const hist=await H.evaluate(async()=>await apiRequest('/v1/tournaments/history'));
+    check(hist && Array.isArray(hist.tournaments) && hist.tournaments.length>=1, 'a completed Cup is in history');
+    const cup=hist.tournaments[0];
+    check(cup.players && cup.players.length===4, 'history records all 4 players');
+    check(cup.champion && cup.champion.name, 'history records the champion');
+    check(!!cup.endedAt && !!cup.startedAt, 'history has start + end timestamps');
+    check(cup.players.some(p=>p.you), 'the caller is marked in their own roster');
     log(failed?'\nTOURNAMENT E2E: FAILURES ABOVE':'\nTOURNAMENT E2E: ALL CHECKS PASSED');
   }catch(e){failed=true;log('E2E ERROR:',e.message);}
   finally{await browser.close();process.exit(failed?1:0);}

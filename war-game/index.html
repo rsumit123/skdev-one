@@ -564,6 +564,22 @@ body.spectating #specRibbon{display:block}
 .confetti i{position:absolute;top:-12px;width:6px;height:10px;border-radius:1px;opacity:.9;animation:cfall linear infinite}
 @keyframes cfall{to{transform:translateY(640px) rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){#champOverlay .trophy,.confetti i,.bracket .livebadge::before,#specBar .mid .lv::before{animation:none}}
+/* my cups history */
+.cups-list{display:flex;flex-direction:column;gap:12px}
+.cup-card{border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:14px 16px;
+  background:linear-gradient(180deg,rgba(255,255,255,.035),rgba(255,255,255,.01))}
+.cup-card.won{border-color:rgba(240,220,154,.36);background:linear-gradient(180deg,rgba(240,220,154,.07),rgba(240,220,154,.01))}
+.cup-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.cup-champ{font-family:"Saira Condensed","Oswald",sans-serif;font-weight:800;text-transform:uppercase;
+  letter-spacing:.02em;font-size:19px;color:#f0dc9a}
+.cup-when{font-family:ui-monospace,monospace;font-size:11px;color:rgba(255,255,255,.5)}
+.cup-meta{font-family:ui-monospace,monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+  color:rgba(255,255,255,.5);margin-top:4px}
+.cup-roster{display:flex;flex-wrap:wrap;gap:6px;margin-top:11px}
+.cup-player{font-family:"Saira Condensed","Oswald",sans-serif;font-weight:600;text-transform:uppercase;font-size:13px;
+  letter-spacing:.02em;padding:4px 10px;border-radius:20px;border:1px solid rgba(255,255,255,.14);color:rgba(255,255,255,.8)}
+.cup-player.champ{border-color:rgba(240,220,154,.4);color:#f0dc9a}
+.cup-player.you{border-color:rgba(120,180,240,.5);color:#bcd8f5}
 
 /* ---------- sheet ---------- */
 #sheet{position:fixed;left:0;right:0;bottom:0;height:min(62dvh,420px);background:#0c1117;
@@ -911,6 +927,7 @@ body.split #nudge{display:none}
       </header>
       <nav class="public-menu-panel" id="publicMenu" aria-label="Commander menu" hidden>
         <button type="button" class="public-quiet" id="btnHomeHistory">My Battles</button>
+        <button type="button" class="public-quiet" id="btnHomeCups">My Cups</button>
         <button type="button" class="public-quiet" id="btnHomeRanks">Leaderboard</button>
         <button type="button" class="public-quiet" id="btnBenchmarkLab" hidden>Benchmark Lab</button>
         <button type="button" class="public-quiet" id="btnPublicLogout">Sign out</button>
@@ -1123,6 +1140,14 @@ body.split #nudge{display:none}
         <div class="public-list" id="historyList" aria-live="polite"></div>
         <div class="auth-error" id="historyError" role="alert"></div>
         <div class="public-secondary"><button type="button" class="public-quiet" id="btnHistoryBack">Back</button></div>
+      </section>
+
+      <section class="public-screen" id="publicCups" data-public-screen="cups" aria-labelledby="cupsTitle">
+        <div class="public-kicker">Knockout record</div>
+        <h1 id="cupsTitle">My Cups</h1>
+        <div class="cups-list" id="cupsList" aria-live="polite"></div>
+        <div class="auth-error" id="cupsError" role="alert"></div>
+        <div class="public-secondary"><button type="button" class="public-quiet" id="btnCupsBack">Back</button></div>
       </section>
 
       <section class="public-screen" id="publicRanksPreview" data-public-screen="ranks" aria-labelledby="ranksPreviewTitle">
@@ -2886,6 +2911,39 @@ async function loadHistoryUI(){
     }
   }
 }
+async function loadCupsUI(){
+  const list=document.getElementById('cupsList');setAuthError('cupsError','');
+  publicListEmpty(list,'Loading Cups…');
+  try{
+    const data=await apiRequest('/v1/tournaments/history',{authScope:'session'});
+    const cups=data.tournaments||[];
+    list.replaceChildren();
+    if(!cups.length){publicListEmpty(list,'No Cups yet. Start a tournament from the home screen.');return;}
+    cups.forEach(c=>list.append(cupCard(c)));
+  }catch(error){
+    if(!showSessionExpiredUI(error)){publicListEmpty(list,'Your Cups could not be loaded.');setAuthError('cupsError','Please try again.');}
+  }
+}
+function cupCard(c){
+  const card=document.createElement('div');card.className='cup-card'+(c.youWon?' won':'');
+  const head=document.createElement('div');head.className='cup-head';
+  const champ=document.createElement('div');champ.className='cup-champ';
+  const cn=document.createElement('span');cn.textContent=(c.champion&&c.champion.name)||'—';
+  champ.append(document.createTextNode('🏆 '),cn);
+  const when=document.createElement('div');when.className='cup-when';
+  when.textContent=c.endedAt?new Date(c.endedAt).toLocaleString():'';
+  head.append(champ,when);
+  const meta=document.createElement('div');meta.className='cup-meta';
+  meta.textContent=(c.size||(c.players||[]).length)+' commanders'+(c.youWon?' · you won':'');
+  const roster=document.createElement('div');roster.className='cup-roster';
+  (c.players||[]).forEach(p=>{
+    const chip=document.createElement('span');chip.className='cup-player'+(p.champion?' champ':'')+(p.you?' you':'');
+    chip.textContent=(p.champion?'🏆 ':'')+p.name+(p.you?' (you)':'');
+    roster.append(chip);
+  });
+  card.append(head,meta,roster);
+  return card;
+}
 let PUBLIC_RANK_TAB='players',PUBLIC_RANK_DIFFICULTY='easy';
 function syncPublicRankControls(){
   document.querySelectorAll('[data-rank-tab]').forEach(button=>{
@@ -2983,6 +3041,8 @@ document.getElementById('btnRanksBack').addEventListener('click',()=>{if(!PUB.bu
 document.getElementById('btnHomeRanks').addEventListener('click',()=>{if(!PUB.busy){showPublicView('ranks');loadPublicRanksUI();}});
 document.getElementById('btnHomeHistory').addEventListener('click',()=>{if(!PUB.busy){showPublicView('history');loadHistoryUI();}});
 document.getElementById('btnHistoryBack').addEventListener('click',()=>{if(!PUB.busy)showPublicView('home');});
+document.getElementById('btnHomeCups').addEventListener('click',()=>{if(!PUB.busy){closePublicMenu();showPublicView('cups');loadCupsUI();}});
+document.getElementById('btnCupsBack').addEventListener('click',()=>{if(!PUB.busy)showPublicView('home');});
 document.querySelectorAll('[data-rank-tab]').forEach(button=>button.addEventListener('click',()=>{
   if(PUB.busy)return;PUBLIC_RANK_TAB=button.dataset.rankTab;loadPublicRanksUI();
 }));
