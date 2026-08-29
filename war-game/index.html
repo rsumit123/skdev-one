@@ -986,7 +986,8 @@ body.split #nudge{display:none}
         <div class="public-kicker">Global theatre</div>
         <h1 id="ranksPreviewTitle">Leaderboard</h1>
         <div class="public-tabs" role="tablist" aria-label="Leaderboard view">
-          <button type="button" role="tab" data-rank-tab="players" aria-selected="true" aria-current="page">Top Players</button>
+          <button type="button" role="tab" data-rank-tab="players" aria-selected="true" aria-current="page">Vs AI</button>
+          <button type="button" role="tab" data-rank-tab="pvp" aria-selected="false">Head to Head</button>
           <button type="button" role="tab" data-rank-tab="ai" aria-selected="false">AI Commanders</button>
           <button type="button" role="tab" data-rank-tab="recent" aria-selected="false">Recent Battles</button>
         </div>
@@ -2497,6 +2498,12 @@ async function loadPublicRanksUI(){
       rows.forEach(row=>list.append(publicListRow(`#${row.rank} ${row.displayName}`,[
         {text:`${row.wins} wins`},{text:`${row.losses} losses`},{text:`${row.winRate}% win rate`,className:'outcome'}
       ])));
+    }else if(PUBLIC_RANK_TAB==='pvp'){
+      data=await apiRequest('/v1/leaderboards/head-to-head');
+      rows=data.players||[];list.replaceChildren();
+      rows.forEach(row=>list.append(publicListRow(`#${row.rank} ${row.displayName}`,[
+        {text:`${row.wins} wins`},{text:`${row.losses} losses`},{text:`${row.winRate}% win rate`,className:'outcome'}
+      ])));
     }else if(PUBLIC_RANK_TAB==='ai'){
       data=await apiRequest('/v1/leaderboards/models');rows=(data.models||[]).map(publicAiRow);list.replaceChildren();
       rows.forEach(row=>list.append(publicListRow(row.name,[
@@ -2508,7 +2515,9 @@ async function loadPublicRanksUI(){
         {text:relativeBattleTime(row.playedAt,Date.now())}
       ],{recent:true})));
     }
-    if(!rows.length)publicListEmpty(list,'No battles yet. Choose a difficulty to enter the breach.');
+    if(!rows.length)publicListEmpty(list, PUBLIC_RANK_TAB==='pvp'
+      ? 'No head-to-head battles yet. Challenge a friend from the home screen.'
+      : 'No battles yet. Choose a difficulty to enter the breach.');
   }catch(error){
     publicListEmpty(list,'Standings could not be loaded.');setAuthError('ranksError','Please try again.');
   }
@@ -2650,6 +2659,8 @@ function PVP_END_GAME(){
   const rb=document.getElementById('btnPvpRematch');
   if(rb)rb.textContent=PVP.isHost?'Rematch':'Rematch (host only)';
   document.getElementById('btnPlay').textContent='Start';SHAKE=Math.max(SHAKE,9);
+  // record the result for the head-to-head board (both clients report; server dedups)
+  if(PVP.socket){try{PVP.socket.emit('game:result',{winner:S.win,reason:S.t>=TIME_CAP?'timecap':'base'});}catch(e){}}
 }
 endGame=function(){
   if(PVP.active){PVP_END_GAME();return;}
