@@ -2064,8 +2064,17 @@ async function pvpConnect(){
     socket.off('game:start');socket.on('game:start',onPvpGameStart);
     socket.off('turn:release');socket.on('turn:release',p=>PVP.onRelease(p));
     socket.off('room:update');socket.on('room:update',onPvpRoomUpdate);
-    socket.off('disconnect');socket.on('disconnect',()=>{if(PVP.active)setReconnectBanner('Connection lost — reconnecting…');});
-    socket.off('connect');socket.on('connect',()=>{if(PVP.active)setReconnectBanner(null);});
+    socket.off('opponent:disconnected');socket.on('opponent:disconnected',onPvpOpponentGone);
+    socket.off('opponent:reconnected');socket.on('opponent:reconnected',onPvpOpponentBack);
+    socket.off('game:forfeit');socket.on('game:forfeit',onPvpForfeit);
+    socket.off('disconnect');socket.on('disconnect',()=>{if(PVP.active||PVP.code)setReconnectBanner('Connection lost — reconnecting…');});
+    socket.off('connect');socket.on('connect',()=>{
+      // A reconnect gets a fresh sid the server doesn't know; re-bind to the room.
+      if(PVP.code){ socket.emit('room:resume',{code:PVP.code},(res)=>{
+        if(res&&res.ok)setReconnectBanner(null);
+        else{setReconnectBanner(null); if(PVP.active)showToast('Lost the battle connection.',{type:'error'});}
+      }); }
+    });
     socket.once('connect',()=>resolve(socket));
     socket.once('connect_error',e=>reject(new Error('Could not reach the battle server.')));
   });
@@ -2154,6 +2163,37 @@ function onPvpGameStart(data){
   showToast('Battle starting vs '+PVP.opponentName+' — you are '+(data.yourSide===0?'Vulcan (left)':'Cobalt (right)'),{type:'success'});
   const seedInput=document.getElementById('seed');if(seedInput)seedInput.value=data.seed;
   goLive();
+}
+function onPvpOpponentGone(data){
+  if(!PVP.active)return;
+  const secs=(data&&data.graceSeconds)||60;
+  setReconnectBanner(PVP.opponentName+' disconnected — waiting up to '+Math.round(secs)+'s…');
+}
+function onPvpOpponentBack(){
+  if(!PVP.active)return;
+  setReconnectBanner(null);
+  showToast(PVP.opponentName+' reconnected — resuming.',{type:'success'});
+}
+function onPvpForfeit(data){
+  if(S.over && !PVP.active)return;
+  const win=(data&&(data.winner===0||data.winner===1))?data.winner:null;
+  PVP.active=false; setReconnectBanner(null);
+  // unblock anything in-flight (open picker or a pending turn await)
+  if(typeof PICK!=='undefined' && PICK){ const p=PICK; PICK=null;
+    document.getElementById('picker').classList.remove('on');
+    try{p.resolve({queue:[],stance:p.stance});}catch(e){} }
+  PVP.failAll(new Error('forfeit'));
+  S.win=win; S.over=true; RUNNING=false; AWAIT=false;
+  const b=document.getElementById('banner'),bt=document.getElementById('bannerTxt');
+  b.style.display='flex';
+  const iWon=win===PVP.mySide;
+  bt.textContent=win===null?'Match ended':(iWon?'Opponent left — you win':'You forfeited');
+  bt.style.color=iWon?'#74ab7c':'#ef9b7e';
+  document.getElementById('publicResultMeta').hidden=true;
+  document.getElementById('publicResultStatus').hidden=true;
+  document.getElementById('btnCompletionRetry').hidden=true;
+  const rb=document.getElementById('btnPvpRematch');if(rb)rb.textContent=PVP.isHost?'Rematch':'Rematch (host only)';
+  document.getElementById('btnPlay').textContent='Start';
 }
 function bindPvp(){
   const on=(id,fn)=>{const el=document.getElementById(id);if(el)el.onclick=fn;};
@@ -2813,7 +2853,10 @@ async function decide(s){
       const stance=clean.stance==='hold'?'hold':'push';
       PVP.submit(T,clean.queue,stance,pvpStateHash());
       setReconnectBanner(PVP.opponentName+' is deciding…');
-      let rel; try{ rel=await PVP.awaitRelease(T); } finally { setReconnectBanner(null); }
+      let rel;
+      try{ rel=await PVP.awaitRelease(T); }
+      catch(e){ return {queue:[],stance:'push',why:'—',bad:[]}; }   // forfeit/desync unblocked us
+      finally{ setReconnectBanner(null); }
       const d=rel.decisions[s];
       return {queue:[...d.queue],stance:d.stance,why:'[YOU] '+((d.queue&&d.queue.length)?d.queue.join(', '):'hold order'),bad:[]};
     }
