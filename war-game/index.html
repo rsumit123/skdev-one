@@ -426,6 +426,29 @@ body:not(.live) #sheet{display:none}
 /* portrait on a short screen still wants a height cap so it doesn't cover all */
 @media (orientation:portrait) and (max-height:520px){ #picker{max-height:74%} }
 
+/* ---------- toasts + reconnect banner (PvP + general error UX) ---------- */
+#toasts{position:fixed;top:calc(10px + env(safe-area-inset-top,0px));left:0;right:0;z-index:60;
+  display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none;padding:0 12px}
+.toast{pointer-events:auto;max-width:min(92vw,440px);background:#121a24;border:1px solid #2b3948;
+  border-left-width:4px;border-radius:10px;padding:11px 14px;font-size:13px;line-height:1.4;color:#e6ecf3;
+  box-shadow:0 10px 30px rgba(0,0,0,.5);display:flex;gap:10px;align-items:flex-start;animation:toastIn .22s ease}
+.toast.error{border-left-color:#e05a4a}
+.toast.success{border-left-color:#4fae6a}
+.toast.info{border-left-color:#3f83ad}
+.toast .tx{flex:1}
+.toast .tc{opacity:.5;cursor:pointer;font-weight:700;line-height:1}
+.toast.out{animation:toastOut .2s ease forwards}
+@keyframes toastIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+@keyframes toastOut{to{opacity:0;transform:translateY(-8px)}}
+#reconnectBanner{position:fixed;top:0;left:0;right:0;z-index:61;
+  background:linear-gradient(90deg,#3a2a12,#2a1f10);border-bottom:1px solid #e0b83a;color:#f0dc9a;
+  font-size:12.5px;text-align:center;padding:calc(6px + env(safe-area-inset-top,0px)) 12px 6px;
+  display:none;letter-spacing:.03em}
+#reconnectBanner.on{display:block}
+#reconnectBanner .spin{display:inline-block;width:11px;height:11px;border:2px solid rgba(240,220,154,.35);
+  border-top-color:#f0dc9a;border-radius:50%;vertical-align:-1px;margin-right:7px;animation:rbspin .7s linear infinite}
+@keyframes rbspin{to{transform:rotate(360deg)}}
+
 /* ---------- sheet ---------- */
 #sheet{position:fixed;left:0;right:0;bottom:0;height:min(62dvh,420px);background:#0c1117;
   border-top:1px solid var(--rule);border-radius:14px 14px 0 0;z-index:20;
@@ -744,6 +767,9 @@ body.split #nudge{display:none}
   </div>
 
   <button id="resultsChip">&#9873; Results</button>
+
+  <div id="reconnectBanner" role="status" aria-live="polite"></div>
+  <div id="toasts" aria-live="polite"></div>
 
   <!-- PUBLIC MARKUP START -->
   <div id="title" class="public-title">
@@ -1519,7 +1545,19 @@ function baseAgent(St,s){
    model is never punished for being slow.
    ------------------------------------------------------------ */
 /* PUBLIC APP TEST SLICE START */
-const PUBLIC_API='https://breach-api.skdev.one';
+// Overridable so Playwright / local dev can point at a local backend without a
+// build step: ?api=http://localhost:8050 (persisted), else the production API.
+const PUBLIC_API=(()=>{
+  try{
+    const q=new URLSearchParams(location.search).get('api');
+    if(q){ localStorage.setItem('breach.pubapi', q); }
+    const v=localStorage.getItem('breach.pubapi');
+    if(v) return v.replace(/\/+$/,'');
+  }catch(e){}
+  return 'https://breach-api.skdev.one';
+})();
+// Socket.IO endpoint (same host as the API) for 2-player PvP.
+const PVP_SOCKET_URL=PUBLIC_API;
 const PUB={identity:null,allowance:null,difficulties:null,game:null,difficulty:null,view:'boot',busy:false,generation:0};
 const GUEST_TOKEN_STATE={value:'',decided:false,tombstone:false,version:0};
 const PUBLIC_REQUESTS=new Set();
@@ -1868,6 +1906,24 @@ function startMockDiagnostic(config){
 function setPublicBusy(busy){
   PUB.busy=!!busy;
   document.querySelectorAll('.public-shell button').forEach(button=>button.disabled=PUB.busy);
+}
+// ---- transient toasts + a persistent reconnect banner (general error UX) ----
+function showToast(message,opts){
+  opts=opts||{}; const box=document.getElementById('toasts'); if(!box) return null;
+  const el=document.createElement('div'); el.className='toast '+(opts.type||'info');
+  const tx=document.createElement('span'); tx.className='tx'; tx.textContent=String(message);
+  const tc=document.createElement('span'); tc.className='tc'; tc.textContent='✕';
+  el.appendChild(tx); el.appendChild(tc); box.appendChild(el);
+  const kill=()=>{ if(!el.parentNode) return; el.classList.add('out'); setTimeout(()=>el.remove(),200); };
+  tc.onclick=kill;
+  const ms=opts.ms==null?3600:opts.ms; if(ms>0) setTimeout(kill,ms);
+  return el;
+}
+function setReconnectBanner(text){
+  const b=document.getElementById('reconnectBanner'); if(!b) return;
+  if(text){ b.innerHTML='<span class="spin"></span><span class="rbtx"></span>';
+    b.querySelector('.rbtx').textContent=String(text); b.classList.add('on'); }
+  else b.classList.remove('on');
 }
 function setPublicHidden(element,hidden){
   element.hidden=!!hidden;element.style.display=hidden?'none':'';
