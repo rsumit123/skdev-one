@@ -119,6 +119,10 @@ body:not(.public-battle) .public-result-status{display:none!important}
 body:not(.pvp-battle) .pvp-result-actions{display:none!important}
 body.pvp-battle .benchmark-result-actions,body.pvp-battle .public-result-actions,
 body.pvp-battle .public-result-meta,body.pvp-battle .public-result-status{display:none!important}
+/* tournament match: the server drives what comes next — no result-action buttons */
+body.tourney-battle .benchmark-result-actions,body.tourney-battle .public-result-actions,
+body.tourney-battle .pvp-result-actions,body.tourney-battle .public-result-meta,
+body.tourney-battle .public-result-status{display:none!important}
 /* keep any result modal inside the viewport in portrait instead of running under the sheet */
 #banner{max-height:80vh;overflow-y:auto;overscroll-behavior:contain}
 body.public-battle #btnSetupOpen,body.public-battle #btnRanksFab,body.public-battle #btnUnitsOpen,
@@ -481,6 +485,86 @@ body:not(.live) #sheet{display:none}
 .pvp-room-actions{margin-top:18px;text-align:center}
 .pvp-wait{display:inline-block;opacity:.7;font-size:14px}
 
+/* ---------- tournament (broadcast) ---------- */
+.tourney-entry button{background:transparent;border:1px solid #f0dc9a;color:#f0dc9a}
+.tourney-crest{text-align:center;margin:6px 0 14px}
+.tourney-crest .cup{font-family:"Saira Condensed","Oswald",sans-serif;font-weight:800;text-transform:uppercase;
+  font-size:34px;line-height:.9;letter-spacing:.02em;color:#f0dc9a}
+.tourney-crest .sub{font-family:ui-monospace,monospace;font-size:10px;letter-spacing:.28em;
+  text-transform:uppercase;color:rgba(240,220,154,.6);margin-top:7px}
+.tourney-members{display:flex;flex-direction:column;gap:8px;max-width:440px;margin:0 auto}
+.tourney-members .tm{display:flex;align-items:center;gap:11px;padding:10px 13px;border-radius:11px;
+  border:1px solid rgba(255,255,255,.12);background:linear-gradient(90deg,rgba(255,255,255,.04),rgba(255,255,255,.015))}
+.tourney-members .tm.host{border-color:rgba(240,220,154,.34)}
+.tourney-members .tm .seed{font-family:ui-monospace,monospace;font-size:12px;color:rgba(255,255,255,.4);width:18px;text-align:center}
+.tourney-members .tm .av{width:30px;height:30px;border-radius:8px;flex:none;display:grid;place-items:center;
+  font-family:"Saira Condensed","Oswald",sans-serif;font-weight:800;font-size:15px;color:#fff}
+.tourney-members .tm .nm{font-family:"Saira Condensed","Oswald",sans-serif;font-weight:700;font-size:17px;
+  letter-spacing:.02em;flex:1;text-transform:uppercase}
+.tourney-members .tm .off{opacity:.45;font-style:italic}
+.tourney-members .tm .badge{font-family:ui-monospace,monospace;font-size:9px;letter-spacing:.12em;text-transform:uppercase;
+  color:#f0dc9a;border:1px solid rgba(240,220,154,.4);border-radius:20px;padding:2px 8px}
+.tourney-board-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.tourney-board-head h1{font-size:26px;margin-top:2px}
+.bracket{display:flex;gap:14px;overflow-x:auto;padding:6px 2px 10px;align-items:stretch}
+.bracket .round{display:flex;flex-direction:column;justify-content:space-around;gap:10px;min-width:150px;flex:none}
+.bracket .rlabel{font-family:ui-monospace,monospace;font-size:9px;letter-spacing:.2em;text-transform:uppercase;
+  color:rgba(255,255,255,.4);text-align:center;margin-bottom:2px}
+.bracket .match{border:1px solid rgba(255,255,255,.12);border-radius:10px;overflow:hidden;background:rgba(255,255,255,.03)}
+.bracket .match.live{border-color:#ff4436;box-shadow:0 0 0 1px rgba(255,68,54,.3),0 8px 22px -10px rgba(255,68,54,.5)}
+.bracket .slot{display:flex;align-items:center;gap:8px;padding:8px 10px}
+.bracket .slot + .slot{border-top:1px solid rgba(255,255,255,.1)}
+.bracket .slot .dot{width:8px;height:8px;border-radius:50%;flex:none;background:rgba(255,255,255,.3)}
+.bracket .slot .sn{font-family:"Saira Condensed","Oswald",sans-serif;font-weight:700;text-transform:uppercase;
+  font-size:14px;flex:1;letter-spacing:.02em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bracket .slot.win .sn{color:#4fbf7e}.bracket .slot.win .sc{color:#4fbf7e}
+.bracket .slot.out .sn{color:rgba(255,255,255,.38)}
+.bracket .slot.tbd .sn,.bracket .slot.bye .sn{color:rgba(255,255,255,.38);font-style:italic;font-weight:600}
+.bracket .slot .sc{font-family:ui-monospace,monospace;font-size:12px;font-weight:700;color:rgba(255,255,255,.55)}
+.bracket .livebadge{display:inline-flex;align-items:center;gap:5px;font-family:ui-monospace,monospace;font-size:9px;
+  font-weight:700;letter-spacing:.1em;color:#fff;background:#ff4436;border-radius:5px;padding:2px 6px;margin-left:auto}
+.bracket .livebadge::before{content:"";width:6px;height:6px;border-radius:50%;background:#fff;animation:rbspin 0s;animation:blink 1.1s ease-in-out infinite}
+@keyframes blink{50%{opacity:.35}}
+.tourney-standby{text-align:center;margin-top:16px;font-family:ui-monospace,monospace;font-size:13px;color:rgba(255,255,255,.6)}
+/* spectator broadcast scoreboard (overlaid on the live battle) */
+#specBar{position:fixed;top:0;left:0;right:0;z-index:58;display:none;align-items:stretch;
+  background:rgba(6,10,18,.9);border-bottom:1px solid rgba(255,255,255,.14);backdrop-filter:blur(4px)}
+body.spectating #specBar{display:flex}
+#specBar .team{flex:1;padding:8px 12px;min-width:0}
+#specBar .team .row{display:flex;align-items:center;gap:7px}
+#specBar .team.r{text-align:right}#specBar .team.r .row{flex-direction:row-reverse}
+#specBar .team .tn{font-family:"Saira Condensed","Oswald",sans-serif;font-weight:800;text-transform:uppercase;font-size:15px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#specBar .hp{height:5px;border-radius:3px;background:rgba(255,255,255,.1);margin-top:6px;overflow:hidden}
+#specBar .hp i{display:block;height:100%;border-radius:3px}
+#specBar .mid{width:86px;flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  border-left:1px solid rgba(255,255,255,.14);border-right:1px solid rgba(255,255,255,.14);background:rgba(0,0,0,.3)}
+#specBar .mid .lv{display:inline-flex;align-items:center;gap:4px;font-family:ui-monospace,monospace;font-size:8.5px;
+  font-weight:700;letter-spacing:.12em;color:#fff;background:#ff4436;border-radius:4px;padding:1px 6px}
+#specBar .mid .lv::before{content:"";width:5px;height:5px;border-radius:50%;background:#fff;animation:blink 1.1s infinite}
+#specBar .mid .rnd{font-family:ui-monospace,monospace;font-size:9px;color:rgba(255,255,255,.7)}
+#specRibbon{position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:58;display:none;
+  font-family:ui-monospace,monospace;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:#f0dc9a;
+  background:rgba(6,10,18,.75);border:1px solid rgba(240,220,154,.32);border-radius:20px;padding:4px 14px;white-space:nowrap}
+body.spectating #specRibbon{display:block}
+/* champion overlay */
+#champOverlay{position:fixed;inset:0;z-index:70;display:flex;align-items:center;justify-content:center;text-align:center;
+  background:radial-gradient(120% 90% at 50% 12%,#1c2135 0%,rgba(6,9,15,.97) 62%)}
+#champOverlay[hidden]{display:none}
+#champOverlay .champ-in{display:flex;flex-direction:column;align-items:center;gap:6px;position:relative;padding:20px}
+#champOverlay .trophy{font-size:70px;filter:drop-shadow(0 8px 26px rgba(240,220,154,.5));animation:float 3s ease-in-out infinite}
+@keyframes float{50%{transform:translateY(-8px)}}
+#champOverlay .k{font-family:ui-monospace,monospace;font-size:10px;letter-spacing:.34em;color:rgba(240,220,154,.7);text-transform:uppercase;margin-top:10px}
+#champOverlay .cn{font-family:"Saira Condensed","Oswald",sans-serif;font-weight:900;text-transform:uppercase;
+  font-size:42px;line-height:.9;margin-top:2px;color:#f0dc9a}
+#champOverlay .word{font-family:"Saira Condensed","Oswald",sans-serif;font-weight:800;text-transform:uppercase;letter-spacing:.26em;
+  font-size:14px;color:#f0dc9a;margin-top:12px}
+#champOverlay .matchup-enter{margin-top:24px}
+.confetti{position:absolute;inset:-40px -80px;pointer-events:none;overflow:hidden}
+.confetti i{position:absolute;top:-12px;width:6px;height:10px;border-radius:1px;opacity:.9;animation:cfall linear infinite}
+@keyframes cfall{to{transform:translateY(640px) rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){#champOverlay .trophy,.confetti i,.bracket .livebadge::before,#specBar .mid .lv::before{animation:none}}
+
 /* ---------- sheet ---------- */
 #sheet{position:fixed;left:0;right:0;bottom:0;height:min(62dvh,420px);background:#0c1117;
   border-top:1px solid var(--rule);border-radius:14px 14px 0 0;z-index:20;
@@ -808,6 +892,13 @@ body.split #nudge{display:none}
   <div id="reconnectBanner" role="status" aria-live="polite"></div>
   <div id="toasts" aria-live="polite"></div>
 
+  <div id="specBar" aria-hidden="true">
+    <div class="team" id="specTeamL"><div class="row"><span class="dot" style="width:9px;height:9px;border-radius:50%;background:#e0673f"></span><span class="tn">—</span></div><div class="hp"><i></i></div></div>
+    <div class="mid"><span class="lv">LIVE</span><span class="rnd" id="specRound">—</span></div>
+    <div class="team r" id="specTeamR"><div class="row"><span class="dot" style="width:9px;height:9px;border-radius:50%;background:#4d98cf"></span><span class="tn">—</span></div><div class="hp"><i></i></div></div>
+  </div>
+  <div id="specRibbon">◉ Spectating</div>
+
   <!-- PUBLIC MARKUP START -->
   <div id="title" class="public-title">
     <main class="public-shell" aria-live="polite">
@@ -929,6 +1020,11 @@ body.split #nudge{display:none}
           <p>Two commanders, one lane. Doesn't use a daily game.</p></div>
           <button type="button" id="btnPvpOpen">Play a friend</button>
         </div>
+        <div class="pvp-entry tourney-entry">
+          <div><span class="public-kicker">Knockout</span><h2>Tournament</h2>
+          <p>3–8 friends, one Cup. Play your matches, watch the rest live.</p></div>
+          <button type="button" id="btnTourneyOpen">Start a Cup</button>
+        </div>
         <div class="auth-error" id="homeError" role="alert" aria-live="assertive"></div>
       </section>
 
@@ -960,6 +1056,53 @@ body.split #nudge{display:none}
         <div class="auth-error" id="pvpError" role="alert" aria-live="assertive"></div>
         <div class="public-secondary"><button type="button" class="public-quiet" id="btnPvpBack">Back</button></div>
       </section>
+
+      <section class="public-screen tourney-screen" id="publicTourney" data-public-screen="tourney" aria-labelledby="tourneyTitle">
+        <div id="tourneyChoose">
+          <div class="tourney-crest"><div class="cup">Breach Cup</div><div class="sub">Knockout · Single elimination</div></div>
+          <p class="public-lede">Open a Cup and share the code, or join a friend's. 3–8 commanders.</p>
+          <div class="pvp-actions">
+            <button type="button" class="matchup-enter" id="btnTourneyCreate">Open a Cup</button>
+            <div class="pvp-join">
+              <input type="text" id="tourneyJoinCode" maxlength="6" placeholder="CODE" autocomplete="off" autocapitalize="characters" spellcheck="false">
+              <button type="button" id="btnTourneyJoin">Join</button>
+            </div>
+          </div>
+        </div>
+        <div id="tourneyLobby" hidden>
+          <div class="pvp-code-box">
+            <span class="public-kicker">Cup code</span>
+            <strong id="tourneyCode">------</strong>
+            <button type="button" class="public-quiet" id="btnTourneyCopy">Copy code</button>
+          </div>
+          <div class="tourney-members" id="tourneyMembers" aria-live="polite"></div>
+          <div class="pvp-room-actions">
+            <button type="button" class="matchup-enter" id="btnTourneyDraw" hidden>Decide opponents</button>
+            <span class="pvp-wait" id="tourneyWait">Waiting for the host…</span>
+          </div>
+        </div>
+        <div id="tourneyBoard" hidden>
+          <div class="tourney-board-head">
+            <div><span class="public-kicker" id="tourneyRoundLabel">Bracket</span><h1 id="tourneyTitle">The Bracket</h1></div>
+            <button type="button" class="matchup-enter" id="btnTourneyStartMatch" hidden>Start next match</button>
+          </div>
+          <div class="bracket" id="tourneyBracket"></div>
+          <div class="tourney-standby" id="tourneyStandby" hidden></div>
+        </div>
+        <div class="auth-error" id="tourneyError" role="alert" aria-live="assertive"></div>
+        <div class="public-secondary"><button type="button" class="public-quiet" id="btnTourneyBack">Leave Cup</button></div>
+      </section>
+
+      <div id="champOverlay" hidden>
+        <div class="confetti" id="champConfetti"></div>
+        <div class="champ-in">
+          <div class="trophy">🏆</div>
+          <div class="k">Breach Cup · Champion</div>
+          <div class="cn" id="champName">—</div>
+          <div class="word">Breaks Through</div>
+          <button type="button" class="matchup-enter" id="btnChampDone">Back to the bracket</button>
+        </div>
+      </div>
 
       <section class="public-screen matchup-screen" id="publicMatchup" data-public-screen="matchup" aria-labelledby="matchupTitle">
         <div class="matchup-rails" aria-hidden="true"><span></span><i>VS</i><span></span></div>
@@ -2230,6 +2373,272 @@ function pvpLeaveToHome(){
 }
 bindPvp();
 
+/* ============ TOURNAMENT (broadcast knockout, reuses the lockstep match) ============ */
+const TOURNEY={active:false,socket:null,code:null,isHost:false,myId:null,state:null,
+  inMatch:false,role:null,_specTimer:null,
+  reset(){this.active=false;this.code=null;this.isHost=false;this.state=null;this.inMatch=false;this.role=null;},
+  leave(){try{if(this.socket){this.socket.off();this.socket.disconnect();}}catch(e){}
+    clearInterval(this._specTimer);this.socket=null;this.reset();}
+};
+function socketAck(socket,event,data){
+  return new Promise((resolve)=>{
+    if(!socket){resolve({ok:false,code:'not_connected'});return;}
+    let done=false;const t=setTimeout(()=>{if(!done){done=true;resolve({ok:false,code:'timeout'});}},12000);
+    socket.emit(event,data,(res)=>{if(!done){done=true;clearTimeout(t);resolve(res||{ok:false,code:'no_response'});}});
+  });
+}
+const TOURNEY_ERRORS={tournament_not_found:'No Cup found with that code.',tournament_in_progress:'That Cup has already started.',
+  tournament_full:'That Cup is full (8 max).',already_in_tournament:"You're already in that Cup.",
+  not_host:'Only the host can do that.',need_three_to_eight:'Need 3–8 commanders to start.',
+  match_in_progress:'A match is already being played.',no_next_match:'No match ready to start.',
+  not_ready:'Draw the bracket first.',unauthorized:'Session expired — please refresh.',
+  timeout:'The server did not respond. Try again.',not_connected:'Not connected to the Cup.'};
+function tMsg(code){return TOURNEY_ERRORS[code]||'Something went wrong. Please try again.';}
+function tErr(msg){const el=document.getElementById('tourneyError');if(el)el.textContent=msg||'';}
+async function tourneyConnect(){
+  await loadSocketIO();
+  if(TOURNEY.socket&&TOURNEY.socket.connected)return TOURNEY.socket;
+  return new Promise((resolve,reject)=>{
+    const socket=window.io(PVP_SOCKET_URL,{
+      path:'/socket.io',transports:['polling','websocket'],reconnection:true,reconnectionAttempts:8,timeout:12000,
+      auth:(cb)=>{apiRequest('/v1/socket-ticket',{method:'POST',body:{}}).then(t=>cb({ticket:t.ticket})).catch(()=>cb({}));}
+    });
+    TOURNEY.socket=socket; PVP.socket=socket;   // the live match rides this socket
+    socket.off('tourney:update');socket.on('tourney:update',onTourneyUpdate);
+    socket.off('match:start');socket.on('match:start',onMatchStart);
+    socket.off('tourney:champion');socket.on('tourney:champion',onTourneyChampion);
+    socket.off('turn:release');socket.on('turn:release',p=>PVP.onRelease(p));
+    socket.off('opponent:disconnected');socket.on('opponent:disconnected',onPvpOpponentGone);
+    socket.off('opponent:reconnected');socket.on('opponent:reconnected',onPvpOpponentBack);
+    socket.off('game:forfeit');socket.on('game:forfeit',onPvpForfeit);
+    socket.off('disconnect');socket.on('disconnect',()=>{if(TOURNEY.code)setReconnectBanner('Connection lost — reconnecting…');});
+    socket.off('connect');socket.on('connect',()=>{
+      if(TOURNEY.code){socket.emit('tourney:resume',{code:TOURNEY.code},(res)=>{setReconnectBanner(null);});}
+    });
+    socket.once('connect',()=>resolve(socket));
+    socket.once('connect_error',()=>reject(new Error('Could not reach the Cup server.')));
+  });
+}
+async function tourneyCreate(){
+  tErr('');setPublicBusy(true);
+  try{await tourneyConnect();
+    const res=await socketAck(TOURNEY.socket,'tourney:create',{});
+    if(!res.ok){tErr(tMsg(res.code));return;}
+    TOURNEY.active=true;TOURNEY.isHost=true;TOURNEY.code=res.tournament.code;TOURNEY.myId=res.you.id;
+    onTourneyUpdate(res.tournament);
+  }catch(e){tErr(e.message||'Could not open the Cup.');}
+  finally{setPublicBusy(false);}
+}
+async function tourneyJoin(){
+  const code=(document.getElementById('tourneyJoinCode').value||'').trim().toUpperCase();
+  if(code.length<4){tErr('Enter the Cup code your friend shared.');return;}
+  tErr('');setPublicBusy(true);
+  try{await tourneyConnect();
+    const res=await socketAck(TOURNEY.socket,'tourney:join',{code});
+    if(!res.ok){tErr(tMsg(res.code));return;}
+    TOURNEY.active=true;TOURNEY.isHost=false;TOURNEY.code=res.tournament.code;TOURNEY.myId=res.you.id;
+    onTourneyUpdate(res.tournament);
+  }catch(e){tErr(e.message||'Could not join the Cup.');}
+  finally{setPublicBusy(false);}
+}
+async function tourneyDraw(){
+  tErr('');setPublicBusy(true);
+  try{const res=await socketAck(TOURNEY.socket,'tourney:draw',{});if(!res.ok)tErr(tMsg(res.code));}
+  finally{setPublicBusy(false);}
+}
+async function tourneyStartMatch(){
+  tErr('');setPublicBusy(true);
+  try{const res=await socketAck(TOURNEY.socket,'tourney:start-match',{});if(!res.ok)tErr(tMsg(res.code));}
+  finally{setPublicBusy(false);}
+}
+function onTourneyUpdate(state){
+  TOURNEY.state=state;
+  if(TOURNEY.inMatch){
+    // a match ended and the server advanced (current cleared). For a non-final match
+    // return everyone to the bracket; the final's champion is handled by its own event.
+    if(state.current===null && state.status!=='ended'){ TOURNEY.inMatch=false; exitToTourneyBoard(); }
+  }else{
+    renderTourney(state);
+  }
+}
+function renderTourney(state){
+  const choose=document.getElementById('tourneyChoose'),lobby=document.getElementById('tourneyLobby'),board=document.getElementById('tourneyBoard');
+  choose.hidden=!!TOURNEY.code;
+  if(state.status==='lobby'){
+    lobby.hidden=false;board.hidden=true;
+    document.getElementById('tourneyCode').textContent=state.code;
+    renderMembers(state);
+    const canDraw=TOURNEY.isHost&&state.members.length>=3&&state.members.length<=8;
+    setPublicHidden(document.getElementById('btnTourneyDraw'),!canDraw);
+    document.getElementById('tourneyWait').textContent=TOURNEY.isHost
+      ?(state.members.length<3?('Need '+(3-state.members.length)+' more — share the code'):'')
+      :'Waiting for the host to decide opponents…';
+  }else{
+    lobby.hidden=true;board.hidden=false;
+    renderBracket(state);
+    const noMatch=state.current===null&&state.status!=='ended';
+    const hasNext=bracketHasNext(state);
+    setPublicHidden(document.getElementById('btnTourneyStartMatch'),!(TOURNEY.isHost&&noMatch&&hasNext));
+    document.getElementById('tourneyRoundLabel').textContent=state.status==='ended'?'Champion decided':'Live bracket';
+    const sb=document.getElementById('tourneyStandby');
+    if(state.status==='ended'){sb.hidden=false;sb.textContent='🏆 '+(state.champion?state.champion.name:'—')+' wins the Cup';}
+    else if(state.current!==null){sb.hidden=false;sb.textContent='Match in progress…';}
+    else if(!TOURNEY.isHost&&hasNext){sb.hidden=false;sb.textContent='Waiting for the host to start the next match…';}
+    else sb.hidden=true;
+  }
+}
+function renderMembers(state){
+  const host=document.getElementById('tourneyMembers');host.innerHTML='';
+  const cols=['linear-gradient(150deg,#e0673f,#6d2515)','linear-gradient(150deg,#4d98cf,#123152)',
+    'linear-gradient(150deg,#7a5cc4,#2c1a52)','linear-gradient(150deg,#3fae8e,#134336)',
+    'linear-gradient(150deg,#c9a13f,#524015)','linear-gradient(150deg,#cf4d7a,#521230)',
+    'linear-gradient(150deg,#4dcfca,#124f4d)','linear-gradient(150deg,#8a8f3a,#3a3c15)'];
+  state.members.forEach((m,i)=>{
+    const row=document.createElement('div');row.className='tm'+(m.host?' host':'');
+    const seed=document.createElement('span');seed.className='seed';seed.textContent=i+1;
+    const av=document.createElement('span');av.className='av';av.style.background=cols[i%cols.length];
+    av.textContent=(m.name||'?').slice(0,1).toUpperCase();
+    const nm=document.createElement('span');nm.className='nm'+(m.connected?'':' off');nm.textContent=m.name+(m.connected?'':' (away)');
+    row.append(seed,av,nm);
+    if(m.host){const b=document.createElement('span');b.className='badge';b.textContent='Host';row.appendChild(b);}
+    host.appendChild(row);
+  });
+}
+function roundName(ri,total){
+  if(ri===total-1)return 'Final';
+  if(ri===total-2)return 'Semifinals';
+  if(ri===total-3)return 'Quarterfinals';
+  return 'Round '+(ri+1);
+}
+function bracketHasNext(state){
+  if(!state.bracket)return false;
+  for(const rnd of state.bracket)for(const m of rnd){
+    if(!m.winner&&m.a&&m.a.id&&m.b&&m.b.id)return true;
+  }
+  return false;
+}
+function renderBracket(state){
+  const host=document.getElementById('tourneyBracket');host.innerHTML='';
+  if(!state.bracket)return;
+  const total=state.bracket.length;
+  state.bracket.forEach((rnd,ri)=>{
+    const col=document.createElement('div');col.className='round';
+    const lab=document.createElement('div');lab.className='rlabel';lab.textContent=roundName(ri,total);col.appendChild(lab);
+    rnd.forEach(m=>{
+      const mm=document.createElement('div');mm.className='match'+(m.live?' live':'');
+      mm.appendChild(bracketSlot(m.a,m,0));mm.appendChild(bracketSlot(m.b,m,1));
+      col.appendChild(mm);
+    });
+    host.appendChild(col);
+  });
+}
+function bracketSlot(slot,m,side){
+  const d=document.createElement('div');d.className='slot';
+  const dot=document.createElement('span');dot.className='dot';dot.style.background=side===0?'#e0673f':'#4d98cf';
+  const sn=document.createElement('span');sn.className='sn';
+  const sc=document.createElement('span');sc.className='sc';
+  if(!slot){d.classList.add('tbd');sn.textContent='—';}
+  else if(slot.bye){d.classList.add('bye');sn.textContent='Bye';}
+  else{sn.textContent=slot.name;
+    if(m.winner){if(m.winner.id===slot.id){d.classList.add('win');sc.textContent='✔';}else{d.classList.add('out');sc.textContent='—';}}}
+  if(m.live&&side===0){const lb=document.createElement('span');lb.className='livebadge';lb.textContent='LIVE';d.append(dot,sn,lb);return d;}
+  d.append(dot,sn,sc);return d;
+}
+function onMatchStart(data){
+  PVP.socket=TOURNEY.socket;
+  PVP.active=true;PVP.turn=0;PVP._pending={};PVP._desynced=false;
+  TOURNEY.inMatch=true;TOURNEY.role=data.role;
+  const p0=data.players[0].name,p1=data.players[1].name;
+  SIDE[0].name=p0;SIDE[1].name=p1;
+  document.body.classList.remove('pvp-battle');
+  document.body.classList.add('tourney-battle');
+  if(data.role==='player'){
+    PVP.mySide=data.yourSide;PVP.opponentName=data.players[1-data.yourSide].name;
+    document.body.classList.remove('spectating');
+    showToast('Your match — you are '+(data.yourSide===0?'Vulcan (left)':'Cobalt (right)'),{type:'success'});
+  }else{
+    PVP.mySide=null;
+    setupSpecBar(p0,p1,data.round);
+    showToast('Spectating '+p0+' vs '+p1,{type:'info'});
+  }
+  CMD[0]={kind:'pvp',model:'human'};CMD[1]={kind:'pvp',model:'human'};
+  refreshNames();
+  const seedInput=document.getElementById('seed');if(seedInput)seedInput.value=data.seed;
+  goLive();
+}
+function setupSpecBar(p0,p1,round){
+  document.body.classList.add('spectating');
+  document.getElementById('specBar').setAttribute('aria-hidden','false');
+  document.querySelector('#specTeamL .tn').textContent=p0;
+  document.querySelector('#specTeamR .tn').textContent=p1;
+  const total=TOURNEY.state&&TOURNEY.state.bracket?TOURNEY.state.bracket.length:1;
+  document.getElementById('specRound').textContent=roundName(round||0,total);
+  document.getElementById('specRibbon').textContent='◉ Spectating · '+p0+' vs '+p1;
+  const L=document.querySelector('#specTeamL .hp i'),R=document.querySelector('#specTeamR .hp i');
+  L.style.background='linear-gradient(90deg,#6d2515,#e0673f)';
+  R.style.background='linear-gradient(270deg,#123152,#4d98cf)';R.style.marginLeft='auto';
+  clearInterval(TOURNEY._specTimer);TOURNEY._specTimer=setInterval(updateSpecBar,250);
+  updateSpecBar();
+}
+function updateSpecBar(){
+  if(!document.body.classList.contains('spectating'))return;
+  const L=document.querySelector('#specTeamL .hp i'),R=document.querySelector('#specTeamR .hp i');
+  if(L)L.style.width=Math.max(0,Math.min(100,S.hp[0]/BASE_HP*100))+'%';
+  if(R)R.style.width=Math.max(0,Math.min(100,S.hp[1]/BASE_HP*100))+'%';
+}
+function exitToTourneyBoard(){
+  clearInterval(TOURNEY._specTimer);
+  document.body.classList.remove('spectating','live','pvp-battle','tourney-battle');
+  document.getElementById('specBar').setAttribute('aria-hidden','true');
+  LIVE=false;RUNNING=false;PVP.active=false;
+  showResults(false);
+  showPublicView('tourney');
+  if(TOURNEY.state)renderTourney(TOURNEY.state);
+}
+function onTourneyChampion(data){
+  const name=(data&&data.champion&&data.champion.name)||'Champion';
+  document.getElementById('champName').textContent=name;
+  spawnConfetti('champConfetti');
+  clearInterval(TOURNEY._specTimer);
+  TOURNEY.inMatch=false;PVP.active=false;LIVE=false;RUNNING=false;
+  document.body.classList.remove('spectating','live');
+  document.getElementById('specBar').setAttribute('aria-hidden','true');
+  document.getElementById('champOverlay').hidden=false;
+}
+function spawnConfetti(id){
+  const host=document.getElementById(id);if(!host)return;host.innerHTML='';
+  const cols=['#f0dc9a','#e0673f','#4d98cf','#3fae8e','#fff'];
+  for(let i=0;i<26;i++){const s=document.createElement('i');
+    s.style.left=(Math.random()*100)+'%';s.style.background=cols[i%cols.length];
+    s.style.animationDuration=(2.4+Math.random()*2.2)+'s';s.style.animationDelay=(-Math.random()*4)+'s';
+    host.appendChild(s);}
+}
+function tourneyLeaveToHome(){
+  TOURNEY.leave();
+  document.body.classList.remove('live','spectating','pvp-battle','tourney-battle');
+  document.getElementById('specBar').setAttribute('aria-hidden','true');
+  document.getElementById('champOverlay').hidden=true;
+  LIVE=false;RUNNING=false;PVP.active=false;
+  showResults(false);showPublicView('home');
+}
+function bindTourney(){
+  const on=(id,fn)=>{const el=document.getElementById(id);if(el)el.onclick=fn;};
+  on('btnTourneyOpen',()=>{tErr('');document.getElementById('tourneyChoose').hidden=false;
+    document.getElementById('tourneyLobby').hidden=true;document.getElementById('tourneyBoard').hidden=true;
+    document.getElementById('tourneyJoinCode').value='';showPublicView('tourney');});
+  on('btnTourneyCreate',tourneyCreate);
+  on('btnTourneyJoin',tourneyJoin);
+  on('btnTourneyDraw',tourneyDraw);
+  on('btnTourneyStartMatch',tourneyStartMatch);
+  on('btnTourneyBack',tourneyLeaveToHome);
+  on('btnChampDone',()=>{document.getElementById('champOverlay').hidden=true;exitToTourneyBoard();});
+  on('btnTourneyCopy',()=>{const c=document.getElementById('tourneyCode').textContent;
+    if(navigator.clipboard)navigator.clipboard.writeText(c).then(()=>showToast('Code copied',{type:'success',ms:1500}),()=>{});});
+  const jc=document.getElementById('tourneyJoinCode');
+  if(jc)jc.addEventListener('keydown',e=>{if(e.key==='Enter')tourneyJoin();});
+}
+bindTourney();
+
 function setPublicHidden(element,hidden){
   element.hidden=!!hidden;element.style.display=hidden?'none':'';
 }
@@ -2649,18 +3058,28 @@ function PVP_END_GAME(){
   RUNNING=false;if(typeof wakeFabs==='function')wakeFabs();
   const b=document.getElementById('banner'),bt=document.getElementById('bannerTxt');
   b.style.display='flex';
-  const outcome=S.win===null?'Draw':(S.win===PVP.mySide?'Victory':'Defeat');
-  bt.textContent=outcome;
-  bt.style.color=outcome==='Victory'?'#74ab7c':outcome==='Defeat'?'#ef9b7e':'#fff';
-  // CSS (body.pvp-battle) shows .pvp-result-actions and hides the public/benchmark rows
   document.getElementById('publicResultMeta').hidden=true;
   document.getElementById('publicResultStatus').hidden=true;
   document.getElementById('btnCompletionRetry').hidden=true;
-  const rb=document.getElementById('btnPvpRematch');
-  if(rb)rb.textContent=PVP.isHost?'Rematch':'Rematch (host only)';
   document.getElementById('btnPlay').textContent='Start';SHAKE=Math.max(SHAKE,9);
-  // record the result for the head-to-head board (both clients report; server dedups)
-  if(PVP.socket){try{PVP.socket.emit('game:result',{winner:S.win,reason:S.t>=TIME_CAP?'timecap':'base'});}catch(e){}}
+  const inTourney=TOURNEY.active&&TOURNEY.inMatch;
+  if(inTourney){
+    // tournament match: no rematch/home here — the server advances and tourney:update
+    // moves everyone to the bracket. Spectators (mySide null) show the winner by name.
+    if(S.win===null)bt.textContent='Draw';
+    else if(PVP.mySide===null)bt.textContent=SIDE[S.win].name+' wins';
+    else bt.textContent=S.win===PVP.mySide?'You win!':'You lose';
+    bt.style.color=(PVP.mySide!==null&&S.win===PVP.mySide)?'#74ab7c':S.win===null?'#fff':'#ef9b7e';
+  }else{
+    const outcome=S.win===null?'Draw':(S.win===PVP.mySide?'Victory':'Defeat');
+    bt.textContent=outcome;
+    bt.style.color=outcome==='Victory'?'#74ab7c':outcome==='Defeat'?'#ef9b7e':'#fff';
+    const rb=document.getElementById('btnPvpRematch');
+    if(rb)rb.textContent=PVP.isHost?'Rematch':'Rematch (host only)';
+  }
+  // report the result: PvP both players report; in a tournament only the two players
+  // report (spectators have mySide null and are rejected server-side anyway).
+  if(PVP.socket&&PVP.mySide!==null){try{PVP.socket.emit('game:result',{winner:S.win,reason:S.t>=TIME_CAP?'timecap':'base'});}catch(e){}}
 }
 endGame=function(){
   if(PVP.active){PVP_END_GAME();return;}
