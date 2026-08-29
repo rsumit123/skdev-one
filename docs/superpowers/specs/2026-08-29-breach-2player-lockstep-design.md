@@ -106,13 +106,14 @@ projection or an exclusion — decide when we get there.
 - **Single worker only.** All room/SID/grace/timer state is process-local; no
   Redis adapter. `>1` worker would split rooms — matches the current deploy.
 
-## Open sub-decisions (not blocking Phase 1)
+## Resolved sub-decisions (owner, 2026-08-29)
 
-- **Quota**: does a PvP game consume the daily allowance? It spends no OpenRouter
-  credits, so it could be free or on a separate counter. Default: counts as 1
-  game; revisit.
-- **Side assignment UI**: host picks, or random/coin-flip. Default: host picks,
-  with a "random" option.
+- **Quota**: a PvP game does NOT count against the daily allowance (it spends no
+  OpenRouter credits). No allowance check on the PvP path.
+- **Side assignment**: RANDOM — the server coin-flips Vulcan/Cobalt at game start.
+- **Error UX**: transient toast/alert system + a persistent reconnect banner,
+  mirroring charade's Toast/GameAlerts UX (built fresh in vanilla JS for the
+  single-file frontend).
 
 ## Build phases
 
