@@ -564,6 +564,13 @@ body.spectating #specRibbon{display:block}
 .confetti i{position:absolute;top:-12px;width:6px;height:10px;border-radius:1px;opacity:.9;animation:cfall linear infinite}
 @keyframes cfall{to{transform:translateY(640px) rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){#champOverlay .trophy,.confetti i,.bracket .livebadge::before,#specBar .mid .lv::before{animation:none}}
+/* per-button loading spinner (async actions: join/create/draw/start…) */
+button.loading{color:transparent!important;pointer-events:none;position:relative}
+button.loading::after{content:"";position:absolute;top:50%;left:50%;width:15px;height:15px;margin:-8px 0 0 -8px;
+  border:2px solid rgba(255,255,255,.35);border-top-color:#fff;border-radius:50%;animation:btnspin .7s linear infinite;box-sizing:border-box}
+.matchup-enter.loading::after,.pvp-entry button.loading::after,#btnTourneyDraw.loading::after,.cta .big.loading::after{
+  border-color:rgba(30,24,10,.3);border-top-color:#20180a}
+@keyframes btnspin{to{transform:rotate(360deg)}}
 /* my cups history */
 .cups-list{display:flex;flex-direction:column;gap:12px}
 .cup-card{border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:14px 16px;
@@ -2148,6 +2155,8 @@ function setPublicBusy(busy){
   PUB.busy=!!busy;
   document.querySelectorAll('.public-shell button').forEach(button=>button.disabled=PUB.busy);
 }
+// show a spinner on the specific button being clicked while its async action runs
+function btnBusy(el,on){if(!el)return;el.classList.toggle('loading',!!on);el.setAttribute('aria-busy',on?'true':'false');}
 // ---- transient toasts + a persistent reconnect banner (general error UX) ----
 function showToast(message,opts){
   opts=opts||{}; const box=document.getElementById('toasts'); if(!box) return null;
@@ -2365,7 +2374,9 @@ function onPvpForfeit(data){
   document.getElementById('btnPlay').textContent='Start';
 }
 function bindPvp(){
-  const on=(id,fn)=>{const el=document.getElementById(id);if(el)el.onclick=fn;};
+  const on=(id,fn)=>{const el=document.getElementById(id);if(!el)return;
+    el.onclick=async(e)=>{if(el.classList.contains('loading'))return;btnBusy(el,true);
+      try{await fn(e);}finally{btnBusy(el,false);}};};
   on('btnPvpOpen',()=>{pvpErr('');document.getElementById('pvpChoose').hidden=false;
     document.getElementById('pvpRoom').hidden=true;document.getElementById('pvpJoinCode').value='';
     showPublicView('pvp');});
@@ -2647,7 +2658,9 @@ function tourneyLeaveToHome(){
   showResults(false);showPublicView('home');
 }
 function bindTourney(){
-  const on=(id,fn)=>{const el=document.getElementById(id);if(el)el.onclick=fn;};
+  const on=(id,fn)=>{const el=document.getElementById(id);if(!el)return;
+    el.onclick=async(e)=>{if(el.classList.contains('loading'))return;btnBusy(el,true);
+      try{await fn(e);}finally{btnBusy(el,false);}};};
   on('btnTourneyOpen',()=>{tErr('');document.getElementById('tourneyChoose').hidden=false;
     document.getElementById('tourneyLobby').hidden=true;document.getElementById('tourneyBoard').hidden=true;
     document.getElementById('tourneyJoinCode').value='';showPublicView('tourney');});
@@ -2756,10 +2769,10 @@ async function bootPublicUI(){
     showBootRetry(error.message);
   }
 }
-async function runAuthAction(errorId,passwordInput,action){
+async function runAuthAction(errorId,passwordInput,action,btn){
   setAuthError(errorId,'');
   setAuthError('identityError','');
-  setPublicBusy(true);
+  setPublicBusy(true);btnBusy(btn,true);
   try{
     const result=await action();
     if(passwordInput)passwordInput.value='';
@@ -2772,7 +2785,7 @@ async function runAuthAction(errorId,passwordInput,action){
     if(passwordInput)passwordInput.value='';
     setAuthError(errorId,error.message);
   }finally{
-    setPublicBusy(false);
+    setPublicBusy(false);btnBusy(btn,false);
     if(PUB.view==='home')renderHome();
   }
 }
@@ -2997,7 +3010,7 @@ document.getElementById('guestForm').addEventListener('submit',event=>{
   event.preventDefault();
   if(PUB.busy)return;
   const form=event.currentTarget;
-  runAuthAction('guestError',null,()=>submitGuest(form.elements.displayName.value.trim()));
+  runAuthAction('guestError',null,()=>submitGuest(form.elements.displayName.value.trim()),form.querySelector('.auth-submit'));
 });
 document.getElementById('signupForm').addEventListener('submit',event=>{
   event.preventDefault();
@@ -3007,7 +3020,7 @@ document.getElementById('signupForm').addEventListener('submit',event=>{
     displayName:form.elements.displayName.value.trim(),
     email:form.elements.email.value.trim(),
     password:form.elements.password.value
-  }));
+  }),form.querySelector('.auth-submit'));
 });
 document.getElementById('loginForm').addEventListener('submit',event=>{
   event.preventDefault();
@@ -3015,7 +3028,7 @@ document.getElementById('loginForm').addEventListener('submit',event=>{
   const form=event.currentTarget;
   runAuthAction('loginError',form.elements.password,()=>submitLogin({
     email:form.elements.email.value.trim(),password:form.elements.password.value
-  }));
+  }),form.querySelector('.auth-submit'));
 });
 document.getElementById('btnPublicLogout').addEventListener('click',async()=>{
   if(PUB.busy)return;
