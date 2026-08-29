@@ -108,6 +108,13 @@ async function boot(ctx,name){
     const seed2A=await A.evaluate(()=>document.getElementById('seed').value);
     const seed2B=await B.evaluate(()=>document.getElementById('seed').value);
     check(seed2A===seed2B && seed2A, 'rematch gave both the same new seed: '+seed2A);
+
+    log('7. Head-to-head leaderboard recorded the result…');
+    await A.waitForTimeout(700);   // let both game:result reports land
+    const h2h=await A.evaluate(async()=>await apiRequest('/v1/leaderboards/head-to-head'));
+    check(h2h && Array.isArray(h2h.players) && h2h.players.length>=1, 'head-to-head endpoint returns standings');
+    check(h2h.players.some(p=>p.wins>=1), 'a winner was recorded with >=1 win');
+    check(h2h.players.reduce((n,p)=>n+p.games,0)>=2, 'both players have a recorded game');
     log(failed?'\nE2E RESULT: FAILURES ABOVE':'\nE2E RESULT: ALL CHECKS PASSED');
   }catch(e){
     failed=true; log('E2E ERROR:',e.message);
