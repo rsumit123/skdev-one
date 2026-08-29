@@ -449,6 +449,32 @@ body:not(.live) #sheet{display:none}
   border-top-color:#f0dc9a;border-radius:50%;vertical-align:-1px;margin-right:7px;animation:rbspin .7s linear infinite}
 @keyframes rbspin{to{transform:rotate(360deg)}}
 
+/* ---------- pvp lobby ---------- */
+.pvp-entry{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;
+  margin-top:18px;padding:16px 18px;border:1px solid rgba(240,220,154,.22);border-radius:12px;
+  background:rgba(240,220,154,.05)}
+.pvp-entry h2{margin:2px 0 0;font-size:18px}
+.pvp-entry p{margin:4px 0 0;opacity:.7;font-size:13px}
+.pvp-entry button{padding:11px 20px;border-radius:9px;border:1px solid #f0dc9a;background:#f0dc9a;
+  color:#1a1710;font-weight:700;cursor:pointer;white-space:nowrap}
+.pvp-actions{display:flex;flex-direction:column;gap:14px;margin-top:18px;max-width:420px}
+.pvp-join{display:flex;gap:8px}
+.pvp-join input{flex:1;padding:12px 14px;border-radius:9px;border:1px solid rgba(255,255,255,.18);
+  background:rgba(0,0,0,.25);color:#fff;font-size:20px;letter-spacing:4px;text-transform:uppercase;text-align:center}
+.pvp-join button,#pvpChoose .pvp-join button{padding:12px 18px;border-radius:9px;border:1px solid rgba(255,255,255,.25);
+  background:transparent;color:#fff;font-weight:600;cursor:pointer}
+.pvp-code-box{display:flex;flex-direction:column;align-items:center;gap:6px;margin:18px 0;padding:20px;
+  border:1px dashed rgba(240,220,154,.4);border-radius:12px}
+.pvp-code-box strong{font-size:40px;letter-spacing:8px;color:#f0dc9a}
+.pvp-players{display:flex;flex-direction:column;gap:8px;max-width:420px;margin:0 auto}
+.pvp-players .pvp-slot{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:9px;
+  border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.03)}
+.pvp-players .pvp-slot .dot{width:9px;height:9px;border-radius:50%;background:#3ecf8e}
+.pvp-players .pvp-slot.empty{opacity:.5;font-style:italic}
+.pvp-players .pvp-slot.empty .dot{background:rgba(255,255,255,.25)}
+.pvp-room-actions{margin-top:18px;text-align:center}
+.pvp-wait{display:inline-block;opacity:.7;font-size:14px}
+
 /* ---------- sheet ---------- */
 #sheet{position:fixed;left:0;right:0;bottom:0;height:min(62dvh,420px);background:#0c1117;
   border-top:1px solid var(--rule);border-radius:14px 14px 0 0;z-index:20;
@@ -887,7 +913,41 @@ body.split #nudge{display:none}
           </article>
         </div>
         <div class="exhaustion-state" id="exhaustionState" hidden></div>
+        <div class="pvp-entry">
+          <div><span class="public-kicker">Head to head</span><h2>Play a friend</h2>
+          <p>Two commanders, one lane. Doesn't use a daily game.</p></div>
+          <button type="button" id="btnPvpOpen">Play a friend</button>
+        </div>
         <div class="auth-error" id="homeError" role="alert" aria-live="assertive"></div>
+      </section>
+
+      <section class="public-screen" id="publicPvp" data-public-screen="pvp" aria-labelledby="pvpTitle">
+        <div class="public-kicker">Head to head</div>
+        <h1 id="pvpTitle">Play a friend</h1>
+        <div id="pvpChoose">
+          <p class="public-lede">Create a battle and share the code, or join a friend's code.</p>
+          <div class="pvp-actions">
+            <button type="button" class="matchup-enter" id="btnPvpCreate">Create a battle</button>
+            <div class="pvp-join">
+              <input type="text" id="pvpJoinCode" maxlength="6" placeholder="CODE" autocomplete="off" autocapitalize="characters" spellcheck="false">
+              <button type="button" id="btnPvpJoin">Join</button>
+            </div>
+          </div>
+        </div>
+        <div id="pvpRoom" hidden>
+          <div class="pvp-code-box">
+            <span class="public-kicker">Battle code</span>
+            <strong id="pvpRoomCode">------</strong>
+            <button type="button" class="public-quiet" id="btnPvpCopy">Copy code</button>
+          </div>
+          <div class="pvp-players" id="pvpPlayers" aria-live="polite"></div>
+          <div class="pvp-room-actions">
+            <button type="button" class="matchup-enter" id="btnPvpStart" hidden>Start battle</button>
+            <span class="pvp-wait" id="pvpWait">Waiting for the host to start…</span>
+          </div>
+        </div>
+        <div class="auth-error" id="pvpError" role="alert" aria-live="assertive"></div>
+        <div class="public-secondary"><button type="button" class="public-quiet" id="btnPvpBack">Back</button></div>
       </section>
 
       <section class="public-screen matchup-screen" id="publicMatchup" data-public-screen="matchup" aria-labelledby="matchupTitle">
@@ -1223,7 +1283,8 @@ function paintWho(){
 function refreshNames(){
   [0,1].forEach(s=>{
     const c=CMD[s];
-    SIDE[s].name = c.kind==='script' ? (s?'Scripted B':'Scripted A')
+    SIDE[s].name = c.kind==='pvp'    ? SIDE[s].name
+                 : c.kind==='script' ? (s?'Scripted B':'Scripted A')
                  : c.kind==='human'  ? 'You'
                  : c.kind==='mock'   ? (s?'Mock B':'Mock A')
                  : shortName(c.model);
@@ -1925,6 +1986,179 @@ function setReconnectBanner(text){
     b.querySelector('.rbtx').textContent=String(text); b.classList.add('on'); }
   else b.classList.remove('on');
 }
+
+/* ============ 2-player PvP (lockstep over Socket.IO) ============ */
+const PVP={
+  active:false,socket:null,code:null,isHost:false,mySide:null,opponentName:'Opponent',
+  turn:0,_pending:{},_desynced:false,_loading:null,
+  reset(){this.active=false;this.mySide=null;this.turn=0;this._pending={};this._desynced=false;},
+  awaitRelease(T){
+    let e=this._pending[T];
+    if(!e){e={};e.promise=new Promise((res,rej)=>{e.resolve=res;e.reject=rej;});this._pending[T]=e;}
+    if(e.payload)return Promise.resolve(e.payload);
+    return e.promise;
+  },
+  onRelease(payload){
+    const T=payload.turn;let e=this._pending[T];
+    if(!e){e={payload};e.promise=Promise.resolve(payload);this._pending[T]=e;}
+    else{e.payload=payload;if(e.resolve)e.resolve(payload);}
+  },
+  submit(T,queue,stance,hash){
+    if(this.socket)this.socket.emit('turn:submit',{turn:T,queue,stance,hash});
+  },
+  failAll(err){for(const T in this._pending){const e=this._pending[T];if(e&&e.reject&&!e.payload)e.reject(err);}},
+  onDesync(){
+    if(this._desynced)return;this._desynced=true;
+    showToast('Battle desynced — the two sides fell out of step. Please start a new match.',{type:'error',ms:0});
+    stopPublicBattle&&stopPublicBattle('Battle desynced.');
+  },
+  leave(){
+    try{if(this.socket){this.socket.off();this.socket.disconnect();}}catch(e){}
+    this.socket=null;this.reset();this.code=null;this.isHost=false;
+  }
+};
+// The shared state fingerprint — identical byte-for-byte on both clients when in sync
+// (sim math is deterministic). Mirrors scratchpad/lockstep.js hashState.
+function pvpStateHash(){
+  const parts=[S.t,S.next,S.nid,S.coins[0],S.coins[1],S.inc[0],S.inc[1],
+    S.eco[0],S.eco[1],S.hp[0],S.hp[1],S.stance[0],S.stance[1],JSON.stringify(S.tower||null)];
+  const us=[...S.units].sort((a,b)=>a.id-b.id)
+    .map(u=>u.id+':'+u.s+':'+u.type+':'+u.x+':'+u.hp+':'+(u.fl||0));
+  return JSON.stringify(parts)+'|'+us.join(';');
+}
+function loadSocketIO(){
+  if(window.io)return Promise.resolve();
+  if(PVP._loading)return PVP._loading;
+  PVP._loading=new Promise((resolve,reject)=>{
+    const sc=document.createElement('script');
+    sc.src='https://cdn.socket.io/4.7.5/socket.io.min.js';
+    sc.crossOrigin='anonymous';
+    sc.onload=()=>resolve();sc.onerror=()=>{PVP._loading=null;reject(new Error('Could not load the multiplayer library.'));};
+    document.head.appendChild(sc);
+  });
+  return PVP._loading;
+}
+async function pvpConnect(){
+  await loadSocketIO();
+  if(PVP.socket&&PVP.socket.connected)return PVP.socket;
+  return new Promise((resolve,reject)=>{
+    const socket=window.io(PVP_SOCKET_URL,{
+      path:'/socket.io',transports:['websocket','polling'],reconnection:true,
+      reconnectionAttempts:8,timeout:12000,
+      // A ticket is one-time-use, so mint a fresh one on every (re)connection attempt.
+      auth:(cb)=>{apiRequest('/v1/socket-ticket',{method:'POST',body:{}})
+        .then(t=>cb({ticket:t.ticket})).catch(()=>cb({}));}
+    });
+    PVP.socket=socket;
+    socket.off('game:start');socket.on('game:start',onPvpGameStart);
+    socket.off('turn:release');socket.on('turn:release',p=>PVP.onRelease(p));
+    socket.off('room:update');socket.on('room:update',onPvpRoomUpdate);
+    socket.off('disconnect');socket.on('disconnect',()=>{if(PVP.active)setReconnectBanner('Connection lost — reconnecting…');});
+    socket.off('connect');socket.on('connect',()=>{if(PVP.active)setReconnectBanner(null);});
+    socket.once('connect',()=>resolve(socket));
+    socket.once('connect_error',e=>reject(new Error('Could not reach the battle server.')));
+  });
+}
+function pvpErr(msg){const el=document.getElementById('pvpError');if(el)el.textContent=msg||'';}
+function emitAck(event,data){
+  return new Promise((resolve)=>{
+    if(!PVP.socket){resolve({ok:false,code:'not_connected'});return;}
+    let done=false;const t=setTimeout(()=>{if(!done){done=true;resolve({ok:false,code:'timeout'});}},12000);
+    PVP.socket.emit(event,data,(res)=>{if(!done){done=true;clearTimeout(t);resolve(res||{ok:false,code:'no_response'});}});
+  });
+}
+const PVP_ERRORS={room_not_found:'No battle found with that code.',room_in_progress:'That battle has already started.',
+  room_full:'That battle is already full.',already_in_room:"You're already in that battle.",
+  not_host:'Only the host can start the battle.',need_two_players:'Waiting for a second commander to join.',
+  unauthorized:'Session expired — please refresh.',timeout:'The server did not respond. Try again.',
+  no_response:'The server did not respond. Try again.',not_connected:'Not connected to the battle server.'};
+function pvpMsg(code){return PVP_ERRORS[code]||'Something went wrong. Please try again.';}
+async function pvpCreate(){
+  pvpErr('');setPublicBusy(true);
+  try{
+    await pvpConnect();
+    const res=await emitAck('room:create',{});
+    if(!res.ok){pvpErr(pvpMsg(res.code));return;}
+    PVP.isHost=true;PVP.code=res.room.code;
+    enterPvpRoom(res.room);
+  }catch(e){pvpErr(e.message||'Could not create the battle.');}
+  finally{setPublicBusy(false);}
+}
+async function pvpJoin(){
+  const code=(document.getElementById('pvpJoinCode').value||'').trim().toUpperCase();
+  if(code.length<4){pvpErr('Enter the battle code your friend shared.');return;}
+  pvpErr('');setPublicBusy(true);
+  try{
+    await pvpConnect();
+    const res=await emitAck('room:join',{code});
+    if(!res.ok){pvpErr(pvpMsg(res.code));return;}
+    PVP.isHost=false;PVP.code=res.room.code;
+    enterPvpRoom(res.room);
+  }catch(e){pvpErr(e.message||'Could not join the battle.');}
+  finally{setPublicBusy(false);}
+}
+async function pvpStart(){
+  pvpErr('');setPublicBusy(true);
+  try{
+    const res=await emitAck('game:start',{});
+    if(!res.ok){pvpErr(pvpMsg(res.code));return;}
+    // game:start events will arrive to both players and drive onPvpGameStart.
+  }catch(e){pvpErr(e.message||'Could not start the battle.');}
+  finally{setPublicBusy(false);}
+}
+function enterPvpRoom(room){
+  document.getElementById('pvpChoose').hidden=true;
+  document.getElementById('pvpRoom').hidden=false;
+  onPvpRoomUpdate(room);
+}
+function onPvpRoomUpdate(room){
+  if(!room)return;
+  if(room.code)document.getElementById('pvpRoomCode').textContent=room.code;
+  const list=document.getElementById('pvpPlayers');list.innerHTML='';
+  const players=room.players||[];
+  for(let i=0;i<2;i++){
+    const p=players[i];const div=document.createElement('div');
+    div.className='pvp-slot'+(p?'':' empty');
+    const dot=document.createElement('span');dot.className='dot';
+    const name=document.createElement('span');
+    name.textContent=p?(p.name+(p.host?' · host':'')):'Waiting for a commander…';
+    div.append(dot,name);list.appendChild(div);
+  }
+  const canStart=PVP.isHost&&players.length>=2&&room.status==='lobby';
+  const startBtn=document.getElementById('btnPvpStart');
+  const wait=document.getElementById('pvpWait');
+  setPublicHidden(startBtn,!canStart);
+  if(PVP.isHost)wait.textContent=players.length<2?'Share the code — waiting for a friend to join…':'';
+  else wait.textContent='Waiting for the host to start…';
+}
+function onPvpGameStart(data){
+  PVP.active=true;PVP.mySide=data.yourSide;PVP.opponentName=data.opponent||'Opponent';
+  PVP.turn=0;PVP._pending={};PVP._desynced=false;
+  CMD[0]={kind:'pvp',model:'human'};CMD[1]={kind:'pvp',model:'human'};
+  const you=data.you||'You';
+  SIDE[0].name=data.yourSide===0?you:PVP.opponentName;
+  SIDE[1].name=data.yourSide===1?you:PVP.opponentName;
+  refreshNames();
+  showToast('Battle starting vs '+PVP.opponentName+' — you are '+(data.yourSide===0?'Vulcan (left)':'Cobalt (right)'),{type:'success'});
+  const seedInput=document.getElementById('seed');if(seedInput)seedInput.value=data.seed;
+  goLive();
+}
+function bindPvp(){
+  const on=(id,fn)=>{const el=document.getElementById(id);if(el)el.onclick=fn;};
+  on('btnPvpOpen',()=>{pvpErr('');document.getElementById('pvpChoose').hidden=false;
+    document.getElementById('pvpRoom').hidden=true;document.getElementById('pvpJoinCode').value='';
+    showPublicView('pvp');});
+  on('btnPvpCreate',pvpCreate);
+  on('btnPvpJoin',pvpJoin);
+  on('btnPvpStart',pvpStart);
+  on('btnPvpBack',()=>{PVP.leave();showPublicView('home');});
+  on('btnPvpCopy',()=>{const c=document.getElementById('pvpRoomCode').textContent;
+    if(navigator.clipboard)navigator.clipboard.writeText(c).then(()=>showToast('Code copied',{type:'success',ms:1500}),()=>{});});
+  const jc=document.getElementById('pvpJoinCode');
+  if(jc)jc.addEventListener('keydown',e=>{if(e.key==='Enter')pvpJoin();});
+}
+bindPvp();
+
 function setPublicHidden(element,hidden){
   element.hidden=!!hidden;element.style.display=hidden?'none':'';
 }
@@ -2523,6 +2757,26 @@ async function decide(s){
     STATS[s].calls++; STATS[s].ms+=ms;
     return {...sanitize(raw), ms};
   }
+  if(c.kind==='pvp'){
+    const T=PVP.turn;
+    if(s===PVP.mySide){
+      THINK[s]=true; paintThink();
+      const raw=await humanTurn(s);
+      THINK[s]=false;
+      const clean=sanitize(raw);
+      const stance=clean.stance==='hold'?'hold':'push';
+      PVP.submit(T,clean.queue,stance,pvpStateHash());
+      setReconnectBanner(PVP.opponentName+' is deciding…');
+      let rel; try{ rel=await PVP.awaitRelease(T); } finally { setReconnectBanner(null); }
+      const d=rel.decisions[s];
+      return {queue:[...d.queue],stance:d.stance,why:'[YOU] '+((d.queue&&d.queue.length)?d.queue.join(', '):'hold order'),bad:[]};
+    }
+    // opponent side: this client just waits for the server to release both orders
+    let rel; try{ rel=await PVP.awaitRelease(T); }catch(e){ return {queue:[],stance:'push',why:'—',bad:[]}; }
+    const d=rel.decisions[s];
+    if(rel.hashes&&rel.hashes[s]!=null&&rel.hashes[s]!==pvpStateHash()) PVP.onDesync();
+    return {queue:[...d.queue],stance:d.stance,why:'['+PVP.opponentName+'] '+((d.queue&&d.queue.length)?d.queue.join(', '):'hold order'),bad:[]};
+  }
   if(c.kind==='server'){
     THINK[s]=true;paintThink();const t0=performance.now();
     try{
@@ -2595,6 +2849,7 @@ async function runDecisions(){
     LOG.push(e); pushFeed(e);
   });
   S.next+=DECIDE; AWAIT=false; acc=0; last=0; paintThink();
+  if(PVP.active) PVP.turn++;   // lockstep: both sides advance to the next turn together
 }
 
 function haltOnFailure(s,msg){
