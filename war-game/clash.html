@@ -31,7 +31,7 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
 .sb .side.A .tt{color:var(--teamA)}.sb .side.B{text-align:right}.sb .side.B .tt{color:var(--teamB)}
 .hpwrap{display:flex;flex-direction:column;gap:5px;margin-top:7px}
 .hprow{display:flex;align-items:center;gap:7px}.sb .side.B .hprow{flex-direction:row-reverse}
-.hprow .cn{font-size:11px;color:var(--muted);width:18px;flex:none;letter-spacing:.02em}
+.hprow .cn{font-size:10.5px;color:var(--muted);flex:none;letter-spacing:.02em;max-width:72px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .hprow .pct{font-size:11px;color:var(--text);width:32px;flex:none;text-align:right;font-variant-numeric:tabular-nums}
 .sb .side.B .hprow .pct{text-align:left}
 .hpbar{flex:1;height:6px;border-radius:3px;background:rgba(255,255,255,.10);overflow:hidden}.hpbar i{display:block;height:100%;border-radius:3px;transition:width .25s}
@@ -122,16 +122,16 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
   <div class="notch"></div>
   <div class="sb">
     <div class="side A"><div class="tt">Team A</div><div class="hpwrap">
-      <div class="hprow"><span class="cn">A1</span><div class="hpbar"><i id="hpA1" style="width:82%;background:linear-gradient(90deg,#6d2515,#e0673f)"></i></div><span class="pct" id="pcA1">82%</span></div>
-      <div class="hprow"><span class="cn">A2</span><div class="hpbar"><i id="hpA2" style="width:61%;background:linear-gradient(90deg,#6d4515,#f0a24a)"></i></div><span class="pct" id="pcA2">61%</span></div>
+      <div class="hprow"><span class="cn" id="nmA1">A1</span><div class="hpbar"><i id="hpA1" style="width:100%;background:linear-gradient(90deg,#6d2515,#e0673f)"></i></div><span class="pct" id="pcA1">100%</span></div>
+      <div class="hprow"><span class="cn" id="nmA2">A2</span><div class="hpbar"><i id="hpA2" style="width:100%;background:linear-gradient(90deg,#6d4515,#f0a24a)"></i></div><span class="pct" id="pcA2">100%</span></div>
     </div></div>
-    <div class="mid"><span class="clk" id="clk">1:52</span><span class="tl">Tower</span>
-      <div class="towerbar"><span class="a" id="twA" style="width:58%"></span><span class="b" id="twB" style="width:42%"></span></div>
-      <span class="state" id="twState">◈ Contested</span>
-      <span class="held" id="twHeld">Team B holds ▾</span></div>
+    <div class="mid"><span class="clk" id="clk">4:00</span><span class="tl">Tower</span>
+      <div class="towerbar"><span class="a" id="twA" style="width:50%"></span><span class="b" id="twB" style="width:50%"></span></div>
+      <span class="state" id="twState">◈ Neutral</span>
+      <span class="held" id="twHeld">—</span></div>
     <div class="side B"><div class="tt">Team B</div><div class="hpwrap">
-      <div class="hprow"><span class="cn">B1</span><div class="hpbar"><i id="hpB1" style="width:74%;margin-left:auto;background:linear-gradient(270deg,#123152,#4d98cf)"></i></div><span class="pct" id="pcB1">74%</span></div>
-      <div class="hprow"><span class="cn">B2</span><div class="hpbar"><i id="hpB2" style="width:69%;margin-left:auto;background:linear-gradient(270deg,#124f4d,#57c9b4)"></i></div><span class="pct" id="pcB2">69%</span></div>
+      <div class="hprow"><span class="cn" id="nmB1">B1</span><div class="hpbar"><i id="hpB1" style="width:100%;margin-left:auto;background:linear-gradient(270deg,#123152,#4d98cf)"></i></div><span class="pct" id="pcB1">100%</span></div>
+      <div class="hprow"><span class="cn" id="nmB2">B2</span><div class="hpbar"><i id="hpB2" style="width:100%;margin-left:auto;background:linear-gradient(270deg,#124f4d,#57c9b4)"></i></div><span class="pct" id="pcB2">100%</span></div>
     </div></div>
   </div>
   <div class="arena"><canvas id="game"></canvas>
@@ -161,7 +161,7 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
     <div class="bonus-toast">🏰 Tower → +income to A1 &amp; A2</div>
   </div>
   <div class="orders">
-    <div class="eco"><div class="coins"><span id="coins">140</span> <small>+3.6/s · eco 2</small></div>
+    <div class="eco"><div class="coins"><span id="coins">0</span> <small id="inc">—</small></div>
       <div class="stance"><b class="on" data-st="push">⚔ Push</b><b data-st="hold">🛡 Hold tower</b></div></div>
     <div class="build">
       <div class="u" data-t="inf"><div class="g">🪖</div><div class="n">Inf</div><div class="c">8</div></div>
@@ -196,10 +196,10 @@ window.BreachSim=function(seed, humanSlots){
         tank:{spd:141,hp:600,dmg:80,db:60,rng:38,cd:19,cost:4500,turn:5, rad:11,amin:38}};
   var HUMAN={}; (humanSlots&&humanSlots.length?humanSlots:['A1']).forEach(function(s){HUMAN[s]=1;});
   var bases=[
-    {id:'A1',team:0,ix:61*FP, iy:83*FP, ihp:1000,alive:true,cd:34,bc:14000},
-    {id:'A2',team:0,ix:299*FP,iy:83*FP, ihp:1000,alive:true,cd:20,bc:14000},
-    {id:'B1',team:1,ix:61*FP, iy:437*FP,ihp:1000,alive:true,cd:24,bc:14000},
-    {id:'B2',team:1,ix:299*FP,iy:437*FP,ihp:1000,alive:true,cd:28,bc:14000}];
+    {id:'A1',team:0,ix:61*FP, iy:83*FP, ihp:1000,alive:true,cd:34,bc:5000},
+    {id:'A2',team:0,ix:299*FP,iy:83*FP, ihp:1000,alive:true,cd:20,bc:5000},
+    {id:'B1',team:1,ix:61*FP, iy:437*FP,ihp:1000,alive:true,cd:24,bc:5000},
+    {id:'B2',team:1,ix:299*FP,iy:437*FP,ihp:1000,alive:true,cd:28,bc:5000}];
   var BY={}; bases.forEach(function(b){BY[b.id]=b;});
   var units=[], nextId=1, stanceT=[0,0], ctrl=512, holdTeam=-1, tick=0, over=false, winner=-1;
   var rs=(seed>>>0)||1;
@@ -249,7 +249,7 @@ window.BreachSim=function(seed, humanSlots){
     //      premium; holding the tower pays BOTH forts of that team ----
     for(i=0;i<bases.length;i++){ var b=bases[i]; if(!b.alive) continue;
       var isH=!!HUMAN[b.id];
-      b.bc+=isH?26:18; if(hold===b.team) b.bc+=isH?12:10;
+      b.bc+=isH?30:18; if(hold===b.team) b.bc+=isH?12:10;
       if(isH) continue;                       // humans build via inputs only
       b.cd--;
       if(b.cd<=0 && countOwned(b.id)<5){
@@ -395,12 +395,23 @@ window.BreachSim=function(seed, humanSlots){
   function nearFoe(u,r){r=r||56;let best=null,bd=r*r;for(const e of units){if(e.team===u.team)continue;
     const d=(e.x-u.x)**2+(e.y-u.y)**2;if(d<bd){bd=d;best=e;}}return best;}
 
+  let SLOTNAME={A1:'AI Commander',A2:'AI Commander',B1:'AI Commander',B2:'AI Commander'};
+  function applySlotNames(){
+    for(const sl of ['A1','A2','B1','B2']){
+      const e=document.getElementById('nm'+sl);
+      if(e){ const me=sl===MYSLOT; e.textContent=me?'You':SLOTNAME[sl];
+        e.style.color=me?'#f0dc9a':(SLOTNAME[sl]==='AI Commander'?'var(--faint)':'var(--text)');
+        e.title=SLOTNAME[sl]; }
+    }
+  }
   function setupWorld(sim){
     SIM=sim; window.BREACH_SIM_DEBUG=SIM;
     units=SIM.units; bases=SIM.bases;
     for(const b of bases){ Object.assign(b,BART[b.id]); b.x=gx2s(b.ix); b.y=gy2s(b.iy); b.hp=b.ihp/10; }
     const yt=document.getElementById('youTag');
-    if(yt) yt.textContent='◉ You · '+MYSLOT+(MYTEAM?' (bottom)':' (top)');
+    if(yt) yt.textContent='◉ '+(SLOTNAME[MYSLOT]&&SLOTNAME[MYSLOT]!=='AI Commander'?SLOTNAME[MYSLOT]:'You')
+      +' · '+MYSLOT+(MYTEAM?' (bottom)':' (top)');
+    applySlotNames();
     document.getElementById('clashLobby').classList.add('off');
   }
 
@@ -504,11 +515,15 @@ window.BreachSim=function(seed, humanSlots){
     finally{ clBusy(btn,false); } }
   function onNetStart(p){
     MODE='net'; MYSLOT=p.you||MYSLOT; MYTEAM=teamOf(MYSLOT);
+    // strip the system-wide "GuestNN:" prefix so the scoreboard shows the callsign
+    const clean=n=>String(n||'').replace(/^Guest\d+:/,'');
+    for(const sl of ['A1','A2','B1','B2']) SLOTNAME[sl]=(p.slots&&p.slots[sl])?clean(p.slots[sl]):'AI Commander';
     frameQ=[]; tickInFrame=0; lastFrameN=-1; overSent=false;
     setupWorld(window.BreachSim(p.seed, p.humanSlots));
   }
   function startSolo(){
     MODE='solo'; MYSLOT='A1'; MYTEAM=0;
+    SLOTNAME={A1:'You',A2:'AI Commander',B1:'AI Commander',B2:'AI Commander'};
     const seed=((Date.now()&0x7fffffff)^((Math.random()*0x7fffffff)|0))>>>0||1;
     setupWorld(window.BreachSim(seed,['A1']));
   }
@@ -727,7 +742,7 @@ window.BreachSim=function(seed, humanSlots){
   }
   const HD='"Roboto Condensed","Arial Narrow",system-ui,sans-serif';
   function hud(){
-    if(!SIM){ return; }
+    if(!SIM){ return; }   // pre-game values are neutral in the markup (100% / 4:00 / 50-50)
     const set=(id,v)=>{const e=document.getElementById(id);if(e)e.style.width=Math.max(0,v)+'%';};
     const txt=(id,v)=>{const e=document.getElementById(id);if(e)e.textContent=v;};
     for(const b of bases){set('hp'+b.id,b.hp);txt('pc'+b.id,Math.round(b.hp)+'%');}
@@ -740,6 +755,10 @@ window.BreachSim=function(seed, humanSlots){
     else if(towerA<0.45){st.textContent='Secured ◥';st.style.color=TC[1];held.textContent='Team B holds ▾';held.style.color=TC[1];}
     else{st.textContent='◈ Contested';st.style.color='#f0dc9a';held.textContent=(a>=bb?'Team A':'Team B')+' pressing ▾';held.style.color='#8a97ad';}
     txt('coins',Math.floor((st0.slotCoins[MYSLOT]||0)/100));
+    // income is derived from the sim's real rates: 26/tick human + 12/tick tower bonus,
+    // 20 ticks/s, coins are x100 -> 5.2/s base, 7.6/s while your team holds the relay
+    const holdMine=(towerA>0.55?0:towerA<0.45?1:-1)===MYTEAM;
+    txt('inc','+'+((30+(holdMine?12:0))*20/100).toFixed(1)+'/s'+(holdMine?' · tower bonus':''));
     const m=Math.floor(st0.clockLeft/60), sc=st0.clockLeft%60; txt('clk',m+':'+(sc<10?'0':'')+sc);
     document.querySelectorAll('.build .u').forEach(el=>{el.style.opacity=(st0.slotCoins[MYSLOT]||0)>=TYPES[el.dataset.t].cost*100?1:.45;});
     if(st0.over){ const w=st0.winner;
