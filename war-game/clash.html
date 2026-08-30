@@ -113,6 +113,20 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
 #modelErrorCard .et{font-family:var(--hd);font-weight:800;text-transform:uppercase;font-size:27px;letter-spacing:.04em;color:#f0b19b}#modelErrorText{font-size:12px;line-height:1.5;color:var(--muted);margin-top:8px}
 #modelRetry,#modelEnd{margin-top:16px;font-family:var(--hd);font-weight:800;text-transform:uppercase;letter-spacing:.05em;font-size:14px;padding:11px 18px;border-radius:10px;border:0;background:linear-gradient(180deg,#f0dc9a,#c9ad5f);color:#20180a;cursor:pointer;width:100%}
 #modelEnd{margin-top:9px;border:1px solid #46556d;background:transparent;color:#cfd8e6}
+.cl-teams{display:flex;flex-direction:column;gap:10px;margin-bottom:12px}
+.cl-team{border:1px solid #22334a;border-radius:11px;padding:9px 10px;background:rgba(255,255,255,.02)}
+.cl-team.A{border-color:rgba(224,103,63,.34)}
+.cl-team.B{border-color:rgba(77,152,207,.34)}
+.cl-team .th{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px}
+.cl-team .tname{font-family:var(--hd);font-weight:800;text-transform:uppercase;letter-spacing:.07em;font-size:12.5px}
+.cl-team.A .tname{color:var(--teamA)} .cl-team.B .tname{color:var(--teamB)}
+.cl-team .tside{font-size:9.5px;color:var(--faint);letter-spacing:.06em;text-transform:uppercase}
+.cl-team .rows{display:flex;flex-direction:column;gap:6px}
+.seat-take{font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);
+  background:rgba(240,220,154,.10);border:1px solid rgba(240,220,154,.42);border-radius:14px;padding:3px 9px;
+  cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent}
+.seat-take:active{transform:scale(.95)}
+.seat-take[disabled]{opacity:.4;pointer-events:none}
 /* ---------- command deck ---------- */
 .orders{background:linear-gradient(180deg,rgba(4,9,15,.99),rgba(3,7,12,.995));border-top:1px solid #1e3048;padding:10px 12px calc(12px + env(safe-area-inset-bottom,0));box-shadow:0 -10px 26px rgba(0,0,0,.22)}
 .orders.model-paused{opacity:.42;pointer-events:none}
@@ -173,7 +187,11 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
       </div>
       <div id="clRoom" hidden>
         <div class="cl-codebox">Room code <b id="clRoomCode">------</b></div>
-        <div id="clSlots"></div>
+        <div class="cl-teams" id="clTeams">
+          <div class="cl-team A"><div class="th"><span class="tname">Team A</span><span class="tside">Top of the arena</span></div><div class="rows" id="clTeamA"></div></div>
+          <div class="cl-team B"><div class="th"><span class="tname">Team B</span><span class="tside">Bottom of the arena</span></div><div class="rows" id="clTeamB"></div></div>
+        </div>
+        <div id="clSlots" hidden></div>
         <button class="cl-primary" id="clStart" hidden>Start battle</button>
         <div class="cl-wait" id="clWait">Empty slots are controlled by the selected model.</div>
       </div>
@@ -518,7 +536,7 @@ window.BreachSim=function(seed, humanSlots){
     let done=false; const t=setTimeout(()=>{if(!done){done=true;res({ok:false,code:'timeout'});}},12000);
     socket.emit(ev,data,r=>{if(!done){done=true;clearTimeout(t);res(r||{ok:false,code:'no_response'});}}); }); }
   const ERR={room_not_found:'No room with that code.',room_in_progress:'That battle already started.',
-    room_full:'Room is full (4).',already_in_room:"You're already in that room.",not_host:'Only the host can start.',
+    room_full:'Room is full (4).',already_in_room:"You're already in that room.",not_host:'Only the host can start.',seat_taken:'Someone just took that seat.',already_started:'The battle already started.',bad_slot:'That seat does not exist.',
     unauthorized:'Could not sign in — refresh and try again.',timeout:'Server not responding.'};
   function clMsg(m,info){ const e=document.getElementById('clMsg');
     if(e){ e.textContent=m||''; e.classList.toggle('info',!!info); } }
@@ -555,9 +573,12 @@ window.BreachSim=function(seed, humanSlots){
     document.getElementById('clMenu').hidden=true;
     document.getElementById('clRoom').hidden=false;
     document.getElementById('clRoomCode').textContent=room.code;
-    const box=document.getElementById('clSlots'); box.innerHTML='';
+    const boxA=document.getElementById('clTeamA'), boxB=document.getElementById('clTeamB');
+    boxA.innerHTML=''; boxB.innerHTML='';
+    const box={ appendChild:(el)=>{ (el.dataset.team==='A'?boxA:boxB).appendChild(el); } };
     for(const r of room.slots){
       const row=document.createElement('div'); row.className='row t'+r.slot.charAt(0);
+      row.dataset.team=r.slot.charAt(0);
       const sl=document.createElement('span'); sl.className='sl'; sl.textContent=r.slot;
       if(r.name||r.kind==='human'){
         const nm=document.createElement('span'); nm.className='nm'; nm.textContent=r.name||'Human commander'; row.append(sl,nm);
@@ -567,11 +588,25 @@ window.BreachSim=function(seed, humanSlots){
         const selected=r.modelId||DEFAULT_MODEL_ID; select.dataset.current=selected; select.innerHTML=modelOptions(selected); select.disabled=!AMHOST;
         if(AMHOST) select.addEventListener('change',()=>chooseModel(r.slot,select));
         const tag=document.createElement('span'); tag.className='model-tag'; tag.textContent='Model'; row.append(sl,select,tag);
+        // any member may claim a free seat, so friends can choose their team
+        const take=document.createElement('button'); take.className='seat-take'; take.type='button';
+        take.textContent='Take seat'; take.title='Play this fort yourself';
+        take.onclick=()=>claimSeat(r.slot,take);
+        row.append(take);
       }
-      box.append(row);
+      box.appendChild(row);
     }
     const st=document.getElementById('clStart');
     st.hidden=!AMHOST;
+  }
+  async function claimSeat(slot,btn){
+    if(!socket) return;
+    clBusy(btn,true); clMsg('');
+    try{
+      const r=await emitAck('clash:seat',{slot});
+      if(!r.ok){ clMsg(ERR[r.code]||'Could not take that seat.'); return; }
+      MYSLOT=r.you; MYTEAM=teamOf(MYSLOT); renderRoom(r.room);
+    } finally { clBusy(btn,false); }
   }
   async function clCreate(autoStart){
     autoStart=autoStart===true;   // guard against an event object being passed in
