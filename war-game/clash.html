@@ -604,7 +604,9 @@ window.BreachSim=function(seed, humanSlots){
     for(const sl of ['A1','A2','B1','B2']){ const raw=Array.isArray(meta)?meta.find(x=>x.slot===sl):meta[sl];
       SLOTNAME[sl]=clean(slotLabel(raw)); }
     frameQ=[]; tickInFrame=0; lastFrameN=-1; overSent=false; netGeneration=p.generation||p.roomGeneration||null;
-    setupWorld(window.BreachSim(p.seed, p.humanSlots));
+    // Model seats are commanded by the server. Passing every slot here prevents
+    // the client-side deterministic filler AI from inventing commands for them.
+    setupWorld(window.BreachSim(p.seed,['A1','A2','B1','B2']));
   }
   function applyResumePayload(p){
     if(p.seed!==undefined && (!SIM || MODE!=='net')) onNetStart(p);
@@ -724,6 +726,15 @@ window.BreachSim=function(seed, humanSlots){
     }
   }
   const flatten=fr=>[].concat(...Object.values(fr.inputs||{}),(fr.convert||[]).map(sl=>({op:'convert',slot:sl})));
+  function modelUnitCounts(){
+    const counts={};
+    for(const slot of ['A1','A2','B1','B2']) counts[slot]={inf:0,gun:0,at:0,tank:0};
+    for(const u of units) if(u&&u.hp>0&&counts[u.owner]&&counts[u.owner][u.t]!==undefined) counts[u.owner][u.t]++;
+    return counts;
+  }
+  function reportClashState(frame){
+    if(socket) socket.emit('clash:state',{frame,state:SIM.state(),units:modelUnitCounts()});
+  }
 
   // ---- fixed-tick driver ------------------------------------------------------
   let acc=0;
@@ -744,6 +755,7 @@ window.BreachSim=function(seed, humanSlots){
           fxFromEvents(SIM.tick(tickInFrame===0?curFrameInputs:[]));
           tickInFrame=(tickInFrame+1)&3; acc-=50;
           if(window.CLASH_NET) window.CLASH_NET.tick=tickInFrame;
+          if(tickInFrame===0) reportClashState(lastFrameN);
           if(tickInFrame===0&&lastFrameN>0&&lastFrameN%25===0&&socket)
             socket.emit('clash:hash',{frame:lastFrameN,hash:SIM.hash()});
         }
@@ -752,6 +764,7 @@ window.BreachSim=function(seed, humanSlots){
           const fr=frameQ.shift(); const ins=flatten(fr);
           SIM.tick(ins); SIM.tick([]); SIM.tick([]); SIM.tick([]);
           tickInFrame=0; lastFrameN=fr.n;
+          reportClashState(lastFrameN);
         }
         const st=SIM.state();
         if(st.over&&!overSent&&socket){ overSent=true; socket.emit('clash:over',{}); }

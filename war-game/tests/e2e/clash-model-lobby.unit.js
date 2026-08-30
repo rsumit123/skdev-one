@@ -16,6 +16,8 @@ ok(html.includes("emitAck('clash:model'"), 'host selection emits clash:model');
 ok(html.includes("sk.on('clash:model_error'"), 'client listens for model failures');
 ok(html.includes("emitAck('clash:model_retry'"), 'failure UI can request a model retry');
 ok(html.includes('Nova Lite'), 'Nova Lite is presented as the default model');
+ok(html.includes("BreachSim(p.seed,['A1','A2','B1','B2'])"), 'network games disable the local filler AI for every seat');
+ok(html.includes("socket.emit('clash:state'"), 'each completed network frame reports the shared state to the model service');
 
 const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)];
 for (const [i, match] of scripts.entries()) {
