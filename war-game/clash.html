@@ -96,6 +96,10 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
 #clSlots .row .nm{flex:1;text-align:left;color:var(--text)}
 #clSlots .row .nm.ai{color:var(--faint);font-style:italic}
 #clSlots .row .you{font-size:9px;letter-spacing:.1em;color:var(--gold);text-transform:uppercase}
+.model-select{flex:1;min-width:0;appearance:none;-webkit-appearance:none;padding:7px 27px 7px 9px;border:1px solid #314766;border-radius:7px;
+  background:#0a121e linear-gradient(45deg,transparent 50%,#8a97ad 50%) calc(100% - 13px) 50%/5px 5px no-repeat,
+  linear-gradient(135deg,#8a97ad 50%,transparent 50%) calc(100% - 8px) 50%/5px 5px no-repeat;color:var(--text);font:600 12px var(--ui)}
+.model-select:disabled{opacity:.6}.model-tag{font-size:9px;letter-spacing:.08em;color:var(--gold2);text-transform:uppercase}
 .cl-wait{font-size:10.5px;color:var(--faint);margin-top:9px}
 .cl-msg{font-size:12px;color:#ef9b7e;margin-top:11px;min-height:15px}
 .cl-card button.busy{color:transparent!important;pointer-events:none;position:relative}
@@ -104,8 +108,14 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
 .cl-primary.busy::after{border-color:rgba(30,24,10,.32);border-top-color:#20180a}
 @keyframes clspin{to{transform:rotate(360deg)}}
 .cl-msg.info{color:var(--muted)}
+#modelErrorCard{position:absolute;inset:0;z-index:31;display:none;align-items:center;justify-content:center;background:rgba(3,6,11,.78);backdrop-filter:blur(3px)}
+#modelErrorCard.on{display:flex}#modelErrorCard .ec{max-width:300px;text-align:center;padding:26px 28px;border:1px solid #814a38;border-radius:16px;background:linear-gradient(180deg,#1c1418,#0b0b12);box-shadow:0 24px 60px rgba(0,0,0,.6)}
+#modelErrorCard .et{font-family:var(--hd);font-weight:800;text-transform:uppercase;font-size:27px;letter-spacing:.04em;color:#f0b19b}#modelErrorText{font-size:12px;line-height:1.5;color:var(--muted);margin-top:8px}
+#modelRetry,#modelEnd{margin-top:16px;font-family:var(--hd);font-weight:800;text-transform:uppercase;letter-spacing:.05em;font-size:14px;padding:11px 18px;border-radius:10px;border:0;background:linear-gradient(180deg,#f0dc9a,#c9ad5f);color:#20180a;cursor:pointer;width:100%}
+#modelEnd{margin-top:9px;border:1px solid #46556d;background:transparent;color:#cfd8e6}
 /* ---------- command deck ---------- */
 .orders{background:linear-gradient(180deg,rgba(4,9,15,.99),rgba(3,7,12,.995));border-top:1px solid #1e3048;padding:10px 12px calc(12px + env(safe-area-inset-bottom,0));box-shadow:0 -10px 26px rgba(0,0,0,.22)}
+.orders.model-paused{opacity:.42;pointer-events:none}
 .eco{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px}
 .eco .coins{font-family:var(--hd);font-weight:800;font-size:28px;color:var(--gold);text-shadow:0 2px 8px rgba(0,0,0,.65);line-height:1}
 .eco .coins small{font-family:var(--ui);font-weight:500;font-size:11px;color:var(--muted);margin-left:6px;letter-spacing:.01em}
@@ -147,6 +157,11 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
       <div class="es">Clash Arena · beta</div><div id="resultSummary" class="result-summary"></div>
       <button onclick="location.reload()">Play again</button>
       <a href="./">Back to Breach</a></div></div>
+    <div id="modelErrorCard" role="alertdialog" aria-modal="true" aria-labelledby="modelErrorTitle">
+      <div class="ec"><div class="et" id="modelErrorTitle">Model paused</div>
+      <div id="modelErrorText">A model commander could not make its move. The battle is paused.</div>
+      <button id="modelRetry" type="button">Retry model turn</button><button id="modelEnd" type="button">End battle</button></div>
+    </div>
     <div id="clashLobby"><div class="cl-card">
       <div class="cl-title">Clash Arena</div>
       <div class="cl-sub">2v2 · four forts · humans + AI · beta</div>
@@ -160,7 +175,7 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
         <div class="cl-codebox">Room code <b id="clRoomCode">------</b></div>
         <div id="clSlots"></div>
         <button class="cl-primary" id="clStart" hidden>Start battle</button>
-        <div class="cl-wait" id="clWait">Empty slots become AI commanders.</div>
+        <div class="cl-wait" id="clWait">Empty slots are controlled by the selected model.</div>
       </div>
       <div class="cl-msg" id="clMsg"></div>
     </div></div>
@@ -413,26 +428,40 @@ window.BreachSim=function(seed, humanSlots){
   function nearFoe(u,r){r=r||56;let best=null,bd=r*r;for(const e of units){if(e.team===u.team)continue;
     const d=(e.x-u.x)**2+(e.y-u.y)**2;if(d<bd){bd=d;best=e;}}return best;}
 
-  let SLOTNAME={A1:'AI Commander',A2:'AI Commander',B1:'AI Commander',B2:'AI Commander'};
+  const DEFAULT_MODEL_ID='amazon/nova-lite-v1';
+  const DEFAULT_MODEL_NAME='Nova Lite';
+  let MODEL_CATALOG=[];
+  let MODEL_PAUSED=false;
+  let SLOTNAME={A1:DEFAULT_MODEL_NAME,A2:DEFAULT_MODEL_NAME,B1:DEFAULT_MODEL_NAME,B2:DEFAULT_MODEL_NAME};
+  function modelName(modelId){
+    const found=MODEL_CATALOG.find(m=>m&&m.id===modelId);
+    return (found&&(found.name||found.displayName))||DEFAULT_MODEL_NAME;
+  }
+  function slotLabel(raw){
+    if(!raw) return DEFAULT_MODEL_NAME;
+    if(typeof raw!=='object') return String(raw);
+    if(raw.kind==='model'||raw.modelId) return raw.modelName||raw.modelDisplayName||(raw.model&&raw.model.name)||modelName(raw.modelId);
+    return raw.name||raw.displayName||DEFAULT_MODEL_NAME;
+  }
   function applySlotNames(){
     for(const sl of ['A1','A2','B1','B2']){
       const e=document.getElementById('nm'+sl);
       if(e){ const me=sl===MYSLOT; e.textContent=me?'You':SLOTNAME[sl];
-        e.style.color=me?'#f0dc9a':(SLOTNAME[sl]==='AI Commander'?'var(--faint)':'var(--text)');
+        e.style.color=me?'#f0dc9a':(SLOTNAME[sl]===DEFAULT_MODEL_NAME?'var(--faint)':'var(--text)');
         e.title=SLOTNAME[sl]; }
     }
   }
   function teamLabel(team){
     const slots=team?['B1','B2']:['A1','A2'];
-    const names=slots.map(sl=>SLOTNAME[sl]).filter(n=>n&&n!=='AI Commander');
-    return names.length?names.join(' & '):'AI Commanders';
+    const names=slots.map(sl=>SLOTNAME[sl]).filter(Boolean);
+    return names.length?names.join(' & '):'Model commanders';
   }
   function setupWorld(sim){
     SIM=sim; window.BREACH_SIM_DEBUG=SIM;
     units=SIM.units; bases=SIM.bases;
     for(const b of bases){ Object.assign(b,BART[b.id]); b.x=gx2s(b.ix); b.y=gy2s(b.iy); b.hp=b.ihp/10; }
     const yt=document.getElementById('youTag');
-    if(yt) yt.textContent='◉ '+(SLOTNAME[MYSLOT]&&SLOTNAME[MYSLOT]!=='AI Commander'?SLOTNAME[MYSLOT]:'You')
+    if(yt) yt.textContent='◉ '+(SLOTNAME[MYSLOT]&&SLOTNAME[MYSLOT]!==DEFAULT_MODEL_NAME?SLOTNAME[MYSLOT]:'You')
       +' · '+MYSLOT+(MYTEAM?' (bottom)':' (top)');
     applySlotNames();
     const bt=document.getElementById('bonusToast'); if(bt) bt.textContent='🏰 Tower → +income to '+teamLabel(MYTEAM);
@@ -477,6 +506,7 @@ window.BreachSim=function(seed, humanSlots){
       sk.on('clash:frame',onNetFrame);
       sk.on('clash:over',onNetOver);
       sk.on('clash:result',onNetOver);
+      sk.on('clash:model_error',onModelError);
       sk.on('clash:desync',()=>clMsg('Desync detected — please start a new match.'));
       sk.on('disconnect',()=>{ if(MODE==='net'&&SIM&&!SIM.state().over){ netWasDisconnected=true; netStatus('Connection lost — reconnecting…'); clMsg('Connection lost — reconnecting…',true); } });
       sk.on('connect',()=>{ if(netWasDisconnected) resumeNet(); });
@@ -503,8 +533,25 @@ window.BreachSim=function(seed, humanSlots){
 
   // ---- lobby flow -------------------------------------------------------------
   let AMHOST=false;
+  function rememberModels(payload){
+    const models=payload&&payload.models;
+    if(Array.isArray(models)&&models.length) MODEL_CATALOG=models;
+  }
+  function modelOptions(selected){
+    const models=MODEL_CATALOG.length?MODEL_CATALOG:[{id:DEFAULT_MODEL_ID,name:DEFAULT_MODEL_NAME}];
+    return models.map(m=>`<option value="${String(m.id)}"${m.id===selected?' selected':''}>${String(m.name||m.displayName||m.id)}</option>`).join('');
+  }
+  async function chooseModel(slot, select){
+    const previous=select.dataset.current||DEFAULT_MODEL_ID;
+    select.disabled=true;
+    const r=await emitAck('clash:model',{slot,modelId:select.value});
+    if(!r||!r.ok){ select.value=previous; clMsg(ERR[r&&r.code]||'Could not change that model. Try again.'); }
+    else { select.dataset.current=select.value; clMsg(''); }
+    select.disabled=false;
+  }
   function renderRoom(room){
     if(!room) return;
+    rememberModels(room);
     document.getElementById('clMenu').hidden=true;
     document.getElementById('clRoom').hidden=false;
     document.getElementById('clRoomCode').textContent=room.code;
@@ -512,10 +559,15 @@ window.BreachSim=function(seed, humanSlots){
     for(const r of room.slots){
       const row=document.createElement('div'); row.className='row t'+r.slot.charAt(0);
       const sl=document.createElement('span'); sl.className='sl'; sl.textContent=r.slot;
-      const nm=document.createElement('span'); nm.className='nm'+(r.name?'':' ai');
-      nm.textContent=r.name||'AI Commander';
-      row.append(sl,nm);
-      if(r.slot===MYSLOT){ const y=document.createElement('span'); y.className='you'; y.textContent='You'; row.append(y); }
+      if(r.name||r.kind==='human'){
+        const nm=document.createElement('span'); nm.className='nm'; nm.textContent=r.name||'Human commander'; row.append(sl,nm);
+        if(r.slot===MYSLOT){ const y=document.createElement('span'); y.className='you'; y.textContent='You'; row.append(y); }
+      } else {
+        const select=document.createElement('select'); select.className='model-select'; select.setAttribute('aria-label',r.slot+' model');
+        const selected=r.modelId||DEFAULT_MODEL_ID; select.dataset.current=selected; select.innerHTML=modelOptions(selected); select.disabled=!AMHOST;
+        if(AMHOST) select.addEventListener('change',()=>chooseModel(r.slot,select));
+        const tag=document.createElement('span'); tag.className='model-tag'; tag.textContent='Model'; row.append(sl,select,tag);
+      }
       box.append(row);
     }
     const st=document.getElementById('clStart');
@@ -544,11 +596,13 @@ window.BreachSim=function(seed, humanSlots){
     finally{ clBusy(btn,false); } }
   function onNetStart(p){
     MODE='net'; MYSLOT=p.you||MYSLOT; MYTEAM=teamOf(MYSLOT);
+    setModelPaused(false);
+    rememberModels(p);
     // strip the system-wide "GuestNN:" prefix so the scoreboard shows the callsign
     const clean=n=>String(n||'').replace(/^Guest\d+:/,'');
     const meta=p.slotMeta||p.slots||{};
     for(const sl of ['A1','A2','B1','B2']){ const raw=Array.isArray(meta)?meta.find(x=>x.slot===sl):meta[sl];
-      SLOTNAME[sl]=raw?(typeof raw==='object'?clean(raw.name||raw.displayName):clean(raw)):'AI Commander'; }
+      SLOTNAME[sl]=clean(slotLabel(raw)); }
     frameQ=[]; tickInFrame=0; lastFrameN=-1; overSent=false; netGeneration=p.generation||p.roomGeneration||null;
     setupWorld(window.BreachSim(p.seed, p.humanSlots));
   }
@@ -562,6 +616,28 @@ window.BreachSim=function(seed, humanSlots){
   function onNetOver(p){
     if(!p)return;
     if(p.result||p.results||p.winner!==undefined||p.winnerTeam!==undefined) showResults(p.result||p.results||p);
+  }
+  function setModelPaused(paused){
+    MODEL_PAUSED=!!paused;
+    document.querySelector('.orders').classList.toggle('model-paused',MODEL_PAUSED);
+    document.getElementById('modelErrorCard').classList.toggle('on',MODEL_PAUSED);
+  }
+  function onModelError(payload){
+    const code=payload&&payload.code;
+    const message=(payload&&payload.message)||'A model commander could not make its move. The battle is paused.';
+    document.getElementById('modelErrorText').textContent=code?message+' ('+code+')':message;
+    setModelPaused(true); netStatus('Model commander paused');
+  }
+  async function retryModelTurn(){
+    const btn=document.getElementById('modelRetry'); clBusy(btn,true);
+    const r=await emitAck('clash:model_retry',{});
+    if(!r||!r.ok){ clMsg(ERR[r&&r.code]||'Retry failed. You can try again or end the battle.'); }
+    else { setModelPaused(false); netStatus('Model turn retrying…'); }
+    clBusy(btn,false);
+  }
+  function endModelBattle(){
+    if(socket) socket.emit('clash:over',{});
+    setModelPaused(false); document.getElementById('endcard').classList.add('on');
   }
   function showResults(result){
     if(!result)return;
@@ -591,7 +667,7 @@ window.BreachSim=function(seed, humanSlots){
   }
   function startSolo(){
     MODE='solo'; MYSLOT='A1'; MYTEAM=0;
-    SLOTNAME={A1:'You',A2:'AI Commander',B1:'AI Commander',B2:'AI Commander'};
+    SLOTNAME={A1:'You',A2:DEFAULT_MODEL_NAME,B1:DEFAULT_MODEL_NAME,B2:DEFAULT_MODEL_NAME};
     const seed=((Date.now()&0x7fffffff)^((Math.random()*0x7fffffff)|0))>>>0||1;
     setupWorld(window.BreachSim(seed,['A1']));
   }
@@ -599,23 +675,25 @@ window.BreachSim=function(seed, humanSlots){
   document.getElementById('clCreate').onclick=clCreate;
   document.getElementById('clJoin').onclick=clJoin;
   document.getElementById('clStart').onclick=clStart;
+  document.getElementById('modelRetry').onclick=retryModelTurn;
+  document.getElementById('modelEnd').onclick=endModelBattle;
   document.getElementById('clCode').addEventListener('keydown',e=>{if(e.key==='Enter')clJoin();});
 
   // ---- player input -----------------------------------------------------------
   document.querySelectorAll('.build .u').forEach(el=>{
-    el.addEventListener('click',()=>{ if(!SIM||SIM.state().over) return;
+    el.addEventListener('click',()=>{ if(MODEL_PAUSED||!SIM||SIM.state().over) return;
       if(MODE==='solo') pending.push({op:'buy',t:el.dataset.t,slot:MYSLOT});
       else if(socket) socket.emit('clash:input',{op:'buy',t:el.dataset.t}); });
   });
   document.querySelectorAll('.stance b').forEach(el=>{
-    el.addEventListener('click',()=>{ if(!SIM||SIM.state().over) return;
+    el.addEventListener('click',()=>{ if(MODEL_PAUSED||!SIM||SIM.state().over) return;
       const v=el.dataset.st==='hold'?1:0;
       if(MODE==='solo') pending.push({op:'stance',v,slot:MYSLOT});
       else if(socket) socket.emit('clash:input',{op:'stance',v});
       document.querySelectorAll('.stance b').forEach(x=>x.classList.toggle('on',x===el)); });
   });
   document.getElementById('ecoUpgrade').addEventListener('click',()=>{
-    if(!SIM||SIM.state().over) return;
+    if(MODEL_PAUSED||!SIM||SIM.state().over) return;
     if(MODE==='solo') pending.push({op:'eco',slot:MYSLOT});
     else if(socket) socket.emit('clash:input',{op:'eco'});
   });
