@@ -935,6 +935,7 @@ body.split #nudge{display:none}
       <nav class="public-menu-panel" id="publicMenu" aria-label="Commander menu" hidden>
         <button type="button" class="public-quiet" id="btnHomeHistory">My Battles</button>
         <button type="button" class="public-quiet" id="btnHomeCups">My Cups</button>
+        <button type="button" class="public-quiet" id="btnHomeClash">My Clash</button>
         <button type="button" class="public-quiet" id="btnHomeRanks">Leaderboard</button>
         <button type="button" class="public-quiet" id="btnBenchmarkLab" hidden>Benchmark Lab</button>
         <button type="button" class="public-quiet" id="btnPublicLogout">Sign out</button>
@@ -1154,6 +1155,14 @@ body.split #nudge{display:none}
         <div class="public-secondary"><button type="button" class="public-quiet" id="btnHistoryBack">Back</button></div>
       </section>
 
+      <section class="public-screen" id="publicClash" data-public-screen="clashhist" aria-labelledby="clashHistTitle">
+        <div class="public-kicker">Arena record</div>
+        <h1 id="clashHistTitle">My Clash</h1>
+        <div class="cups-list" id="clashList" aria-live="polite"></div>
+        <div class="auth-error" id="clashHistError" role="alert"></div>
+        <div class="public-secondary"><button type="button" class="public-quiet" id="btnClashHistBack">Back</button></div>
+      </section>
+
       <section class="public-screen" id="publicCups" data-public-screen="cups" aria-labelledby="cupsTitle">
         <div class="public-kicker">Knockout record</div>
         <h1 id="cupsTitle">My Cups</h1>
@@ -1169,6 +1178,7 @@ body.split #nudge{display:none}
           <button type="button" role="tab" data-rank-tab="players" aria-selected="true" aria-current="page">Vs AI</button>
           <button type="button" role="tab" data-rank-tab="pvp" aria-selected="false">Head to Head</button>
           <button type="button" role="tab" data-rank-tab="ai" aria-selected="false">AI Commanders</button>
+          <button type="button" role="tab" data-rank-tab="clash" aria-selected="false">Clash</button>
           <button type="button" role="tab" data-rank-tab="recent" aria-selected="false">Recent Battles</button>
         </div>
         <div class="public-filters" id="playerDifficultyFilters" aria-label="Difficulty filter">
@@ -2931,6 +2941,46 @@ async function loadHistoryUI(){
     }
   }
 }
+function clashGroupHead(text){
+  const h=document.createElement('div');h.className='cup-meta';
+  h.style.margin='14px 0 4px';h.style.color='var(--gold)';h.textContent=text;return h;
+}
+async function loadClashUI(){
+  const list=document.getElementById('clashList');setAuthError('clashHistError','');
+  publicListEmpty(list,'Loading battles…');
+  try{
+    const data=await apiRequest('/v1/clash/history',{authScope:'session'});
+    const bs=data.battles||[];
+    list.replaceChildren();
+    if(!bs.length){publicListEmpty(list,'No Clash battles yet. Enter the Arena from the home screen.');return;}
+    bs.forEach(b=>list.append(clashCard(b)));
+  }catch(error){
+    if(!showSessionExpiredUI(error)){publicListEmpty(list,'Your Clash battles could not be loaded.');
+      setAuthError('clashHistError','Please try again.');}
+  }
+}
+function clashCard(b){
+  const card=document.createElement('div');card.className='cup-card'+(b.youWon?' won':'');
+  const head=document.createElement('div');head.className='cup-head';
+  const res=document.createElement('div');res.className='cup-champ';
+  res.textContent=!b.decided?'Draw':(b.youWon?'Victory':'Defeat');
+  res.style.color=!b.decided?'#f0dc9a':(b.youWon?'#8fbf7a':'#ef9b7e');
+  const when=document.createElement('div');when.className='cup-when';
+  when.textContent=b.endedAt?new Date(b.endedAt).toLocaleString():'';
+  head.append(res,when);
+  const meta=document.createElement('div');meta.className='cup-meta';
+  meta.textContent='Team '+(b.winnerTeam===0?'A':b.winnerTeam===1?'B':'—')+' took the arena'
+    +(b.reason==='timecap'?' · on time':'');
+  const roster=document.createElement('div');roster.className='cup-roster';
+  (b.seats||[]).forEach(st=>{
+    const chip=document.createElement('span');
+    chip.className='cup-player'+(st.you?' you':'')+(st.isModel?'':'');
+    chip.textContent=(st.team===0?'A':'B')+' · '+st.name+(st.you?' (you)':'')+(st.isModel?' 🤖':'');
+    if(st.isModel)chip.style.opacity='.85';
+    roster.append(chip);
+  });
+  card.append(head,meta,roster);return card;
+}
 async function loadCupsUI(){
   const list=document.getElementById('cupsList');setAuthError('cupsError','');
   publicListEmpty(list,'Loading Cups…');
@@ -2991,6 +3041,22 @@ async function loadPublicRanksUI(){
       rows.forEach(row=>list.append(publicListRow(`#${row.rank} ${row.displayName}`,[
         {text:`${row.wins} wins`},{text:`${row.losses} losses`},{text:`${row.winRate}% win rate`,className:'outcome'}
       ])));
+    }else if(PUBLIC_RANK_TAB==='clash'){
+      data=await apiRequest('/v1/clash/leaderboard');
+      const ps=data.players||[], ms=data.models||[];
+      rows=ps.concat(ms); list.replaceChildren();
+      if(ps.length){
+        list.append(clashGroupHead('Commanders'));
+        ps.forEach(r=>list.append(publicListRow(`#${r.rank} ${r.displayName}`,[
+          {text:`${r.wins}W · ${r.losses}L`},{text:`${r.games} battles`},
+          {text:`${r.winRate}% win rate`,className:'outcome'}])));
+      }
+      if(ms.length){
+        list.append(clashGroupHead('Model commanders'));
+        ms.forEach(r=>list.append(publicListRow(`#${r.rank} ${r.name}`,[
+          {text:`${r.wins}W · ${r.losses}L`},{text:`${r.games} battles`},
+          {text:`${r.winRate}% win rate`,className:'outcome'}])));
+      }
     }else if(PUBLIC_RANK_TAB==='ai'){
       data=await apiRequest('/v1/leaderboards/models');rows=(data.models||[]).map(publicAiRow);list.replaceChildren();
       rows.forEach(row=>list.append(publicListRow(row.name,[
@@ -3002,6 +3068,7 @@ async function loadPublicRanksUI(){
         {text:relativeBattleTime(row.playedAt,Date.now())}
       ],{recent:true})));
     }
+    if(!rows.length&&PUBLIC_RANK_TAB==='clash'){publicListEmpty(list,'No Clash battles yet. Enter the Arena from the home screen.');return;}
     if(!rows.length)publicListEmpty(list, PUBLIC_RANK_TAB==='pvp'
       ? 'No head-to-head battles yet. Challenge a friend from the home screen.'
       : 'No battles yet. Choose a difficulty to enter the breach.');
@@ -3063,6 +3130,8 @@ document.getElementById('btnHomeHistory').addEventListener('click',()=>{if(!PUB.
 document.getElementById('btnHistoryBack').addEventListener('click',()=>{if(!PUB.busy)showPublicView('home');});
 document.getElementById('btnHomeCups').addEventListener('click',()=>{if(!PUB.busy){closePublicMenu();showPublicView('cups');loadCupsUI();}});
 document.getElementById('btnCupsBack').addEventListener('click',()=>{if(!PUB.busy)showPublicView('home');});
+document.getElementById('btnHomeClash').addEventListener('click',()=>{if(!PUB.busy){closePublicMenu();showPublicView('clashhist');loadClashUI();}});
+document.getElementById('btnClashHistBack').addEventListener('click',()=>{if(!PUB.busy)showPublicView('home');});
 document.querySelectorAll('[data-rank-tab]').forEach(button=>button.addEventListener('click',()=>{
   if(PUB.busy)return;PUBLIC_RANK_TAB=button.dataset.rankTab;loadPublicRanksUI();
 }));
