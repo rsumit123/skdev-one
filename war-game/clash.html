@@ -217,6 +217,7 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
       </div>
       <div class="cl-msg" id="clMsg"></div>
     </div></div>
+    <div id="modelThinking"><span class="dots"><i></i><i></i><i></i></span><span id="mtText">Models deciding…</span></div>
     <div class="bonus-toast" id="bonusToast">🏰 Tower → team income bonus</div>
     <div id="netStatus" class="net-status" aria-live="polite" hidden></div>
   </div>
@@ -545,6 +546,7 @@ window.BreachSim=function(seed, humanSlots){
       sk.on('clash:over',onNetOver);
       sk.on('clash:result',onNetOver);
       sk.on('clash:model_error',onModelError);
+      sk.on('clash:model_thinking',onModelThinking);
       sk.on('clash:desync',()=>clMsg('Desync detected — please start a new match.'));
       sk.on('disconnect',()=>{ if(MODE==='net'&&SIM&&!SIM.state().over){ netWasDisconnected=true; netStatus('Connection lost — reconnecting…'); clMsg('Connection lost — reconnecting…',true); } });
       sk.on('connect',()=>{ if(netWasDisconnected) resumeNet(); });
@@ -681,7 +683,15 @@ window.BreachSim=function(seed, humanSlots){
     document.querySelector('.orders').classList.toggle('model-paused',MODEL_PAUSED);
     document.getElementById('modelErrorCard').classList.toggle('on',MODEL_PAUSED);
   }
+  function onModelThinking(p){
+    const el=document.getElementById('modelThinking'); if(!el) return;
+    const on=!!(p&&p.thinking), n=((p&&p.seats)||[]).length;
+    const t=document.getElementById('mtText');
+    if(t) t.textContent = n===1 ? 'Model commander deciding…' : n+' model commanders deciding…';
+    el.classList.toggle('on',on);
+  }
   function onModelError(payload){
+    onModelThinking({thinking:false});
     const code=payload&&payload.code;
     const message=(payload&&payload.message)||'A model commander could not make its move. The battle is paused.';
     document.getElementById('modelErrorText').textContent=code?message+' ('+code+')':message;
