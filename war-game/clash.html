@@ -94,6 +94,12 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
 #clSlots .row .you{font-size:9px;letter-spacing:.1em;color:var(--gold);text-transform:uppercase}
 .cl-wait{font-size:10.5px;color:var(--faint);margin-top:9px}
 .cl-msg{font-size:12px;color:#ef9b7e;margin-top:11px;min-height:15px}
+.cl-card button.busy{color:transparent!important;pointer-events:none;position:relative}
+.cl-card button.busy::after{content:"";position:absolute;top:50%;left:50%;width:16px;height:16px;margin:-9px 0 0 -9px;
+  border:2px solid rgba(255,255,255,.32);border-top-color:#fff;border-radius:50%;animation:clspin .7s linear infinite;box-sizing:border-box}
+.cl-primary.busy::after{border-color:rgba(30,24,10,.32);border-top-color:#20180a}
+@keyframes clspin{to{transform:rotate(360deg)}}
+.cl-msg.info{color:var(--muted)}
 /* ---------- command deck ---------- */
 .orders{background:linear-gradient(180deg,rgba(4,9,15,.99),rgba(3,7,12,.995));border-top:1px solid #1e3048;padding:10px 12px calc(12px + env(safe-area-inset-bottom,0));box-shadow:0 -10px 26px rgba(0,0,0,.22)}
 .eco{display:flex;align-items:center;justify-content:space-between;margin-bottom:9px}
@@ -420,7 +426,7 @@ window.BreachSim=function(seed, humanSlots){
   }
   function loadIO(){ return window.io?Promise.resolve():new Promise((res,rej)=>{
     const sc=document.createElement('script'); sc.src='https://cdn.socket.io/4.7.5/socket.io.min.js';
-    sc.crossOrigin='anonymous'; sc.onload=res; sc.onerror=()=>rej(new Error('Could not load the multiplayer library.'));
+    sc.crossOrigin='anonymous'; sc.onload=res; sc.onerror=()=>rej(new Error('Could not load the multiplayer library. Tap to try again.'));
     document.head.appendChild(sc); }); }
   async function ensureSocket(){
     if(socket&&socket.connected) return socket;
@@ -436,7 +442,7 @@ window.BreachSim=function(seed, humanSlots){
       sk.on('clash:desync',()=>clMsg('Desync detected — please start a new match.'));
       sk.on('disconnect',()=>{ if(MODE==='net'&&SIM&&!SIM.state().over) clMsg('Connection lost — reconnecting…'); });
       sk.once('connect',()=>res(sk));
-      sk.once('connect_error',()=>rej(new Error('Could not reach the battle server.')));
+      sk.once('connect_error',()=>rej(new Error('Could not reach the battle server. Tap to try again.')));
     });
   }
   function emitAck(ev,data){ return new Promise(res=>{ if(!socket)return res({ok:false,code:'not_connected'});
@@ -445,7 +451,15 @@ window.BreachSim=function(seed, humanSlots){
   const ERR={room_not_found:'No room with that code.',room_in_progress:'That battle already started.',
     room_full:'Room is full (4).',already_in_room:"You're already in that room.",not_host:'Only the host can start.',
     unauthorized:'Could not sign in — refresh and try again.',timeout:'Server not responding.'};
-  function clMsg(m){ const e=document.getElementById('clMsg'); if(e)e.textContent=m||''; }
+  function clMsg(m,info){ const e=document.getElementById('clMsg');
+    if(e){ e.textContent=m||''; e.classList.toggle('info',!!info); } }
+  function clBusy(el,on){ if(!el)return; el.classList.toggle('busy',!!on);
+    el.setAttribute('aria-busy',on?'true':'false'); }
+  // one transparent retry: a deploy/cold-start blip shouldn't look like a dead button
+  async function withRetry(fn){
+    try{ return await fn(); }
+    catch(e){ clMsg('Connecting…',true); await new Promise(r=>setTimeout(r,1200));
+      socket=null; return await fn(); } }
 
   // ---- lobby flow -------------------------------------------------------------
   let AMHOST=false;
@@ -468,19 +482,26 @@ window.BreachSim=function(seed, humanSlots){
     st.hidden=!AMHOST;
   }
   async function clCreate(){
-    clMsg(''); try{ await ensureSocket(); const r=await emitAck('clash:create',{});
-      if(!r.ok){clMsg(ERR[r.code]||'Could not create the room.');return;}
-      AMHOST=true; MYSLOT=r.you; MYTEAM=teamOf(MYSLOT); renderRoom(r.room);
-    }catch(e){ clMsg(e.message); } }
+    const btn=document.getElementById('clCreate'); clMsg('Connecting…',true); clBusy(btn,true);
+    try{ const r=await withRetry(async()=>{ await ensureSocket(); return emitAck('clash:create',{}); });
+      if(!r.ok){clMsg(ERR[r.code]||'Could not create the room. Tap to try again.');return;}
+      clMsg(''); AMHOST=true; MYSLOT=r.you; MYTEAM=teamOf(MYSLOT); renderRoom(r.room);
+    }catch(e){ clMsg((e&&e.message)||'Could not reach the battle server. Tap to try again.'); }
+    finally{ clBusy(btn,false); } }
   async function clJoin(){
     const code=(document.getElementById('clCode').value||'').trim().toUpperCase();
     if(code.length<4){clMsg('Enter the room code.');return;}
-    clMsg(''); try{ await ensureSocket(); const r=await emitAck('clash:join',{code});
-      if(!r.ok){clMsg(ERR[r.code]||'Could not join.');return;}
-      AMHOST=false; MYSLOT=r.you; MYTEAM=teamOf(MYSLOT); renderRoom(r.room);
-    }catch(e){ clMsg(e.message); } }
-  async function clStart(){ clMsg(''); const r=await emitAck('clash:start',{});
-    if(!r.ok) clMsg(ERR[r.code]||'Could not start.'); }
+    const btn=document.getElementById('clJoin'); clMsg('Connecting…',true); clBusy(btn,true);
+    try{ const r=await withRetry(async()=>{ await ensureSocket(); return emitAck('clash:join',{code}); });
+      if(!r.ok){clMsg(ERR[r.code]||'Could not join. Tap to try again.');return;}
+      clMsg(''); AMHOST=false; MYSLOT=r.you; MYTEAM=teamOf(MYSLOT); renderRoom(r.room);
+    }catch(e){ clMsg((e&&e.message)||'Could not reach the battle server. Tap to try again.'); }
+    finally{ clBusy(btn,false); } }
+  async function clStart(){ const btn=document.getElementById('clStart');
+    clMsg('Starting…',true); clBusy(btn,true);
+    try{ const r=await emitAck('clash:start',{});
+      if(!r.ok) clMsg(ERR[r.code]||'Could not start. Tap to try again.'); else clMsg(''); }
+    finally{ clBusy(btn,false); } }
   function onNetStart(p){
     MODE='net'; MYSLOT=p.you||MYSLOT; MYTEAM=teamOf(MYSLOT);
     frameQ=[]; tickInFrame=0; lastFrameN=-1; overSent=false;
