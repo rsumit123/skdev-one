@@ -86,16 +86,36 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
   color:#fff;font-size:17px;letter-spacing:4px;text-transform:uppercase;text-align:center}
 .cl-join button{font-family:var(--hd);font-weight:700;text-transform:uppercase;font-size:13px;padding:0 18px;
   border-radius:10px;border:1px solid #2a3d58;background:rgba(7,13,21,.9);color:var(--text);cursor:pointer}
-.cl-codebox{font-size:12px;color:var(--muted);margin-bottom:11px}
-.cl-codebox b{color:var(--gold);font-size:21px;letter-spacing:5px;margin-left:6px}
-#clSlots{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
-#clSlots .row{display:flex;align-items:center;gap:9px;padding:8px 11px;border:1px solid #22334a;border-radius:9px;
-  background:rgba(255,255,255,.025);font-size:12.5px}
-#clSlots .row .sl{font-family:var(--hd);font-weight:800;width:24px;text-align:left}
-#clSlots .row.tA .sl{color:var(--teamA)}#clSlots .row.tB .sl{color:var(--teamB)}
-#clSlots .row .nm{flex:1;text-align:left;color:var(--text)}
-#clSlots .row .nm.ai{color:var(--faint);font-style:italic}
-#clSlots .row .you{font-size:9px;letter-spacing:.1em;color:var(--gold);text-transform:uppercase}
+.cl-codebox{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:13px;
+  padding:9px 12px;border:1px solid #22334a;border-radius:11px;background:rgba(4,9,16,.55)}
+.cl-codebox .lbl{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.cl-codebox b{color:var(--gold);font-size:20px;letter-spacing:4px;font-family:var(--hd);font-weight:800}
+.cl-copy{font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text);
+  background:rgba(255,255,255,.06);border:1px solid #2a3d58;border-radius:20px;padding:5px 10px;cursor:pointer}
+.cl-copy:active{transform:scale(.95)}
+/* ---- lobby seat rows (team-scoped so grouping cannot orphan them) ---- */
+.cl-team .rows{display:flex;flex-direction:column;gap:7px}
+.cl-team .row{display:flex;align-items:center;gap:9px;padding:9px 10px;border:1px solid #22334a;
+  border-radius:10px;background:linear-gradient(90deg,rgba(255,255,255,.045),rgba(255,255,255,.012));min-height:44px}
+.cl-team .row.tA{border-left:3px solid var(--teamA)}
+.cl-team .row.tB{border-left:3px solid var(--teamB)}
+.cl-team .row .sl{font-family:var(--hd);font-weight:800;font-size:11px;letter-spacing:.04em;
+  width:26px;flex:none;text-align:center;padding:3px 0;border-radius:5px;color:#0b0f16}
+.cl-team .row.tA .sl{background:var(--teamA)}
+.cl-team .row.tB .sl{background:var(--teamB)}
+.cl-team .row .nm{flex:1;min-width:0;text-align:left;color:var(--text);font-size:13.5px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cl-team .row .nm.ai{color:var(--faint);font-style:italic}
+.cl-team .row .you{font-size:9px;font-weight:700;letter-spacing:.1em;color:#20180a;background:var(--gold);
+  border-radius:20px;padding:3px 8px;text-transform:uppercase;flex:none}
+/* dark, native-looking model picker (the browser default rendered white) */
+.cl-team .row .model-select{flex:1;min-width:0;appearance:none;-webkit-appearance:none;
+  background:rgba(4,9,16,.9) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M0 0l5 6 5-6z' fill='%238a97ad'/></svg>") no-repeat right 9px center;
+  border:1px solid #22334a;border-radius:8px;color:var(--text);font-family:var(--ui);font-size:12.5px;
+  padding:7px 24px 7px 9px;text-overflow:ellipsis}
+.cl-team .row .model-select:disabled{opacity:.75}
+.cl-team .row .model-tag{display:none}   /* the dropdown itself says "model" */
+.cl-team .row .model-select{flex:1 1 auto;width:100%}
 .model-select{flex:1;min-width:0;appearance:none;-webkit-appearance:none;padding:7px 27px 7px 9px;border:1px solid #314766;border-radius:7px;
   background:#0a121e linear-gradient(45deg,transparent 50%,#8a97ad 50%) calc(100% - 13px) 50%/5px 5px no-repeat,
   linear-gradient(135deg,#8a97ad 50%,transparent 50%) calc(100% - 8px) 50%/5px 5px no-repeat;color:var(--text);font:600 12px var(--ui)}
@@ -122,9 +142,9 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
 .cl-team.A .tname{color:var(--teamA)} .cl-team.B .tname{color:var(--teamB)}
 .cl-team .tside{font-size:9.5px;color:var(--faint);letter-spacing:.06em;text-transform:uppercase}
 .cl-team .rows{display:flex;flex-direction:column;gap:6px}
-.seat-take{font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);
-  background:rgba(240,220,154,.10);border:1px solid rgba(240,220,154,.42);border-radius:14px;padding:3px 9px;
-  cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent}
+.seat-take{flex:none;width:30px;height:30px;display:grid;place-items:center;font-size:17px;line-height:1;
+  font-weight:700;color:var(--gold);background:rgba(240,220,154,.10);border:1px solid rgba(240,220,154,.42);
+  border-radius:9px;cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent;padding:0}
 .seat-take:active{transform:scale(.95)}
 .seat-take[disabled]{opacity:.4;pointer-events:none}
 /* ---------- command deck ---------- */
@@ -186,14 +206,14 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
           autocomplete="off" autocapitalize="characters" spellcheck="false"><button id="clJoin">Join</button></div>
       </div>
       <div id="clRoom" hidden>
-        <div class="cl-codebox">Room code <b id="clRoomCode">------</b></div>
+        <div class="cl-codebox"><span class="lbl">Room code</span><b id="clRoomCode">------</b><button type="button" class="cl-copy" id="clCopy">Copy</button></div>
         <div class="cl-teams" id="clTeams">
           <div class="cl-team A"><div class="th"><span class="tname">Team A</span><span class="tside">Top of the arena</span></div><div class="rows" id="clTeamA"></div></div>
           <div class="cl-team B"><div class="th"><span class="tname">Team B</span><span class="tside">Bottom of the arena</span></div><div class="rows" id="clTeamB"></div></div>
         </div>
         <div id="clSlots" hidden></div>
         <button class="cl-primary" id="clStart" hidden>Start battle</button>
-        <div class="cl-wait" id="clWait">Empty slots are controlled by the selected model.</div>
+        <div class="cl-wait" id="clWait">Empty seats are played by the chosen model. Tap <b>+</b> on a seat to play it yourself.</div>
       </div>
       <div class="cl-msg" id="clMsg"></div>
     </div></div>
@@ -581,7 +601,7 @@ window.BreachSim=function(seed, humanSlots){
       row.dataset.team=r.slot.charAt(0);
       const sl=document.createElement('span'); sl.className='sl'; sl.textContent=r.slot;
       if(r.name||r.kind==='human'){
-        const nm=document.createElement('span'); nm.className='nm'; nm.textContent=r.name||'Human commander'; row.append(sl,nm);
+        const nm=document.createElement('span'); nm.className='nm'; nm.textContent=String(r.name||'Human commander').replace(/^Guest\d+:/,''); row.append(sl,nm);
         if(r.slot===MYSLOT){ const y=document.createElement('span'); y.className='you'; y.textContent='You'; row.append(y); }
       } else {
         const select=document.createElement('select'); select.className='model-select'; select.setAttribute('aria-label',r.slot+' model');
@@ -590,7 +610,7 @@ window.BreachSim=function(seed, humanSlots){
         const tag=document.createElement('span'); tag.className='model-tag'; tag.textContent='Model'; row.append(sl,select,tag);
         // any member may claim a free seat, so friends can choose their team
         const take=document.createElement('button'); take.className='seat-take'; take.type='button';
-        take.textContent='Take seat'; take.title='Play this fort yourself';
+        take.textContent='+'; take.title='Take this seat'; take.setAttribute('aria-label','Take seat '+r.slot);
         take.onclick=()=>claimSeat(r.slot,take);
         row.append(take);
       }
@@ -708,6 +728,10 @@ window.BreachSim=function(seed, humanSlots){
   document.getElementById('clCreate').onclick=()=>clCreate(false);   // never pass the MouseEvent: it is truthy and would auto-start
   document.getElementById('clJoin').onclick=clJoin;
   document.getElementById('clStart').onclick=clStart;
+  document.getElementById('clCopy').onclick=async()=>{
+    const code=document.getElementById('clRoomCode').textContent.trim();
+    try{ await navigator.clipboard.writeText(code); clMsg('Code copied - send it to your friends.',true); }
+    catch(e){ clMsg('Room code: '+code,true); } };
   document.getElementById('modelRetry').onclick=retryModelTurn;
   document.getElementById('modelEnd').onclick=endModelBattle;
   document.getElementById('clCode').addEventListener('keydown',e=>{if(e.key==='Enter')clJoin();});
