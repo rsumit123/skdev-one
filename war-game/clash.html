@@ -554,7 +554,7 @@ window.BreachSim=function(seed, humanSlots){
   function onNetFrame(p){ if(!p)return; frameQ.push(p); }
   function onNetOver(p){
     if(!p)return;
-    if(p.result||p.results) showResults(p.result||p.results);
+    if(p.result||p.results||p.winner!==undefined||p.winnerTeam!==undefined) showResults(p.result||p.results||p);
   }
   function showResults(result){
     if(!result)return;
