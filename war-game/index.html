@@ -588,6 +588,42 @@ button.loading::after{content:"";position:absolute;top:50%;left:50%;width:15px;h
 .cup-player.champ{border-color:rgba(240,220,154,.4);color:#f0dc9a}
 .cup-player.you{border-color:rgba(120,180,240,.5);color:#bcd8f5}
 
+
+/* ===== home screen: compact cards (mock alignment) ===== */
+@media(max-width:720px){
+  .battle-authorization{grid-template-columns:1fr;gap:10px;align-items:start;
+    border:1px solid #23344b;border-radius:14px;padding:14px 15px;
+    background:linear-gradient(180deg,rgba(240,220,154,.06),rgba(255,255,255,.012))}
+  .battle-authorization h1{font-size:19px!important;line-height:1.15;overflow-wrap:anywhere}
+  .authorization-quota strong{font-size:15px}
+  .difficulty-heading h2{font-size:20px}
+  .difficulty-list{border-top:0;display:flex;flex-direction:column;gap:10px;margin-top:4px}
+  /* explicit placement: icon | (title over models) | cta  */
+  .difficulty-row{grid-template-columns:44px minmax(0,1fr) auto!important;
+    grid-template-rows:auto auto!important;gap:2px 12px!important;
+    align-items:center!important;padding:12px 13px!important;border:1px solid #23344b;border-radius:13px;
+    background:linear-gradient(90deg,rgba(255,255,255,.04),rgba(255,255,255,.012))}
+  .difficulty-row::after{content:attr(data-icon);grid-column:1;grid-row:1/3;align-self:center;
+    width:44px;height:44px;border-radius:11px;display:grid;place-items:center;font-size:21px;
+    background:rgba(255,255,255,.05);border:1px solid #24354d}
+  .difficulty-row .difficulty-level{grid-column:2;grid-row:1}
+  .difficulty-row p{grid-column:2;grid-row:2}
+  .difficulty-row button{grid-column:3;grid-row:1/3;align-self:center}
+  .difficulty-row[data-difficulty-card="easy"]::after{background:rgba(79,191,126,.13);border-color:rgba(79,191,126,.4)}
+  .difficulty-row[data-difficulty-card="medium"]::after{background:rgba(240,220,154,.13);border-color:rgba(240,220,154,.45)}
+  .difficulty-row[data-difficulty-card="hard"]::after{background:rgba(224,103,63,.14);border-color:rgba(224,103,63,.45)}
+  .difficulty-level b{font-size:17px;color:#f2f5f9}
+  .difficulty-level span{font-size:9.5px}
+  .difficulty-row p{font-size:11px;margin-top:3px;color:#8d98a4}
+  .difficulty-row button{font-size:11px;padding:9px 11px;border-radius:9px;line-height:1.2;
+    align-self:center;white-space:normal;max-width:40vw;text-align:left}
+  .difficulty-row button small{font-size:8px}
+  /* other modes: a compact row of cards instead of three tall blocks */
+  .pvp-entry{flex-direction:column;align-items:flex-start;gap:8px;padding:13px 14px;border-radius:13px}
+  .pvp-entry h2{font-size:17px}
+  .pvp-entry p{font-size:11.5px}
+  .pvp-entry button{width:100%;padding:10px;font-size:12.5px}
+}
 /* ---------- sheet ---------- */
 #sheet{position:fixed;left:0;right:0;bottom:0;height:min(62dvh,420px);background:#0c1117;
   border-top:1px solid var(--rule);border-radius:14px 14px 0 0;z-index:20;
@@ -1023,17 +1059,17 @@ body.split #nudge{display:none}
           <p>The commander is revealed after your game is authorized.</p>
         </div>
         <div class="difficulty-list" id="difficultyList">
-          <article class="difficulty-row" data-difficulty-card="easy">
+          <article class="difficulty-row" data-difficulty-card="easy" data-icon="🎖">
             <div class="difficulty-level"><span>Easy</span><b>Learn the battlefield</b></div>
             <p>Nova Lite · Nova 2 Lite · Phi-4</p>
             <button type="button" data-difficulty="easy">Choose Easy <small>Uses 1 game</small></button>
           </article>
-          <article class="difficulty-row" data-difficulty-card="medium">
+          <article class="difficulty-row" data-difficulty-card="medium" data-icon="⭐">
             <div class="difficulty-level"><span>Medium</span><b>Expect counterplay</b></div>
             <p>Gemini 3.5 Flash Lite · Qwen 3.7 Flash</p>
             <button type="button" data-difficulty="medium">Choose Medium <small>Uses 1 game</small></button>
           </article>
-          <article class="difficulty-row" data-difficulty-card="hard">
+          <article class="difficulty-row" data-difficulty-card="hard" data-icon="💀">
             <div class="difficulty-level"><span>Hard</span><b>Face the benchmark leader</b></div>
             <p>Gemini 3.7 Flash</p>
             <button type="button" data-difficulty="hard">Choose Hard <small>Uses 1 game</small></button>
@@ -2694,6 +2730,11 @@ bindTourney();
 (function(){const b=document.getElementById('btnClashOpen');
   if(b)b.onclick=()=>{location.href='/war-game/clash.html';};})();
 
+// The system prefixes guests with "GuestNN:" for uniqueness; that is plumbing,
+// not a callsign, so never show it in the UI.
+function commanderName(identity){
+  return String((identity&&identity.displayName)||'Commander').replace(/^Guest\d+:/,'');
+}
 function setPublicHidden(element,hidden){
   element.hidden=!!hidden;element.style.display=hidden?'none':'';
 }
@@ -2712,7 +2753,7 @@ function showPublicView(view){
     screen.classList.toggle('on',screen.dataset.publicScreen===view);
   });
   if(view==='home'&&PUB.identity){
-    document.getElementById('publicName').textContent=PUB.identity.displayName;
+    document.getElementById('publicName').textContent=commanderName(PUB.identity);
   }
   const menuButton=document.getElementById('btnPublicMenu');
   menuButton.hidden=view!=='home';
@@ -2764,7 +2805,7 @@ function showSessionExpiredUI(error){
 }
 function renderPublicIdentityHome(){
   if(!PUB.identity)return;
-  document.getElementById('publicName').textContent=PUB.identity.displayName;
+  document.getElementById('publicName').textContent=commanderName(PUB.identity);
   renderHome();
   window.breachPublicHooks?.onPublicIdentityResolved(PUB.identity);
 }
@@ -2835,7 +2876,7 @@ function renderExhaustion(){
 }
 function renderHome(){
   if(!PUB.identity)return;
-  document.getElementById('publicName').textContent=PUB.identity.displayName;
+  document.getElementById('publicName').textContent=commanderName(PUB.identity);
   const allowance=PUB.allowance;
   if(allowance){
     const view=quotaView(allowance,Date.now());
