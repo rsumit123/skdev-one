@@ -1049,6 +1049,11 @@ body.split #nudge{display:none}
           <p>3–8 friends, one Cup. Play your matches, watch the rest live.</p></div>
           <button type="button" id="btnTourneyOpen">Start a Cup</button>
         </div>
+        <div class="pvp-entry">
+          <div><span class="public-kicker">New · Beta</span><h2>Clash Arena</h2>
+          <p>2v2 four-fort battle — you and an AI ally vs two AI commanders. Doesn't use a daily game.</p></div>
+          <button type="button" id="btnClashOpen">Enter the Arena</button>
+        </div>
         <div class="auth-error" id="homeError" role="alert" aria-live="assertive"></div>
       </section>
 
@@ -2676,6 +2681,8 @@ function bindTourney(){
   if(jc)jc.addEventListener('keydown',e=>{if(e.key==='Enter')tourneyJoin();});
 }
 bindTourney();
+(function(){const b=document.getElementById('btnClashOpen');
+  if(b)b.onclick=()=>{location.href='clash.html';};})();
 
 function setPublicHidden(element,hidden){
   element.hidden=!!hidden;element.style.display=hidden?'none':'';
