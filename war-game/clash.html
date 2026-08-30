@@ -473,6 +473,7 @@ window.BreachSim=function(seed, humanSlots){
       socket=sk;
       sk.on('clash:lobby',renderRoom);
       sk.on('clash:start',onNetStart);
+      sk.on('clash:resumed',p=>{ if(p) applyResumePayload(p); });
       sk.on('clash:frame',onNetFrame);
       sk.on('clash:over',onNetOver);
       sk.on('clash:result',onNetOver);
@@ -551,6 +552,12 @@ window.BreachSim=function(seed, humanSlots){
     frameQ=[]; tickInFrame=0; lastFrameN=-1; overSent=false; netGeneration=p.generation||p.roomGeneration||null;
     setupWorld(window.BreachSim(p.seed, p.humanSlots));
   }
+  function applyResumePayload(p){
+    if(p.seed!==undefined && (!SIM || MODE!=='net')) onNetStart(p);
+    if(p.generation!==undefined) netGeneration=p.generation;
+    const replay=Array.isArray(p.log)?p.log:(Array.isArray(p.frames)?p.frames:[]);
+    replay.filter(fr=>fr&&typeof fr.n==='number'&&fr.n>lastFrameN).forEach(onNetFrame);
+  }
   function onNetFrame(p){ if(!p)return; frameQ.push(p); }
   function onNetOver(p){
     if(!p)return;
@@ -573,8 +580,10 @@ window.BreachSim=function(seed, humanSlots){
     netResuming=true; netStatus('Reconnecting…');
     const r=await emitAck('clash:resume',{code:CLASH_CODE,lastFrame:lastFrameN,generation:netGeneration});
     if(r&&r.ok!==false){
-      if(r.start&&!SIM) onNetStart(r.start);
-      const replay=r.frames||r.replay||[]; if(Array.isArray(replay)) replay.forEach(onNetFrame);
+      const payload=r.resync||r.start||r;
+      if(payload&&payload.seed!==undefined&&!SIM) onNetStart(payload);
+      if(payload) applyResumePayload(payload);
+      const replay=r.frames||r.replay||[]; if(Array.isArray(replay)) replay.filter(fr=>fr&&fr.n>lastFrameN).forEach(onNetFrame);
       if(r.generation!==undefined) netGeneration=r.generation;
       netWasDisconnected=false; netStatus('Reconnected'); setTimeout(()=>netStatus('',false),1400);
     } else netStatus('Reconnect failed — battle may have ended');
