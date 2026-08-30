@@ -573,7 +573,8 @@ window.BreachSim=function(seed, humanSlots){
     const st=document.getElementById('clStart');
     st.hidden=!AMHOST;
   }
-  async function clCreate(autoStart=false){
+  async function clCreate(autoStart){
+    autoStart=autoStart===true;   // guard against an event object being passed in
     const btn=document.getElementById(autoStart?'clSolo':'clCreate'); clMsg('Connecting…',true); clBusy(btn,true);
     try{ const r=await withRetry(async()=>{ await ensureSocket(); return emitAck('clash:create',{}); });
       if(!r.ok){clMsg(ERR[r.code]||'Could not create the room. Tap to try again.');return;}
@@ -669,7 +670,7 @@ window.BreachSim=function(seed, humanSlots){
     netResuming=false;
   }
   document.getElementById('clSolo').onclick=()=>clCreate(true);
-  document.getElementById('clCreate').onclick=clCreate;
+  document.getElementById('clCreate').onclick=()=>clCreate(false);   // never pass the MouseEvent: it is truthy and would auto-start
   document.getElementById('clJoin').onclick=clJoin;
   document.getElementById('clStart').onclick=clStart;
   document.getElementById('modelRetry').onclick=retryModelTurn;
