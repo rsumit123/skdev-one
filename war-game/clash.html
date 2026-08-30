@@ -190,10 +190,10 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
 window.BreachSim=function(seed, humanSlots){
   var FP=256, CX=180*FP, CY=260*FP;
   var TOWER_R=46*FP, HOLD_R=64*FP, GATE=38, FOE_R=56*FP, CHASE_R=150*FP, CLOCK_TICKS=4800;
-  var T={inf :{spd:282,hp:160,dmg:30,db:18,rng:26,cd:10,cost:800, turn:12,rad:7, amin:90},
-        gun :{spd:205,hp:220,dmg:50,db:23,rng:32,cd:10,cost:2000,turn:11,rad:7, amin:90},
-        at  :{spd:218,hp:200,dmg:40,db:45,rng:34,cd:10,cost:2800,turn:11,rad:7, amin:90},
-        tank:{spd:141,hp:600,dmg:80,db:60,rng:38,cd:19,cost:4500,turn:5, rad:11,amin:38}};
+  var T={inf :{spd:282,hp:160,dmg:30,db:3,rng:26,cd:10,cost:800, turn:12,rad:7, amin:90},
+        gun :{spd:205,hp:220,dmg:50,db:4,rng:32,cd:10,cost:2000,turn:11,rad:7, amin:90},
+        at  :{spd:218,hp:200,dmg:40,db:7,rng:34,cd:10,cost:2800,turn:11,rad:7, amin:90},
+        tank:{spd:141,hp:600,dmg:80,db:14,rng:38,cd:19,cost:4500,turn:5, rad:11,amin:38}};
   var HUMAN={}; (humanSlots&&humanSlots.length?humanSlots:['A1']).forEach(function(s){HUMAN[s]=1;});
   var bases=[
     {id:'A1',team:0,ix:61*FP, iy:83*FP, ihp:1000,alive:true,cd:34,bc:5000},
