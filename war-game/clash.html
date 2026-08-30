@@ -640,7 +640,7 @@ window.BreachSim=function(seed, humanSlots){
     clBusy(btn,false);
   }
   function endModelBattle(){
-    if(socket) socket.emit('clash:over',{});
+    if(socket) socket.emit('clash:over',{winner:SIM.state().winner,reason:SIM.state().clockLeft>0?'base':'timecap'});
     setModelPaused(false); document.getElementById('endcard').classList.add('on');
   }
   function showResults(result){
@@ -763,7 +763,7 @@ window.BreachSim=function(seed, humanSlots){
           reportClashState(lastFrameN);
         }
         const st=SIM.state();
-        if(st.over&&!overSent&&socket){ overSent=true; socket.emit('clash:over',{}); }
+        if(st.over&&!overSent&&socket){ overSent=true; socket.emit('clash:over',{winner:SIM.state().winner,reason:SIM.state().clockLeft>0?'base':'timecap'}); }
       }
       syncView();
     }
