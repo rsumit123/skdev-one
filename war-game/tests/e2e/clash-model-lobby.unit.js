@@ -18,6 +18,9 @@ ok(html.includes("emitAck('clash:model_retry'"), 'failure UI can request a model
 ok(html.includes('Nova Lite'), 'Nova Lite is presented as the default model');
 ok(html.includes("BreachSim(p.seed,['A1','A2','B1','B2'])"), 'network games disable the local filler AI for every seat');
 ok(html.includes("socket.emit('clash:state'"), 'each completed network frame reports the shared state to the model service');
+ok(html.includes('Play vs models'), 'solo entry describes the real model opponents');
+ok(html.includes("document.getElementById('clSolo').onclick=()=>clCreate(true)"), 'solo entry creates and immediately starts a network room');
+ok(!html.includes('function startSolo('), 'no local scripted solo path remains reachable');
 
 const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/gi)];
 for (const [i, match] of scripts.entries()) {

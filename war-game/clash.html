@@ -166,7 +166,7 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
       <div class="cl-title">Clash Arena</div>
       <div class="cl-sub">2v2 · four forts · humans + AI · beta</div>
       <div id="clMenu">
-        <button class="cl-primary" id="clSolo">Play solo vs AI</button>
+        <button class="cl-primary" id="clSolo">Play vs models</button>
         <button class="cl-secondary" id="clCreate">Create room</button>
         <div class="cl-join"><input id="clCode" maxlength="6" placeholder="CODE"
           autocomplete="off" autocapitalize="characters" spellcheck="false"><button id="clJoin">Join</button></div>
@@ -573,11 +573,12 @@ window.BreachSim=function(seed, humanSlots){
     const st=document.getElementById('clStart');
     st.hidden=!AMHOST;
   }
-  async function clCreate(){
-    const btn=document.getElementById('clCreate'); clMsg('Connecting…',true); clBusy(btn,true);
+  async function clCreate(autoStart=false){
+    const btn=document.getElementById(autoStart?'clSolo':'clCreate'); clMsg('Connecting…',true); clBusy(btn,true);
     try{ const r=await withRetry(async()=>{ await ensureSocket(); return emitAck('clash:create',{}); });
       if(!r.ok){clMsg(ERR[r.code]||'Could not create the room. Tap to try again.');return;}
       clMsg(''); AMHOST=true; MYSLOT=r.you; MYTEAM=teamOf(MYSLOT); CLASH_CODE=r.room&&r.room.code||''; renderRoom(r.room);
+      if(autoStart) await clStart();
     }catch(e){ clMsg((e&&e.message)||'Could not reach the battle server. Tap to try again.'); }
     finally{ clBusy(btn,false); } }
   async function clJoin(){
@@ -667,13 +668,7 @@ window.BreachSim=function(seed, humanSlots){
     } else netStatus('Reconnect failed — battle may have ended');
     netResuming=false;
   }
-  function startSolo(){
-    MODE='solo'; MYSLOT='A1'; MYTEAM=0;
-    SLOTNAME={A1:'You',A2:DEFAULT_MODEL_NAME,B1:DEFAULT_MODEL_NAME,B2:DEFAULT_MODEL_NAME};
-    const seed=((Date.now()&0x7fffffff)^((Math.random()*0x7fffffff)|0))>>>0||1;
-    setupWorld(window.BreachSim(seed,['A1']));
-  }
-  document.getElementById('clSolo').onclick=startSolo;
+  document.getElementById('clSolo').onclick=()=>clCreate(true);
   document.getElementById('clCreate').onclick=clCreate;
   document.getElementById('clJoin').onclick=clJoin;
   document.getElementById('clStart').onclick=clStart;
