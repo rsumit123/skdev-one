@@ -65,6 +65,10 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
   font-size:15px;padding:11px 26px;border-radius:10px;border:0;background:linear-gradient(180deg,#f0dc9a,#c9ad5f);
   color:#20180a;cursor:pointer;display:block;width:100%}
 #endcard a{display:block;margin-top:11px;font-size:12px;color:#8a97ad;text-decoration:none;letter-spacing:.04em}
+.result-summary{margin-top:12px;max-width:240px;text-align:left;font-size:11px;color:var(--muted);line-height:1.6}
+.result-summary .result-team{color:var(--text);font-weight:700;margin-top:4px}
+.result-summary .result-winner{color:var(--gold)}
+.net-status{position:absolute;top:48px;right:10px;z-index:20;padding:5px 10px;border-radius:14px;background:rgba(7,13,21,.9);border:1px solid #53677f;color:#f0dc9a;font-size:10px;letter-spacing:.04em}
 /* ---------- clash lobby ---------- */
 #clashLobby{position:absolute;inset:0;z-index:28;display:flex;align-items:center;justify-content:center;
   background:rgba(3,6,11,.66);backdrop-filter:blur(3px)}
@@ -140,7 +144,7 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
     <div class="you-tag" id="youTag">◉ You · A1 (top)</div>
     <a class="exit-chip" href="./">← Breach</a>
     <div id="endcard"><div class="ec"><div class="et">Victory</div>
-      <div class="es">Clash Arena · beta</div>
+      <div class="es">Clash Arena · beta</div><div id="resultSummary" class="result-summary"></div>
       <button onclick="location.reload()">Play again</button>
       <a href="./">Back to Breach</a></div></div>
     <div id="clashLobby"><div class="cl-card">
@@ -161,6 +165,7 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
       <div class="cl-msg" id="clMsg"></div>
     </div></div>
     <div class="bonus-toast" id="bonusToast">🏰 Tower → team income bonus</div>
+    <div id="netStatus" class="net-status" aria-live="polite" hidden></div>
   </div>
   <div class="orders">
     <div class="eco"><div class="coins"><span id="coins">0</span> <small id="inc">—</small></div>
@@ -394,7 +399,8 @@ window.BreachSim=function(seed, humanSlots){
   const PUBLIC_API=(()=>{try{const v=localStorage.getItem('breach.pubapi');if(v)return v.replace(/\/+$/,'');}catch(e){}
     return 'https://breach-api.skdev.one';})();
   let SIM=null, units=[], bases=[];
-  let MODE='solo', MYSLOT='A1', MYTEAM=0, socket=null;
+  let MODE='solo', MYSLOT='A1', MYTEAM=0, socket=null, CLASH_CODE='';
+  let netWasDisconnected=false, netResuming=false, netGeneration=null;
   let frameQ=[], tickInFrame=0, curFrameInputs=null, lastFrameN=-1, overSent=false;
   const pending=[];   // solo-mode input queue
   const BART={A1:{art:'base_sandbag',rot:-0.018},A2:{art:'base_concrete',rot:0.018},
@@ -467,9 +473,12 @@ window.BreachSim=function(seed, humanSlots){
       socket=sk;
       sk.on('clash:lobby',renderRoom);
       sk.on('clash:start',onNetStart);
-      sk.on('clash:frame',p=>frameQ.push(p));
+      sk.on('clash:frame',onNetFrame);
+      sk.on('clash:over',onNetOver);
+      sk.on('clash:result',onNetOver);
       sk.on('clash:desync',()=>clMsg('Desync detected — please start a new match.'));
-      sk.on('disconnect',()=>{ if(MODE==='net'&&SIM&&!SIM.state().over) clMsg('Connection lost — reconnecting…'); });
+      sk.on('disconnect',()=>{ if(MODE==='net'&&SIM&&!SIM.state().over){ netWasDisconnected=true; netStatus('Connection lost — reconnecting…'); clMsg('Connection lost — reconnecting…',true); } });
+      sk.on('connect',()=>{ if(netWasDisconnected) resumeNet(); });
       sk.once('connect',()=>res(sk));
       sk.once('connect_error',()=>rej(new Error('Could not reach the battle server. Tap to try again.')));
     });
@@ -482,6 +491,7 @@ window.BreachSim=function(seed, humanSlots){
     unauthorized:'Could not sign in — refresh and try again.',timeout:'Server not responding.'};
   function clMsg(m,info){ const e=document.getElementById('clMsg');
     if(e){ e.textContent=m||''; e.classList.toggle('info',!!info); } }
+  function netStatus(m,on=true){ const e=document.getElementById('netStatus'); if(!e)return; e.textContent=m||''; e.hidden=!on; }
   function clBusy(el,on){ if(!el)return; el.classList.toggle('busy',!!on);
     el.setAttribute('aria-busy',on?'true':'false'); }
   // one transparent retry: a deploy/cold-start blip shouldn't look like a dead button
@@ -514,7 +524,7 @@ window.BreachSim=function(seed, humanSlots){
     const btn=document.getElementById('clCreate'); clMsg('Connecting…',true); clBusy(btn,true);
     try{ const r=await withRetry(async()=>{ await ensureSocket(); return emitAck('clash:create',{}); });
       if(!r.ok){clMsg(ERR[r.code]||'Could not create the room. Tap to try again.');return;}
-      clMsg(''); AMHOST=true; MYSLOT=r.you; MYTEAM=teamOf(MYSLOT); renderRoom(r.room);
+      clMsg(''); AMHOST=true; MYSLOT=r.you; MYTEAM=teamOf(MYSLOT); CLASH_CODE=r.room&&r.room.code||''; renderRoom(r.room);
     }catch(e){ clMsg((e&&e.message)||'Could not reach the battle server. Tap to try again.'); }
     finally{ clBusy(btn,false); } }
   async function clJoin(){
@@ -523,7 +533,7 @@ window.BreachSim=function(seed, humanSlots){
     const btn=document.getElementById('clJoin'); clMsg('Connecting…',true); clBusy(btn,true);
     try{ const r=await withRetry(async()=>{ await ensureSocket(); return emitAck('clash:join',{code}); });
       if(!r.ok){clMsg(ERR[r.code]||'Could not join. Tap to try again.');return;}
-      clMsg(''); AMHOST=false; MYSLOT=r.you; MYTEAM=teamOf(MYSLOT); renderRoom(r.room);
+      clMsg(''); AMHOST=false; MYSLOT=r.you; MYTEAM=teamOf(MYSLOT); CLASH_CODE=r.room&&r.room.code||code; renderRoom(r.room);
     }catch(e){ clMsg((e&&e.message)||'Could not reach the battle server. Tap to try again.'); }
     finally{ clBusy(btn,false); } }
   async function clStart(){ const btn=document.getElementById('clStart');
@@ -538,8 +548,37 @@ window.BreachSim=function(seed, humanSlots){
     const meta=p.slotMeta||p.slots||{};
     for(const sl of ['A1','A2','B1','B2']){ const raw=Array.isArray(meta)?meta.find(x=>x.slot===sl):meta[sl];
       SLOTNAME[sl]=raw?(typeof raw==='object'?clean(raw.name||raw.displayName):clean(raw)):'AI Commander'; }
-    frameQ=[]; tickInFrame=0; lastFrameN=-1; overSent=false;
+    frameQ=[]; tickInFrame=0; lastFrameN=-1; overSent=false; netGeneration=p.generation||p.roomGeneration||null;
     setupWorld(window.BreachSim(p.seed, p.humanSlots));
+  }
+  function onNetFrame(p){ if(!p)return; frameQ.push(p); }
+  function onNetOver(p){
+    if(!p)return;
+    if(p.result||p.results) showResults(p.result||p.results);
+  }
+  function showResults(result){
+    if(!result)return;
+    const card=document.getElementById('endcard'), sum=document.getElementById('resultSummary');
+    const winner=result.winnerTeam!==undefined?result.winnerTeam:result.winner;
+    if(sum){
+      const teams=result.teams||{}; const lines=[];
+      for(const team of [0,1]){ const raw=teams[team]||teams[String(team)]; const names=Array.isArray(raw)?raw.map(x=>typeof x==='string'?x:(x.name||x.displayName)).filter(Boolean):[]; if(names.length) lines.push('<div class="result-team '+(winner===team?'result-winner':'')+'">Team '+(team?'B':'A')+(winner===team?' · Winner':'')+'</div><div>'+names.join(' · ')+'</div>'); }
+      if(!lines.length&&Array.isArray(result.slots)){ for(const x of result.slots){ const n=typeof x==='string'?x:(x.name||x.displayName); if(n) lines.push('<div>'+n+'</div>'); } }
+      sum.innerHTML=lines.join('');
+    }
+    if(card){ const et=card.querySelector('.et'); if(et&&winner!==undefined){ et.textContent=winner===MYTEAM?'Victory':winner===-1?'Draw':'Defeat'; } card.classList.add('on'); }
+  }
+  async function resumeNet(){
+    if(!socket||!CLASH_CODE||MODE!=='net'||netResuming)return;
+    netResuming=true; netStatus('Reconnecting…');
+    const r=await emitAck('clash:resume',{code:CLASH_CODE,lastFrame:lastFrameN,generation:netGeneration});
+    if(r&&r.ok!==false){
+      if(r.start&&!SIM) onNetStart(r.start);
+      const replay=r.frames||r.replay||[]; if(Array.isArray(replay)) replay.forEach(onNetFrame);
+      if(r.generation!==undefined) netGeneration=r.generation;
+      netWasDisconnected=false; netStatus('Reconnected'); setTimeout(()=>netStatus('',false),1400);
+    } else netStatus('Reconnect failed — battle may have ended');
+    netResuming=false;
   }
   function startSolo(){
     MODE='solo'; MYSLOT='A1'; MYTEAM=0;
