@@ -507,8 +507,14 @@ window.BreachSim=function(seed, humanSlots){
   const pending=[];   // solo-mode input queue
   const BART={A1:{art:'base_sandbag',rot:-0.018},A2:{art:'base_concrete',rot:0.018},
               B1:{art:'base_depot',rot:0.014},B2:{art:'base_dugin',rot:-0.014}};
-  const FPX=256, SIMH=520, S2=H/SIMH, OX=W/2-180*S2, OY=H/2-260*S2;
-  const gx2s=v=>v/FPX*S2+OX, gy2s=v=>v/FPX*S2+OY;
+  const FPX=256, SIMW=360, SIMH=520, S2=H/SIMH, OX=W/2-180*S2, OY=H/2-260*S2;
+  // Everyone plays from the bottom of their own screen. Team A holds the top of
+  // the shared grid, so an A player's camera is rotated 180 degrees. This is a
+  // RENDER transform only - the sim and its hash run on ix/iy, untouched, so
+  // both clients still simulate the identical battle.
+  const flipped=()=>MYTEAM===0;
+  const gx2s=v=>(flipped()?SIMW-v/FPX:v/FPX)*S2+OX;
+  const gy2s=v=>(flipped()?SIMH-v/FPX:v/FPX)*S2+OY;
   const TYPES={inf:{h:21,cost:8},gun:{h:22,cost:20},at:{h:22,cost:28},tank:{h:32,cost:45}};
   const MAXHP={inf:160,gun:220,at:200,tank:600};
   const teamOf=sl=>sl&&sl.charAt(0)==='B'?1:0;
@@ -581,8 +587,10 @@ window.BreachSim=function(seed, humanSlots){
     units=SIM.units; bases=SIM.bases;
     for(const b of bases){ Object.assign(b,BART[b.id]); b.x=gx2s(b.ix); b.y=gy2s(b.iy); b.hp=b.ihp/10; }
     const yt=document.getElementById('youTag');
+    // no more "(top)"/"(bottom)": every player now looks at their own forts from
+    // the bottom of the screen, so the word only ever contradicted the view.
     if(yt) yt.textContent='◉ '+(SLOTNAME[MYSLOT]&&SLOTNAME[MYSLOT]!==DEFAULT_MODEL_NAME?SLOTNAME[MYSLOT]:'You')
-      +' · '+MYSLOT+(MYTEAM?' (bottom)':' (top)');
+      +' · '+MYSLOT;
     applySlotNames();
     buildTargetPicker();
     const bt=document.getElementById('bonusToast'); if(bt) bt.textContent='🏰 Tower → +income to '+teamLabel(MYTEAM);
@@ -813,9 +821,11 @@ window.BreachSim=function(seed, humanSlots){
     if(socket) socket.emit('clash:over',{winner:SIM.state().winner,reason:SIM.state().clockLeft>0?'base':'timecap'});
     setModelPaused(false); document.getElementById('endcard').classList.add('on');
   }
-  function showResults(result){
-    if(!result)return;
-    const card=document.getElementById('endcard'), sum=document.getElementById('resultSummary');
+  // Fills the roster block only. Kept separate from showResults so the local
+  // end-of-battle path can name the winners without also revealing the card,
+  // which has a deliberate beat before it appears.
+  function fillResultSummary(result){
+    const sum=document.getElementById('resultSummary');
     const winner=result.winnerTeam!==undefined?result.winnerTeam:result.winner;
     if(sum){
       const teams=result.teams||{}; const lines=[];
@@ -823,6 +833,12 @@ window.BreachSim=function(seed, humanSlots){
       if(!lines.length&&Array.isArray(result.slots)){ for(const x of result.slots){ const n=typeof x==='string'?x:(x.name||x.displayName); if(n) lines.push('<div>'+n+'</div>'); } }
       sum.innerHTML=lines.join('');
     }
+  }
+  function showResults(result){
+    if(!result)return;
+    fillResultSummary(result);
+    const card=document.getElementById('endcard');
+    const winner=result.winnerTeam!==undefined?result.winnerTeam:result.winner;
     if(card){ const et=card.querySelector('.et'); if(et&&winner!==undefined){ et.textContent=winner===MYTEAM?'Victory':winner===-1?'Draw':'Defeat'; } card.classList.add('on'); }
   }
   async function resumeNet(){
@@ -876,7 +892,8 @@ window.BreachSim=function(seed, humanSlots){
     for(const u of units){
       u.x=gx2s(u.ix); u.y=gy2s(u.iy);
       u.type=u.t; u.max=MAXHP[u.t];
-      u.dir=Math.atan2(u.fy,u.fx)+Math.PI/2;   // derived only; sim never reads dir
+      // derived only; sim never reads dir. Rotated camera => rotated facing.
+      u.dir=Math.atan2(u.fy,u.fx)+Math.PI/2+(flipped()?Math.PI:0);
       const movedPx=u.moved/FPX*S2;
       u.moving=movedPx>0.03;
       if(u.t==='tank') u.trackDist=(u.trackDist||0)+movedPx;
@@ -1107,6 +1124,11 @@ window.BreachSim=function(seed, humanSlots){
       if(ec&&!ec.classList.contains('on')){ const et=ec.querySelector('.et');
         et.textContent=w===MYTEAM?'Victory':w===-1?'Draw':'Defeat';
         et.style.color=w===MYTEAM?'#8fbf7a':w===-1?'#f0dc9a':'#e0673f';
+        // Name who actually won. The client already knows every seat, so this
+        // needs no round trip - the server records the result but never sends
+        // one back, which is why the summary used to come up blank.
+        fillResultSummary({winnerTeam:w,teams:{0:['A1','A2'].map(s=>SLOTNAME[s]),
+                                               1:['B1','B2'].map(s=>SLOTNAME[s])}});
         setTimeout(()=>ec.classList.add('on'),900); } }
   }
   let towerA=0.5, last=0, perf=0;
