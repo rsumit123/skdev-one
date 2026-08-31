@@ -357,11 +357,12 @@ window.BreachSim=function(seed, humanSlots){
   // matters, which is a commander choosing WHEN to invest. At 21 the upgrade
   // costs a fifth of the opening bank and is a reflex; at 36 it costs most of it
   // and you have to give up the opening units to take it.
+  var RAMP_DEN=1100;   // 55 seconds at 20 ticks/sec - the original's doubling time
   var ECO_COST=[3600,6300,9000], bases=[
-    {id:'A1',team:0,ix:61*FP, iy:83*FP, ihp:1000,alive:true,cd:34,bc:5000,eco:0},
-    {id:'A2',team:0,ix:299*FP,iy:83*FP, ihp:1000,alive:true,cd:20,bc:5000,eco:0},
-    {id:'B1',team:1,ix:61*FP, iy:437*FP,ihp:1000,alive:true,cd:24,bc:5000,eco:0},
-    {id:'B2',team:1,ix:299*FP,iy:437*FP,ihp:1000,alive:true,cd:28,bc:5000,eco:0}];
+    {id:'A1',team:0,ix:61*FP, iy:83*FP, ihp:1000,alive:true,cd:34,bc:0,eco:0},
+    {id:'A2',team:0,ix:299*FP,iy:83*FP, ihp:1000,alive:true,cd:20,bc:0,eco:0},
+    {id:'B1',team:1,ix:61*FP, iy:437*FP,ihp:1000,alive:true,cd:24,bc:0,eco:0},
+    {id:'B2',team:1,ix:299*FP,iy:437*FP,ihp:1000,alive:true,cd:28,bc:0,eco:0}];
   var BY={}; bases.forEach(function(b){BY[b.id]=b;});
   var units=[], nextId=1, stanceT=[0,0], ctrl=512, holdTeam=-1, tick=0, over=false, winner=-1;
   var TARGET={};   // slot -> chosen enemy fort id (or undefined = nearest)
@@ -428,9 +429,20 @@ window.BreachSim=function(seed, humanSlots){
     //      premium; holding the tower pays BOTH forts of that team ----
     for(i=0;i<bases.length;i++){ var b=bases[i]; if(!b.alive) continue;
       var isH=!!HUMAN[b.id];
-      b.bc+=isH?(30+b.eco*6):(18+b.eco*4); if(hold===b.team) b.bc+=isH?6:10;   // halved: at +2.4/s the tower ended
-      // games in ~96s and was worth two eco levels for free; at +1.2/s matches
-      // run ~145s and are still decisive 10/10, and it is worth one eco level.
+      // Breach's economy shape. Clash used to pay a flat 6.0/s from second zero -
+      // the rate the original game only reaches at t=275s of a 300s match, on
+      // identical unit prices - so there was no opening: you were at full
+      // production immediately and no coin was ever a decision. Now income is
+      // (1.0/s + 0.5/s per eco level) x RAMP, with RAMP = 1 + t/55 exactly as
+      // the original. An early coin is scarce and an early eco upgrade compounds
+      // for the rest of the match, which is where the save-or-spend call lives.
+      var incNum=10+b.eco*5;
+      var per=Math.floor(incNum*(RAMP_DEN+tick)/(RAMP_DEN*2));
+      // The tower is a small FLAT add, not a multiplier - the original pays 0.3/s.
+      // Measured at +1.0/s it doubles the opening income and games end in 103s
+      // with the holder snowballing; at +0.4/s they run ~192s.
+      if(hold===b.team) per+=2;
+      b.inc=per; b.bc+=per;
       if(isH) continue;                       // humans build via inputs only
       if(b.eco<3 && b.bc>=ECO_COST[b.eco]){ b.bc-=ECO_COST[b.eco]; b.eco++; }
       b.cd--;
@@ -541,8 +553,8 @@ window.BreachSim=function(seed, humanSlots){
       mix(u.id); mix(u.ix); mix(u.iy); mix(u.fx&0xffff); mix(u.fy&0xffff); mix(u.hp); mix(u.spd); }
     return h; }
   return { FP:FP, units:units, bases:bases, targets:TARGET, tick:api_tick, hash:api_hash,
-    state:function(){ var sc={}, se={}; bases.forEach(function(b){sc[b.id]=b.bc; se[b.id]=b.eco;});
-      return { slotCoins:sc, slotEco:se, ecoCosts:ECO_COST.slice(), stance:stanceT.slice(), ctrl:ctrl, over:over, winner:winner,
+    state:function(){ var sc={}, se={}, si={}; bases.forEach(function(b){sc[b.id]=b.bc; se[b.id]=b.eco; si[b.id]=b.inc|0;});
+      return { slotCoins:sc, slotEco:se, slotInc:si, ecoCosts:ECO_COST.slice(), stance:stanceT.slice(), ctrl:ctrl, over:over, winner:winner,
         clockLeft:Math.max(0,Math.ceil((CLOCK_TICKS-tick)/20)) }; } };
 };
 </script>
@@ -1251,7 +1263,10 @@ window.BreachSim=function(seed, humanSlots){
     // 20 ticks/s, coins are x100 -> 5.2/s base, 7.6/s while your team holds the relay
     const holdMine=(towerA>0.55?0:towerA<0.45?1:-1)===MYTEAM;
     const ecoLevel=(st0.slotEco&&st0.slotEco[MYSLOT])||0;
-    const incomePerTick=30+ecoLevel*6+(holdMine?12:0);
+    // read the rate the sim actually pays. This used to recompute the formula by
+    // hand and had already drifted - it credited the tower with twice what the
+    // simulator gave, so the number on screen was simply wrong while holding.
+    const incomePerTick=(st0.slotInc&&st0.slotInc[MYSLOT])||0;
     // say what the rate IS. Unlabelled next to the ECO row it read as the eco
     // rate, so a Lv0 fort looked like it was already earning eco bonuses.
     txt('inc','+'+(incomePerTick*20/100).toFixed(1)+'/s income'+(holdMine?' · incl. tower':''));
