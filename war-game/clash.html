@@ -772,6 +772,10 @@ window.BreachSim=function(seed, humanSlots){
     document.head.appendChild(sc); }); }
   async function ensureSocket(){
     if(socket&&socket.connected) return socket;
+    // A failed attempt used to leave its socket in place: the next attempt built
+    // a SECOND io() without disposing the first, so both stayed subscribed and a
+    // reconnect could apply every clash:frame twice - which desyncs the sim.
+    if(socket){ try{ socket.removeAllListeners(); socket.close(); }catch(e){} socket=null; }
     await loadIO();
     return new Promise((res,rej)=>{
       const sk=window.io(PUBLIC_API,{path:'/socket.io',transports:['polling','websocket'],
@@ -794,8 +798,15 @@ window.BreachSim=function(seed, humanSlots){
       sk.on('clash:roster',onNetRoster);
       sk.on('disconnect',()=>{ if(MODE==='net'&&SIM&&!SIM.state().over){ netWasDisconnected=true; netStatus('Connection lost — reconnecting…'); clMsg('Connection lost — reconnecting…',true); } });
       sk.on('connect',()=>{ if(netWasDisconnected) resumeNet(); });
-      sk.once('connect',()=>res(sk));
-      sk.once('connect_error',()=>rej(new Error('Could not reach the battle server. Tap to try again.')));
+      let settled=false;
+      const give=(fn,arg)=>{ if(settled)return; settled=true; clearTimeout(guard); fn(arg); };
+      // socket.io's own timeout only covers one attempt; this bounds the whole
+      // thing so the button can never sit spinning on "Connecting..." forever.
+      const guard=setTimeout(()=>give(rej,
+        new Error('Could not reach the battle server. Tap to try again.')),20000);
+      sk.once('connect',()=>give(res,sk));
+      sk.once('connect_error',()=>give(rej,
+        new Error('Could not reach the battle server. Tap to try again.')));
     });
   }
   function emitAck(ev,data){ return new Promise(res=>{ if(!socket)return res({ok:false,code:'not_connected'});
