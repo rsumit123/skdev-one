@@ -13,14 +13,23 @@ const sim = ctx.window.BreachSim(1234, ['A1', 'B1']);
 // fraction of the 50-coin opening bank and stops being a decision at all
 assert.deepStrictEqual(Array.from(sim.state().ecoCosts), [3600, 6300, 9000]);
 assert.deepStrictEqual(JSON.parse(JSON.stringify(sim.state().slotEco)), { A1: 0, A2: 0, B1: 0, B2: 0 });
+// forts now open EMPTY and earn 1.0/s, so an upgrade has to be saved for
+assert.strictEqual(sim.state().slotCoins.A1, 0, 'a fort starts with nothing');
+sim.tick([{ op: 'eco', slot: 'A1' }]);
+assert.strictEqual(sim.state().slotEco.A1, 0, 'cannot buy an upgrade you have not saved for');
+sim.bases.find(b => b.id === 'A1').bc = 3600;      // hand it exactly one upgrade
 const before = sim.state().slotCoins.A1;
 const hash0 = sim.hash();
 sim.tick([{ op: 'eco', slot: 'A1' }]);
 assert.strictEqual(sim.state().slotEco.A1, 1);
-assert.strictEqual(sim.state().slotCoins.A1, before - 3600 + 36);
+// the tick also pays that fort its (now ramped) income
+assert.strictEqual(sim.state().slotCoins.A1, before - 3600 + sim.state().slotInc.A1);
 assert.strictEqual(sim.state().slotEco.B1, 0, 'eco upgrade must not affect teammate');
 assert.notStrictEqual(sim.hash(), hash0, 'eco state is included in lockstep hash');
-// Max level is deterministic and cannot spend beyond the third upgrade.
+// Max level is deterministic and cannot spend beyond the third upgrade. Fund it
+// directly: at 1.0/s a fort cannot earn all three upgrades in a few seconds any
+// more, which is the whole point of the ramped economy.
+sim.bases.find(b => b.id === 'A1').bc = 999999;
 for (let i = 0; i < 400; i++) sim.tick([{ op: 'eco', slot: 'A1' }]);
 assert.strictEqual(sim.state().slotEco.A1, 3);
 assert.strictEqual(sim.state().slotCoins.A1 >= 0, true);

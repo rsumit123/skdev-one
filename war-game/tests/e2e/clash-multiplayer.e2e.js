@@ -41,8 +41,10 @@ const URL='http://127.0.0.1:8055/clash.html';
   const fA=await A.p.evaluate(()=>CLASH_NET.frame);
   ok(fA>=5,'frames flowing (A at frame '+fA+')');
 
-  console.log('4. B buys a tank — it appears on BOTH clients…');
-  await B.p.click('.build .u[data-t="inf"]');
+  console.log('4. B buys infantry — it appears on BOTH clients…');
+  // forts open empty and earn ~1 coin a second, so wait until B can actually
+  // afford the 8-coin infantry rather than clicking into an empty bank
+  await B.p.waitForFunction(()=>BREACH_SIM_DEBUG.state().slotCoins.B1>=800,{timeout:30000});
   await B.p.click('.build .u[data-t="inf"]');
   const grew=async pg=>pg.waitForFunction(()=>BREACH_SIM_DEBUG.units.some(u=>u.owner==='B1'),{timeout:8000}).then(()=>true).catch(()=>false);
   ok(await grew(B.p),'B sees its own B1 units');

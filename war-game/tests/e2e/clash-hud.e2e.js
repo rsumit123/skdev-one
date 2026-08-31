@@ -32,8 +32,9 @@ const { chromium } = require(process.env.PLAYWRIGHT_PKG || '@playwright/test');
   ok(names[2]&&names[2]!=='B1'&&names[2]!=='AI Commander','opponent shows their real name -> "'+names[2]+'"');
   const live=await A.p.evaluate(()=>({coins:+document.getElementById('coins').textContent,
     inc:document.getElementById('inc').textContent, clk:document.getElementById('clk').textContent}));
-  ok(live.coins>=50&&live.coins<200,'coins start ~50 and tick up -> '+live.coins);
-  ok(/^\+6\.0\/s/.test(live.inc),'income shows the real rate -> '+live.inc);
+  // forts open EMPTY and earn 1.0/s, ramping - the original Breach curve
+  ok(live.coins>=0&&live.coins<20,'a fort opens empty and earns slowly -> '+live.coins);
+  ok(/^\+1\.\d\/s income/.test(live.inc),'income starts at about 1/s -> '+live.inc);
   ok(live.clk!=='4:00','clock is actually running -> '+live.clk);
   console.log(`HUD: ${pass} passed, ${fail} failed`);
   await b.close(); process.exit(fail?1:0);
