@@ -342,7 +342,12 @@ window.BreachSim=function(seed, humanSlots){
         at  :{spd:218,hp:200,dmg:40,db:7,rng:34,cd:10,cost:2800,turn:11,rad:7, amin:90},
         tank:{spd:141,hp:600,dmg:80,db:14,rng:38,cd:19,cost:4500,turn:5, rad:11,amin:38}};
   var HUMAN={}; (humanSlots&&humanSlots.length?humanSlots:['A1']).forEach(function(s){HUMAN[s]=1;});
-  var ECO_COST=[3600,6300,9000], bases=[
+  // Halved 2026-08-31. At 36/63/90 an upgrade paid for itself in 30-75s, but a
+  // match is decided by the midfield fight at ~75-110s, and the 36 coins are
+  // 4.5 infantry you do not have in it. Measured: a team that bought ANY eco
+  // lost 28 of 28 games against an identical team that bought only army. At
+  // these prices it is 11 of 20 - a real choice instead of a trap.
+  var ECO_COST=[1800,3200,4500], bases=[
     {id:'A1',team:0,ix:61*FP, iy:83*FP, ihp:1000,alive:true,cd:34,bc:5000,eco:0},
     {id:'A2',team:0,ix:299*FP,iy:83*FP, ihp:1000,alive:true,cd:20,bc:5000,eco:0},
     {id:'B1',team:1,ix:61*FP, iy:437*FP,ihp:1000,alive:true,cd:24,bc:5000,eco:0},
