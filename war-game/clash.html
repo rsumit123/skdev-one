@@ -803,12 +803,20 @@ window.BreachSim=function(seed, humanSlots){
     if(t) t.textContent = n===1 ? 'Model commander deciding…' : n+' model commanders deciding…';
     el.classList.toggle('on',on);
   }
+  const MODEL_ERR={model_budget_exhausted:
+    "Today's model-commander budget is used up. Model seats can't take their turn until it resets — you can still finish this battle."};
   function onModelError(payload){
     onModelThinking({thinking:false});
     const code=payload&&payload.code;
-    const message=(payload&&payload.message)||'A model commander could not make its move. The battle is paused.';
-    document.getElementById('modelErrorText').textContent=code?message+' ('+code+')':message;
-    setModelPaused(true); netStatus('Model commander paused');
+    const message=(payload&&payload.message)||MODEL_ERR[code]
+      ||'A model commander could not make its move. The battle is paused.';
+    // a budget stop is not a blip: retrying it just fails again
+    const retryable=!(payload&&payload.retry===false);
+    document.getElementById('modelErrorText').textContent=
+      (code&&!MODEL_ERR[code])?message+' ('+code+')':message;
+    const rb=document.getElementById('modelRetry'); if(rb) rb.hidden=!retryable;
+    setModelPaused(true);
+    netStatus(MODEL_ERR[code]?'Model budget reached':'Model commander paused');
   }
   async function retryModelTurn(){
     const btn=document.getElementById('modelRetry'); clBusy(btn,true);
