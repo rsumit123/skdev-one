@@ -76,3 +76,32 @@ console.log('clash counters: PASS');
   assert.notStrictEqual(sim2.hash(), h1, 'stance changes are hashed');
   console.log('clash stance: PASS');
 }
+
+// ---- hold actually holds ---------------------------------------------------
+// "Hold tower" chased anything within CHASE_R (150 grid units) - most of the way
+// to the enemy fort - so a holding unit wandered downfield and was
+// indistinguishable from a pushing one.
+{
+  const where = (stance) => {
+    const c3 = { window: {}, Math };
+    vm.runInNewContext(html.slice(start, end), c3);
+    const sim3 = c3.window.BreachSim(11, ['A1', 'A2', 'B1', 'B2']);
+    const FP = sim3.FP;
+    sim3.tick([{ op: 'stance', v: stance, slot: 'A1' }]);
+    for (let t = 1; t < 2000; t++) {
+      const ins = [];
+      // only A1 buys, so nothing intercepts: this measures where units CHOOSE to go
+      if (t % 100 === 0 && sim3.state().slotCoins.A1 >= 800)
+        ins.push({ op: 'buy', t: 'inf', slot: 'A1' });
+      sim3.tick(ins);
+    }
+    const mine = sim3.units.filter(u => u.owner === 'A1');
+    return mine.length ? mine.reduce((s, u) => s + u.iy / FP, 0) / mine.length : -1;
+  };
+  const push = where(0), hold = where(1);
+  // A1's fort is at y=83, the tower at y=260, the enemy forts at y=437
+  assert.ok(push > 330, `push should march on the enemy fort, got y=${Math.round(push)}`);
+  assert.ok(hold > 150 && hold < 300, `hold should garrison the tower, got y=${Math.round(hold)}`);
+  assert.ok(push - hold > 120, `push and hold must be clearly different (${Math.round(push)} vs ${Math.round(hold)})`);
+  console.log(`clash hold: PASS (push y=${Math.round(push)}, hold y=${Math.round(hold)})`);
+}

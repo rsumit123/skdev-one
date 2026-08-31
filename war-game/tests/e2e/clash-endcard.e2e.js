@@ -33,8 +33,11 @@ const { chromium } = require(process.env.PLAYWRIGHT_PKG || '@playwright/test');
   ok(clock.on,'the end card appears on a clock finish');
   ok(/time ran out/i.test(clock.card),'it says the clock ran out');
   ok(/more fort health/i.test(clock.card),'and that health decides it');
-  ok(/A 171%/.test(clock.card)&&/B 148%/.test(clock.card),
-    'showing both totals so the result can be checked');
+  ok(/171%/.test(clock.card)&&/148%/.test(clock.card),
+    'showing both team totals so the result can be checked');
+  ok(/71%/.test(clock.card)&&/48%/.test(clock.card),
+    'broken down per fort');
+  ok(/You/.test(clock.card),'and naming the commanders, not slot codes');
   // the compact HUD now drops the scoreboard entirely - fort health lives on the
   // battlefield - so the winner is carried by the end card, not that bar
   ok(/Team A . Winner/i.test(clock.card)||/winner/i.test(clock.card),
@@ -44,7 +47,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_PKG || '@playwright/test');
   const razed=await play(()=>{
     BREACH_SIM_DEBUG.bases.forEach(x=>{ if(x.team===1){ x.ihp=0; x.alive=false; } });
   });
-  ok(/both destroyed/i.test(razed.card),'a fort kill says the forts were destroyed');
+  ok(/forts were destroyed/i.test(razed.card),'a fort kill says the forts were destroyed');
   ok(!/time ran out/i.test(razed.card),'and does not claim the clock ran out');
   ok(clock.errs.length===0&&razed.errs.length===0,'no page errors');
   console.log(`\nEND CARD: ${pass} passed, ${fail} failed`);
