@@ -35,8 +35,10 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
   border-radius:14px;padding:8px 14px;font:600 9.5px var(--ui);letter-spacing:.09em;
   text-transform:uppercase;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .panel-toggle:active{transform:scale(.96)}
-#sbToggle{top:auto;bottom:-15px;left:50%;transform:translateX(-50%)}
-#sbToggle:active{transform:translateX(-50%) scale(.96)}
+/* off-centre on purpose: centred it covered the tower status line, which is
+   where "Battle over" is printed. */
+#sbToggle{top:auto;bottom:-15px;right:10px}
+#sbToggle:active{transform:scale(.96)}
 #ordToggle{top:-15px;left:50%;transform:translateX(-50%)}
 #ordToggle:active{transform:translateX(-50%) scale(.96)}
 .sb,.orders{position:relative}
@@ -47,6 +49,8 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
 .screen.hud-min .hprow .cn{display:none}
 .screen.hud-min .hprow .pct{font-size:10px;width:28px}
 .screen.hud-min .tw-detail{display:none}
+/* ...but the end-of-battle result is not a detail - always show it */
+.screen.hud-min .tw-detail.tw-final{display:inline}
 .screen.hud-min .sb .mid{padding-bottom:6px}
 /* --- compact orders: smaller unit tiles, tighter rows --- */
 .screen.orders-min .orders{padding:7px 10px calc(8px + env(safe-area-inset-bottom,0))}
@@ -106,6 +110,11 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
 .result-summary{margin-top:12px;max-width:240px;text-align:left;font-size:11px;color:var(--muted);line-height:1.6}
 .result-summary .result-team{color:var(--text);font-weight:700;margin-top:4px}
 .result-summary .result-winner{color:var(--gold)}
+/* why the battle ended. A timecap win with both forts standing is otherwise
+   unexplained - the player is simply told they won. */
+.result-summary .result-why{color:#cfd8e6;font-weight:600;margin:2px 0 8px;
+  padding-bottom:8px;border-bottom:1px solid #22344c}
+.result-summary .result-hp{color:var(--faint);font-weight:400}
 .net-status{position:absolute;top:48px;right:10px;z-index:20;padding:5px 10px;border-radius:14px;background:rgba(7,13,21,.9);border:1px solid #53677f;color:#f0dc9a;font-size:10px;letter-spacing:.04em}
 /* ---------- clash lobby ---------- */
 /* Covers the whole screen, not just the arena. Pinned inside .arena it only got
@@ -984,6 +993,26 @@ window.BreachSim=function(seed, humanSlots){
     const winner=result.winnerTeam!==undefined?result.winnerTeam:result.winner;
     if(sum){
       const teams=result.teams||{}; const lines=[];
+      // Explain the ending. A clock win with every fort still standing looks
+      // arbitrary otherwise: you are told you won and nothing says why.
+      const hp=result.hp;
+      if(hp){
+        const tot=t=>(hp[t?'B1':'A1']||0)+(hp[t?'B2':'A2']||0);
+        const razed=t=>[t?'B1':'A1',t?'B2':'A2'].every(k=>(hp[k]||0)<=0);
+        let why='';
+        if(razed(0)||razed(1)){
+          const out=razed(0)?0:1;
+          why='Team '+(out?'B':'A')+"'s forts were both destroyed.";
+        } else if(result.endedOnClock){
+          why = winner===-1
+            ? 'Time ran out dead level.'
+            : 'Time ran out - the team with more fort health left wins.';
+        }
+        if(why) lines.push('<div class="result-why">'+why+'</div>');
+        lines.push('<div class="result-hp">Fort health at the end &mdash; '
+          +'A '+tot(0)+'% ('+(hp.A1|0)+'+'+(hp.A2|0)+')'
+          +' &middot; B '+tot(1)+'% ('+(hp.B1|0)+'+'+(hp.B2|0)+')</div>');
+      }
       for(const team of [0,1]){ const raw=teams[team]||teams[String(team)]; const names=Array.isArray(raw)?raw.map(x=>typeof x==='string'?x:(x.name||x.displayName)).filter(Boolean):[]; if(names.length) lines.push('<div class="result-team '+(winner===team?'result-winner':'')+'">Team '+(team?'B':'A')+(winner===team?' · Winner':'')+'</div><div>'+names.join(' · ')+'</div>'); }
       if(!lines.length&&Array.isArray(result.slots)){ for(const x of result.slots){ const n=typeof x==='string'?x:(x.name||x.displayName); if(n) lines.push('<div>'+n+'</div>'); } }
       sum.innerHTML=lines.join('');
@@ -1350,6 +1379,7 @@ window.BreachSim=function(seed, humanSlots){
     document.querySelectorAll('.build .u').forEach(el=>{el.style.opacity=affordable(st0,el.dataset.t)?1:.45;});
     if(st0.over){ const w=st0.winner;
       held.textContent=w===0?'Team A wins':w===1?'Team B wins':'Draw';
+      held.classList.add('tw-final');
       held.style.color='#f0dc9a'; st.textContent='◈ Battle over'; st.style.color='#f0dc9a';
       const ec=document.getElementById('endcard');
       if(ec&&!ec.classList.contains('on')){ const et=ec.querySelector('.et');
@@ -1358,8 +1388,10 @@ window.BreachSim=function(seed, humanSlots){
         // Name who actually won. The client already knows every seat, so this
         // needs no round trip - the server records the result but never sends
         // one back, which is why the summary used to come up blank.
-        fillResultSummary({winnerTeam:w,teams:{0:['A1','A2'].map(s=>SLOTNAME[s]),
-                                               1:['B1','B2'].map(s=>SLOTNAME[s])}});
+        const hp={}; for(const bb of bases) hp[bb.id]=Math.max(0,Math.round(bb.ihp/10));
+        fillResultSummary({winnerTeam:w,hp:hp,
+          endedOnClock:(st0.clockLeft|0)<=0,
+          teams:{0:['A1','A2'].map(s=>SLOTNAME[s]),1:['B1','B2'].map(s=>SLOTNAME[s])}});
         setTimeout(()=>ec.classList.add('on'),900); } }
   }
   let towerA=0.5, last=0, perf=0;
