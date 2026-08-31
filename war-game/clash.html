@@ -24,6 +24,18 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
   .notch{display:block;position:absolute;top:9px;left:50%;transform:translateX(-50%);width:96px;height:20px;background:#05080f;border-radius:0 0 12px 12px;z-index:40}
   .sb{padding-top:22px!important}
 }
+/* Collapsed, the scoreboard goes away entirely: fort health and tower control
+   are drawn on the battlefield itself now, so the bar was covering the board to
+   repeat what the board already says. Only the clock stays, floating and
+   transparent. "Details" brings the full scoreboard back. */
+.screen.hud-min .sb{display:none}
+.screen.hud-min #sbToggle{top:calc(8px + env(safe-area-inset-top,0));bottom:auto}
+#clockPill{position:absolute;top:calc(6px + env(safe-area-inset-top,0));left:50%;
+  transform:translateX(-50%);z-index:8;display:none;flex-direction:column;align-items:center;
+  pointer-events:none;text-shadow:0 2px 6px rgba(0,0,0,.9)}
+.screen.hud-min #clockPill{display:flex}
+#clockPill b{font-family:var(--hd);font-weight:800;font-size:20px;letter-spacing:.03em;color:#f4f0e6}
+#clockPill span{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 /* ---------- compact/expanded HUD ----------
    The arena was losing roughly a third of the screen to the two chrome panels.
    Both now default to a compact form and expand on demand, so the board is big
@@ -86,14 +98,14 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
 /* The tag and the toast share row 1, one anchored left and one right. Both grow
    with their text - a long callsign plus a two-name tower message ran them into
    each other - so each is capped at just under half the width. */
-.you-tag{position:absolute;top:10px;left:10px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;font-weight:600;
+.you-tag{position:absolute;bottom:46px;left:10px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;font-weight:600;
   color:#fff;background:rgba(224,103,63,.88);border-radius:16px;padding:5px 11px;z-index:6;
   max-width:46%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.bonus-toast{position:absolute;top:10px;right:10px;font-size:10px;font-weight:600;
+.bonus-toast{position:absolute;bottom:46px;right:10px;font-size:10px;font-weight:600;
   color:#20180a;background:var(--gold);border-radius:16px;padding:5px 11px;z-index:6;
   max-width:46%;text-align:right}
 /* ---------- exit + end card ---------- */
-.exit-chip{position:absolute;top:48px;left:10px;z-index:6;font-size:10.5px;letter-spacing:.06em;
+.exit-chip{position:absolute;bottom:78px;left:10px;z-index:6;font-size:10.5px;letter-spacing:.06em;
   text-transform:uppercase;font-weight:600;color:#cfd8e6;text-decoration:none;
   background:rgba(7,13,21,.82);border:1px solid #23344b;border-radius:16px;padding:5px 11px}
 #endcard{position:absolute;inset:0;z-index:30;display:none;align-items:center;justify-content:center;
@@ -295,9 +307,10 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
       <div class="hprow"><span class="cn" id="nmB1">AI Commander</span><div class="hpbar"><i id="hpB1" style="width:100%;margin-left:auto;background:linear-gradient(270deg,#123152,#4d98cf)"></i></div><span class="pct" id="pcB1">100%</span></div>
       <div class="hprow"><span class="cn" id="nmB2">AI Commander</span><div class="hpbar"><i id="hpB2" style="width:100%;margin-left:auto;background:linear-gradient(270deg,#124f4d,#57c9b4)"></i></div><span class="pct" id="pcB2">100%</span></div>
     </div></div>
-  <button type="button" class="panel-toggle" id="sbToggle" aria-expanded="false">Details</button>
   </div>
+  <button type="button" class="panel-toggle" id="sbToggle" aria-expanded="false">Details</button>
   <div class="arena"><canvas id="game"></canvas>
+    <div id="clockPill"><b id="clk2">4:00</b><span id="twMini"></span></div>
     <div class="you-tag" id="youTag">◉ You · A1 (top)</div>
     <a class="exit-chip" href="./">← Breach</a>
     <div id="endcard"><div class="ec"><div class="et">Victory</div>
@@ -367,7 +380,7 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
    - Emits render events (shot/die/basedown); FX never feed back.
    Inputs per tick (slot-tagged, from the lockstep frame log):
      {op:'buy', slot:'A1', t:'inf'|'gun'|'at'|'tank'}
-     {op:'stance', slot:'B1', v:0|1}          (sets the SLOT'S TEAM stance)
+     {op:'stance', slot:'B1', v:0|1}          (sets THAT FORT'S stance)
      {op:'eco', slot:'A1'}                    (upgrade that fort's economy)
      {op:'convert', slot:'B2'}                (fort handed to AI, e.g. disconnect) */
 window.BreachSim=function(seed, humanSlots){
@@ -400,7 +413,11 @@ window.BreachSim=function(seed, humanSlots){
     {id:'B1',team:1,ix:61*FP, iy:437*FP,ihp:1000,alive:true,cd:24,bc:0,eco:0},
     {id:'B2',team:1,ix:299*FP,iy:437*FP,ihp:1000,alive:true,cd:28,bc:0,eco:0}];
   var BY={}; bases.forEach(function(b){BY[b.id]=b;});
-  var units=[], nextId=1, stanceT=[0,0], ctrl=512, holdTeam=-1, tick=0, over=false, winner=-1;
+  // Stance is per FORT, not per team. It used to be team-wide, which meant a
+  // model teammate reset a human's choice every decision window: you tapped
+  // Hold, and four seconds later A2 sent its own stance and your units marched
+  // off anyway. Your fort now obeys you and only you.
+  var units=[], nextId=1, stanceS={A1:0,A2:0,B1:0,B2:0}, ctrl=512, holdTeam=-1, tick=0, over=false, winner=-1;
   var TARGET={};   // slot -> chosen enemy fort id (or undefined = nearest)
   var rs=(seed>>>0)||1;
   function rnd(n){ rs^=(rs<<13); rs>>>=0; rs^=(rs>>>17); rs^=(rs<<5); rs>>>=0; return rs%n; }
@@ -447,7 +464,7 @@ window.BreachSim=function(seed, humanSlots){
     }
     // ---- inputs (deterministic order: exactly as logged) ----
     if(inputs) for(i=0;i<inputs.length;i++){ var inp=inputs[i]; if(!inp) continue;
-      if(inp.op==='stance'){ stanceT[teamOf(inp.slot)]=inp.v?1:0; }
+      if(inp.op==='stance'){ if(stanceS[inp.slot]!==undefined) stanceS[inp.slot]=inp.v?1:0; }
       else if(inp.op==='convert'){ delete HUMAN[inp.slot]; }
       else if(inp.op==='target'){
         var tb=inp.v&&BY[inp.v];
@@ -506,7 +523,7 @@ window.BreachSim=function(seed, humanSlots){
         // 4-minute draw with every base at 100%. It also made the Push button
         // and the attack-target picker silently inert. Push now always pushes;
         // the tower keeps its real reward, the income bonus.
-        var pushOn = tb && stanceT[u.team]===0;
+        var pushOn = tb && stanceS[u.owner]===0;
         var brawl = pushOn ? null : nearestFoe(u,CHASE_R);
         if(pushOn){ tgx=tb.ix; tgy=tb.iy; ref=tb; refBase=true; }
         else if(brawl){ tgx=brawl.ix; tgy=brawl.iy; ref=brawl; }   // contested: fight for the tower
@@ -581,7 +598,8 @@ window.BreachSim=function(seed, humanSlots){
   }
   function api_hash(){ var h=2166136261>>>0, i;
     function mix(v){ h^=(v>>>0)&0xffffffff; h=(h*16777619)>>>0; }
-    mix(tick); mix(ctrl); mix(stanceT[0]); mix(stanceT[1]); mix(rs);
+    mix(tick); mix(ctrl); mix(rs);
+    for(i=0;i<4;i++) mix(stanceS[['A1','A2','B1','B2'][i]]);
     for(i=0;i<4;i++){ var ts=['A1','B1','A2','B2'][i], tv=TARGET[ts];
       mix(tv?(tv.charCodeAt(0)*31+tv.charCodeAt(1)):0); }
     for(i=0;i<bases.length;i++){ mix(bases[i].ihp); mix(bases[i].bc); mix(bases[i].eco); mix(bases[i].alive?1:0); }
@@ -590,7 +608,8 @@ window.BreachSim=function(seed, humanSlots){
     return h; }
   return { FP:FP, units:units, bases:bases, targets:TARGET, tick:api_tick, hash:api_hash,
     state:function(){ var sc={}, se={}, si={}; bases.forEach(function(b){sc[b.id]=b.bc; se[b.id]=b.eco; si[b.id]=b.inc|0;});
-      return { slotCoins:sc, slotEco:se, slotInc:si, ecoCosts:ECO_COST.slice(), stance:stanceT.slice(), ctrl:ctrl, over:over, winner:winner,
+      return { slotCoins:sc, slotEco:se, slotInc:si, ecoCosts:ECO_COST.slice(), slotStance:{A1:stanceS.A1,A2:stanceS.A2,B1:stanceS.B1,B2:stanceS.B2},
+        stance:[stanceS.A1,stanceS.B1], ctrl:ctrl, over:over, winner:winner,
         clockLeft:Math.max(0,Math.ceil((CLOCK_TICKS-tick)/20)) }; } };
 };
 </script>
@@ -609,7 +628,11 @@ window.BreachSim=function(seed, humanSlots){
     DPR=Math.min(2.5,(window.devicePixelRatio||1)*(rect.width/W));
     cv.width=Math.round(W*DPR); cv.height=Math.round(H*DPR);
     TX=W/2; TY=H/2;
-    S2=H/SIMH; OX=W/2-180*S2; OY=H/2-260*S2;
+    // Leave a band top and bottom: the forts sit at the grid's corners and
+    // their health bars are drawn ABOVE them, so a grid that filled the box
+    // pushed the far side's bars off-screen and under the chrome.
+    const MARGIN=46;
+    S2=Math.max(1,(H-MARGIN*2))/SIMH; OX=W/2-180*S2; OY=H/2-260*S2;
     // bases cache their screen position, so refresh it against the new box
     if(typeof bases!=='undefined'&&bases) for(const b of bases){ b.x=gx2s(b.ix); b.y=gy2s(b.iy); }
   }
@@ -1304,6 +1327,22 @@ window.BreachSim=function(seed, humanSlots){
     ctx.save();ctx.globalAlpha=b.alive?1:.42;ctx.translate(b.x,b.y);ctx.rotate(b.rot*.4);
     const sc=108/im15.naturalWidth;ctx.scale(sc,sc);ctx.filter='brightness(.92) contrast(1.06)';
     ctx.drawImage(im15,-im15.naturalWidth*.5,-im15.naturalHeight*.56);ctx.filter='none';ctx.restore();
+    // Health on the fort itself, so the board tells you the state of the battle
+    // without a scoreboard covering a third of it.
+    const hpFrac=Math.max(0,Math.min(1,b.ihp/1000));
+    const bw=56, bx=b.x-bw/2, by=b.y-64;
+    ctx.save();
+    ctx.fillStyle='rgba(4,8,14,.72)';
+    ctx.beginPath(); ctx.roundRect?ctx.roundRect(bx-1.5,by-1.5,bw+3,9,4.5):ctx.rect(bx-1.5,by-1.5,bw+3,9);
+    ctx.fill();
+    ctx.fillStyle=b.alive?TC[b.team]:'rgba(150,150,150,.5)';
+    ctx.fillRect(bx,by,Math.max(0,bw*hpFrac),6);
+    ctx.strokeStyle='rgba(0,0,0,.45)';ctx.lineWidth=1;ctx.strokeRect(bx,by,bw,6);
+    ctx.fillStyle=b.alive?'#e9e3d2':'rgba(233,227,210,.55)';
+    ctx.font='700 9px '+HD; ctx.textAlign='center';
+    ctx.shadowColor='rgba(0,0,0,.85)'; ctx.shadowBlur=3;
+    ctx.fillText(b.alive?Math.round(hpFrac*100)+'%':'DOWN', b.x, by-4);
+    ctx.restore();
     // flag + label
     ctx.strokeStyle='rgba(222,214,188,.78)';ctx.lineWidth=1.35;ctx.beginPath();ctx.moveTo(b.x-3,b.y-28);ctx.lineTo(b.x-3,b.y-48);ctx.stroke();ctx.fillStyle=TC[b.team];ctx.beginPath();ctx.moveTo(b.x-3,b.y-48);ctx.lineTo(b.x+12,b.y-44);ctx.lineTo(b.x-3,b.y-40);ctx.closePath();ctx.fill();
     ctx.fillStyle=b.alive?'#f4f0e6':'rgba(255,255,255,.5)';ctx.font='700 14px '+HD;ctx.textAlign='center';ctx.shadowColor='rgba(0,0,0,.7)';ctx.shadowBlur=3;ctx.fillText(b.id,b.x,b.y-52);ctx.shadowBlur=0;if(b.alive) hpBar(b.x,b.y+40,52,Math.max(0,b.hp/100),b.team);
@@ -1314,6 +1353,16 @@ window.BreachSim=function(seed, humanSlots){
     const t=A15.tower2, sc=96/t.naturalHeight; ctx.save();ctx.translate(x,y);ctx.scale(sc,sc);ctx.filter='brightness(.92) contrast(1.06)';ctx.drawImage(t,-t.naturalWidth*.5,-t.naturalHeight*.66);ctx.filter='none';ctx.restore(); 
     // beacon
     const pulse=.6+.4*Math.sin(perf/260);ctx.save();ctx.globalAlpha=pulse;ctx.fillStyle='#ffe9a8';ctx.shadowColor='#ffd070';ctx.shadowBlur=9;ctx.beginPath();ctx.arc(x-1,y-48,2.2,0,6.28);ctx.fill();ctx.restore();
+    // who holds the tower, on the map
+    {const cw=64, cx=x-cw/2, cy=y+36, a=Math.max(0,Math.min(1,towerA));
+     ctx.save();
+     ctx.fillStyle='rgba(4,8,14,.72)';
+     ctx.beginPath(); ctx.roundRect?ctx.roundRect(cx-1.5,cy-1.5,cw+3,8,4):ctx.rect(cx-1.5,cy-1.5,cw+3,8);
+     ctx.fill();
+     ctx.fillStyle=TC[0]; ctx.fillRect(cx,cy,cw*a,5);
+     ctx.fillStyle=TC[1]; ctx.fillRect(cx+cw*a,cy,cw*(1-a),5);
+     ctx.strokeStyle='rgba(0,0,0,.45)';ctx.lineWidth=1;ctx.strokeRect(cx,cy,cw,5);
+     ctx.restore();}
     ctx.fillStyle='#f4f0e6';ctx.font='700 11px '+HD;ctx.textAlign='center';ctx.shadowColor='rgba(0,0,0,.8)';ctx.shadowBlur=3;ctx.fillText('TOWER',x,y+31);ctx.shadowBlur=0;
   }
   function drawUnit(u){
@@ -1386,7 +1435,11 @@ window.BreachSim=function(seed, humanSlots){
     txt('inc','+'+(incomePerTick*20/100).toFixed(1)+'/s income'+(holdMine?' · incl. tower':''));
     const ecoBtn=document.getElementById('ecoUpgrade');
     if(ecoBtn){ const next=st0.ecoCosts&&st0.ecoCosts[ecoLevel]; txt('ecoLevel','Lv '+ecoLevel); txt('ecoCost',next===undefined?'MAX':Math.round(next/100).toLocaleString()); ecoBtn.disabled=next===undefined||(st0.slotCoins[MYSLOT]||0)<next; }
-    const m=Math.floor(st0.clockLeft/60), sc=st0.clockLeft%60; txt('clk',m+':'+(sc<10?'0':'')+sc);
+    const m=Math.floor(st0.clockLeft/60), sc=st0.clockLeft%60, clock=m+':'+(sc<10?'0':'')+sc;
+    txt('clk',clock); txt('clk2',clock);
+    // the floating clock also carries the tower state, the one thing the map
+    // bar cannot spell out
+    txt('twMini', towerA>0.55?'Tower: Team A':towerA<0.45?'Tower: Team B':'Tower contested');
     document.querySelectorAll('.build .u').forEach(el=>{el.style.opacity=affordable(st0,el.dataset.t)?1:.45;});
     if(st0.over){ const w=st0.winner;
       held.textContent=w===0?'Team A wins':w===1?'Team B wins':'Draw';

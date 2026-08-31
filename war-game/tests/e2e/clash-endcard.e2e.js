@@ -35,7 +35,10 @@ const { chromium } = require(process.env.PLAYWRIGHT_PKG || '@playwright/test');
   ok(/more fort health/i.test(clock.card),'and that health decides it');
   ok(/A 171%/.test(clock.card)&&/B 148%/.test(clock.card),
     'showing both totals so the result can be checked');
-  ok(clock.held>0,'the winner line stays visible in the compact scoreboard');
+  // the compact HUD now drops the scoreboard entirely - fort health lives on the
+  // battlefield - so the winner is carried by the end card, not that bar
+  ok(/Team A . Winner/i.test(clock.card)||/winner/i.test(clock.card),
+    'the end card names the winning team');
 
   // 2. a fort kill explains itself differently
   const razed=await play(()=>{
