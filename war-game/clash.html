@@ -1251,7 +1251,9 @@ window.BreachSim=function(seed, humanSlots){
     const holdMine=(towerA>0.55?0:towerA<0.45?1:-1)===MYTEAM;
     const ecoLevel=(st0.slotEco&&st0.slotEco[MYSLOT])||0;
     const incomePerTick=30+ecoLevel*6+(holdMine?12:0);
-    txt('inc','+'+(incomePerTick*20/100).toFixed(1)+'/s'+(holdMine?' · tower bonus':''));
+    // say what the rate IS. Unlabelled next to the ECO row it read as the eco
+    // rate, so a Lv0 fort looked like it was already earning eco bonuses.
+    txt('inc','+'+(incomePerTick*20/100).toFixed(1)+'/s income'+(holdMine?' · incl. tower':''));
     const ecoBtn=document.getElementById('ecoUpgrade');
     if(ecoBtn){ const next=st0.ecoCosts&&st0.ecoCosts[ecoLevel]; txt('ecoLevel','Lv '+ecoLevel); txt('ecoCost',next===undefined?'MAX':Math.round(next/100).toLocaleString()); ecoBtn.disabled=next===undefined||(st0.slotCoins[MYSLOT]||0)<next; }
     const m=Math.floor(st0.clockLeft/60), sc=st0.clockLeft%60; txt('clk',m+':'+(sc<10?'0':'')+sc);
