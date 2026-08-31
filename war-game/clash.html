@@ -157,6 +157,19 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
   text-transform:uppercase;-webkit-tap-highlight-color:transparent;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .target-row button.on{border-color:var(--teamB);color:#dcefff;background:rgba(77,152,207,.16)}
 .target-row button.on.tA{border-color:var(--teamA);color:#ffdcd0;background:rgba(224,103,63,.16)}
+/* models-deciding chip. NB: the arena canvas is position:absolute, so this MUST be
+   positioned too - as a static block it rendered underneath the canvas and was
+   invisible, which is why the indicator never appeared in game. */
+#modelThinking{position:absolute;top:46px;left:50%;transform:translateX(-50%);z-index:9;display:none;
+  align-items:center;gap:7px;font-size:10.5px;letter-spacing:.05em;color:#e7dcb6;white-space:nowrap;
+  background:rgba(6,10,18,.9);border:1px solid rgba(240,220,154,.34);border-radius:16px;padding:5px 12px;
+  box-shadow:0 4px 14px rgba(0,0,0,.45)}
+#modelThinking.on{display:flex}
+#modelThinking .dots{display:inline-flex;gap:3px}
+#modelThinking .dots i{width:4px;height:4px;border-radius:50%;background:var(--gold);animation:mtb 1s infinite}
+#modelThinking .dots i:nth-child(2){animation-delay:.15s}
+#modelThinking .dots i:nth-child(3){animation-delay:.3s}
+@keyframes mtb{0%,60%,100%{opacity:.25}30%{opacity:1}}
 /* ---------- command deck ---------- */
 .orders{background:linear-gradient(180deg,rgba(4,9,15,.99),rgba(3,7,12,.995));border-top:1px solid #1e3048;padding:10px 12px calc(12px + env(safe-area-inset-bottom,0));box-shadow:0 -10px 26px rgba(0,0,0,.22)}
 .orders.model-paused{opacity:.42;pointer-events:none}
@@ -1053,7 +1066,7 @@ window.BreachSim=function(seed, humanSlots){
     const incomePerTick=30+ecoLevel*6+(holdMine?12:0);
     txt('inc','+'+(incomePerTick*20/100).toFixed(1)+'/s'+(holdMine?' · tower bonus':''));
     const ecoBtn=document.getElementById('ecoUpgrade');
-    if(ecoBtn){ const next=st0.ecoCosts&&st0.ecoCosts[ecoLevel]; txt('ecoLevel','Lv '+ecoLevel); txt('ecoCost',next===undefined?'MAX':next.toLocaleString()); ecoBtn.disabled=next===undefined||(st0.slotCoins[MYSLOT]||0)<next; }
+    if(ecoBtn){ const next=st0.ecoCosts&&st0.ecoCosts[ecoLevel]; txt('ecoLevel','Lv '+ecoLevel); txt('ecoCost',next===undefined?'MAX':Math.round(next/100).toLocaleString()); ecoBtn.disabled=next===undefined||(st0.slotCoins[MYSLOT]||0)<next; }
     const m=Math.floor(st0.clockLeft/60), sc=st0.clockLeft%60; txt('clk',m+':'+(sc<10?'0':'')+sc);
     document.querySelectorAll('.build .u').forEach(el=>{el.style.opacity=(st0.slotCoins[MYSLOT]||0)>=TYPES[el.dataset.t].cost*100?1:.45;});
     if(st0.over){ const w=st0.winner;

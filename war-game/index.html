@@ -172,8 +172,14 @@ body:not(.live) #sheet{display:none}
 .public-mast-tools{display:flex;align-items:center;gap:10px}
 .public-menu-button{border:1px solid #4a5560;background:#0a0e13;color:#d4dbe1;padding:8px 12px;
   min-width:64px;cursor:pointer;text-transform:uppercase;letter-spacing:.08em;font-size:10px}
-.public-menu-panel{display:flex;justify-content:flex-end;gap:8px;border-bottom:1px solid var(--rule);
-  padding:8px 0;background:#080c10}
+.public-menu-panel{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:8px;
+  border-bottom:1px solid var(--rule);padding:8px 0;background:#080c10}
+@media(max-width:720px){
+  /* six items never fit one row on a phone: they were clipped off the left edge */
+  .public-menu-panel{justify-content:stretch;gap:6px}
+  .public-menu-panel .public-quiet{flex:1 1 calc(50% - 3px);min-width:0;padding:11px 8px;
+    font-size:12px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+}
 .public-menu-panel[hidden],.public-menu-button[hidden],#btnSetupOpen[hidden],#btnSetupOpen2[hidden]{display:none!important}
 .public-screen{display:none;flex:1;min-height:0;padding:18px 0}
 .public-screen.on{display:flex;flex-direction:column}
