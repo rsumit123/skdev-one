@@ -7,6 +7,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_PKG || '@playwright/test');
   await p.addInitScript(()=>{try{localStorage.setItem('breach.pubapi','http://127.0.0.1:8050');}catch(e){}});
   await p.goto('http://127.0.0.1:8055/clash.html',{waitUntil:'load'});
   await p.click('#clSolo');
+  await p.waitForFunction(()=>!document.getElementById('clRoom').hidden,{timeout:20000});
+  await p.click('#clStart');
   await p.waitForFunction(()=>window.BREACH_SIM_DEBUG,{timeout:20000});
   await p.waitForTimeout(1200);
   const btns=await p.evaluate(()=>[...document.querySelectorAll('#targetBtns button')].map(b=>b.textContent));

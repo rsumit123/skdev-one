@@ -81,7 +81,8 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
   padding:12px;border-radius:10px;border:0;background:linear-gradient(180deg,#f0dc9a,#c9ad5f);color:#20180a;cursor:pointer;display:block;width:100%}
 .cl-secondary{font-family:var(--hd);font-weight:700;text-transform:uppercase;letter-spacing:.05em;font-size:13px;
   padding:11px;border-radius:10px;border:1px solid #2a3d58;background:rgba(7,13,21,.9);color:var(--text);cursor:pointer;display:block;width:100%;margin-top:9px}
-.cl-join{display:flex;gap:7px;margin-top:9px}
+.cl-hint{font-size:11px;line-height:1.45;color:var(--faint);margin-top:9px;text-align:center}
+.cl-join{display:flex;gap:7px;margin-top:11px}
 .cl-join input{flex:1;min-width:0;padding:10px;border-radius:10px;border:1px solid #2a3d58;background:rgba(0,0,0,.35);
   color:#fff;font-size:17px;letter-spacing:4px;text-transform:uppercase;text-align:center}
 .cl-join button{font-family:var(--hd);font-weight:700;text-transform:uppercase;font-size:13px;padding:0 18px;
@@ -148,6 +149,7 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
 .seat-take:active{transform:scale(.95)}
 .seat-take[disabled]{opacity:.4;pointer-events:none}
 .target-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.target-row[hidden]{display:none}   /* display:flex would otherwise beat the hidden attribute */
 .target-row .tr-label{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);flex:none}
 .target-row .tr-btns{display:flex;gap:6px;flex:1}
 .target-row button{flex:1;font-size:11px;font-weight:700;letter-spacing:.03em;padding:7px 6px;border-radius:8px;
@@ -208,8 +210,9 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
       <div class="cl-title">Clash Arena</div>
       <div class="cl-sub">2v2 · four forts · humans + AI · beta</div>
       <div id="clMenu">
-        <button class="cl-primary" id="clSolo">Play vs models</button>
-        <button class="cl-secondary" id="clCreate">Create room</button>
+        <button class="cl-primary" id="clSolo">New battle</button>
+        <div class="cl-hint">Pick your model opponents on the next screen. Playing with
+        friends? Share the room code shown there.</div>
         <div class="cl-join"><input id="clCode" maxlength="6" placeholder="CODE"
           autocomplete="off" autocapitalize="characters" spellcheck="false"><button id="clJoin">Join</button></div>
       </div>
@@ -221,7 +224,7 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
         </div>
         <div id="clSlots" hidden></div>
         <button class="cl-primary" id="clStart" hidden>Start battle</button>
-        <div class="cl-wait" id="clWait">Empty seats are played by the chosen model. Tap <b>+</b> on a seat to play it yourself.</div>
+        <div class="cl-wait" id="clWait">Pick a model for each empty seat, or share the room code to bring friends in. Tap <b>+</b> on a seat to play it yourself.</div>
       </div>
       <div class="cl-msg" id="clMsg"></div>
     </div></div>
@@ -690,7 +693,7 @@ window.BreachSim=function(seed, humanSlots){
   }
   async function clCreate(autoStart){
     autoStart=autoStart===true;   // guard against an event object being passed in
-    const btn=document.getElementById(autoStart?'clSolo':'clCreate'); clMsg('Connecting…',true); clBusy(btn,true);
+    const btn=document.getElementById('clSolo'); clMsg('Connecting…',true); clBusy(btn,true);
     try{ const r=await withRetry(async()=>{ await ensureSocket(); return emitAck('clash:create',{}); });
       if(!r.ok){clMsg(ERR[r.code]||'Could not create the room. Tap to try again.');return;}
       clMsg(''); AMHOST=true; MYSLOT=r.you; MYTEAM=teamOf(MYSLOT); CLASH_CODE=r.room&&r.room.code||''; renderRoom(r.room);
@@ -792,8 +795,9 @@ window.BreachSim=function(seed, humanSlots){
     } else netStatus('Reconnect failed — battle may have ended');
     netResuming=false;
   }
-  document.getElementById('clSolo').onclick=()=>clCreate(true);
-  document.getElementById('clCreate').onclick=()=>clCreate(false);   // never pass the MouseEvent: it is truthy and would auto-start
+  // Both entry points open the SAME lobby: auto-starting hid the model dropdowns,
+  // so "solo" silently meant "always three Nova Lites" and could never be joined.
+  document.getElementById('clSolo').onclick=()=>clCreate(false);
   document.getElementById('clJoin').onclick=clJoin;
   document.getElementById('clStart').onclick=clStart;
   document.getElementById('clCopy').onclick=async()=>{
