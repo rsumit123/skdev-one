@@ -24,6 +24,37 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
   .notch{display:block;position:absolute;top:9px;left:50%;transform:translateX(-50%);width:96px;height:20px;background:#05080f;border-radius:0 0 12px 12px;z-index:40}
   .sb{padding-top:22px!important}
 }
+/* ---------- compact/expanded HUD ----------
+   The arena was losing roughly a third of the screen to the two chrome panels.
+   Both now default to a compact form and expand on demand, so the board is big
+   while the detail stays one tap away. Purely presentational - no game state. */
+.panel-toggle{position:absolute;z-index:12;display:flex;align-items:center;gap:4px;
+  background:rgba(8,14,22,.92);border:1px solid #23344b;color:var(--muted);
+  border-radius:11px;padding:2px 8px;font:600 9px var(--ui);letter-spacing:.09em;
+  text-transform:uppercase;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.panel-toggle:active{transform:scale(.96)}
+#sbToggle{top:auto;bottom:-11px;left:50%;transform:translateX(-50%)}
+#sbToggle:active{transform:translateX(-50%) scale(.96)}
+#ordToggle{top:-11px;left:50%;transform:translateX(-50%)}
+#ordToggle:active{transform:translateX(-50%) scale(.96)}
+.sb,.orders{position:relative}
+/* --- compact scoreboard: keep both bases readable, drop the words --- */
+.screen.hud-min .sb .side{padding:6px 10px 7px}
+.screen.hud-min .sb .side .tt{font-size:12px}
+.screen.hud-min .hpwrap{gap:3px;margin-top:4px}
+.screen.hud-min .hprow .cn{display:none}
+.screen.hud-min .hprow .pct{font-size:10px;width:28px}
+.screen.hud-min .tw-detail{display:none}
+.screen.hud-min .sb .mid{padding-bottom:6px}
+/* --- compact orders: smaller unit tiles, tighter rows --- */
+.screen.orders-min .orders{padding:7px 10px calc(8px + env(safe-area-inset-bottom,0))}
+.screen.orders-min .build{gap:6px}
+.screen.orders-min .build .u{min-height:58px}
+.screen.orders-min .build .u .n{font-size:11px}
+.screen.orders-min .build .u .c{font-size:10px;margin-top:1px}
+.screen.orders-min .eco{margin-bottom:6px}
+.screen.orders-min .eco-upgrade{padding:6px 10px;margin-bottom:6px}
+.screen.orders-min .target-row{margin-bottom:6px}
 /* ---------- scoreboard ---------- */
 .sb{display:flex;align-items:stretch;background:rgba(3,7,12,.975);border-bottom:1px solid #18263a;padding-top:env(safe-area-inset-top,0)}
 .sb .side{flex:1;padding:10px 12px 9px;min-width:0}
@@ -224,11 +255,12 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
     <div class="mid"><span class="clk" id="clk">4:00</span><span class="tl">Tower</span>
       <div class="towerbar"><span class="a" id="twA" style="width:50%"></span><span class="b" id="twB" style="width:50%"></span></div>
       <span class="state" id="twState">◈ Neutral</span>
-      <span class="held" id="twHeld">—</span></div>
+      <span class="held tw-detail" id="twHeld">—</span></div>
     <div class="side B"><div class="tt">Team B</div><div class="hpwrap">
       <div class="hprow"><span class="cn" id="nmB1">AI Commander</span><div class="hpbar"><i id="hpB1" style="width:100%;margin-left:auto;background:linear-gradient(270deg,#123152,#4d98cf)"></i></div><span class="pct" id="pcB1">100%</span></div>
       <div class="hprow"><span class="cn" id="nmB2">AI Commander</span><div class="hpbar"><i id="hpB2" style="width:100%;margin-left:auto;background:linear-gradient(270deg,#124f4d,#57c9b4)"></i></div><span class="pct" id="pcB2">100%</span></div>
     </div></div>
+  <button type="button" class="panel-toggle" id="sbToggle" aria-expanded="false">Details</button>
   </div>
   <div class="arena"><canvas id="game"></canvas>
     <div class="you-tag" id="youTag">◉ You · A1 (top)</div>
@@ -247,6 +279,7 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
     <div id="netStatus" class="net-status" aria-live="polite" hidden></div>
   </div>
   <div class="orders">
+    <button type="button" class="panel-toggle" id="ordToggle" aria-expanded="false">Bigger orders</button>
     <div class="target-row" id="targetRow" hidden>
       <span class="tr-label">Attack</span>
       <span class="tr-btns" id="targetBtns"></span>
@@ -401,7 +434,14 @@ window.BreachSim=function(seed, humanSlots){
         tgx=CX-nx*(46+10)+Math.floor(-ny*u.lane/FP);
         tgy=CY-ny*(46+10)+Math.floor( nx*u.lane/FP);
       } else {
-        var pushOn = tb && stanceT[u.team]===0 && hold===u.team;
+        // Holding the tower used to be a precondition for attacking at all, so a
+        // team that camped it on 'hold' stance froze the whole match: it never
+        // advanced (it was holding) and the other team COULD never advance (it
+        // did not hold the tower). Measured across seeds that is a guaranteed
+        // 4-minute draw with every base at 100%. It also made the Push button
+        // and the attack-target picker silently inert. Push now always pushes;
+        // the tower keeps its real reward, the income bonus.
+        var pushOn = tb && stanceT[u.team]===0;
         var brawl = pushOn ? null : nearestFoe(u,CHASE_R);
         if(pushOn){ tgx=tb.ix; tgy=tb.iy; ref=tb; refBase=true; }
         else if(brawl){ tgx=brawl.ix; tgy=brawl.iy; ref=brawl; }   // contested: fight for the tower
@@ -460,7 +500,11 @@ window.BreachSim=function(seed, humanSlots){
       var hx=u.ix-CX, hy=u.iy-CY;
       if(hx*hx+hy*hy < HOLD_R*HOLD_R){ if(u.team) nb++; else na++; } }
     var tot=na+nb;
-    if(tot>0){ var target=Math.floor(na*1024/tot); ctrl+=Math.floor((target-ctrl)/16); }
+    // Math.floor rounds a negative delta away from zero and a positive one
+    // toward it, so every near-tie contest bled control toward team B and
+    // never toward A. Truncate toward zero instead - symmetric, still integer.
+    if(tot>0){ var target=Math.floor(na*1024/tot), d=target-ctrl;
+      ctrl+=(d>=0?Math.floor(d/16):-Math.floor(-d/16)); }
     // ---- end conditions ----
     if(!teamAlive(0)||!teamAlive(1)||tick>=CLOCK_TICKS){
       over=true;
@@ -488,14 +532,25 @@ window.BreachSim=function(seed, humanSlots){
 <script>
 (function(){
   const cv=document.getElementById('game'), ctx=cv.getContext('2d');
-  const rect=cv.parentElement.getBoundingClientRect();
-  const W=360, H=Math.round(W*Math.max(1.0,Math.min(1.6,rect.height/rect.width)));
-  const DPR=Math.min(2.5,(window.devicePixelRatio||1)*(rect.width/W));
-  cv.width=Math.round(W*DPR); cv.height=Math.round(H*DPR);
+  // These used to be consts measured exactly once, so the arena never re-fitted
+  // its box - collapsing a HUD panel (or rotating the device) left the canvas
+  // drawing at the old aspect and everything stretched. fit() recomputes them.
+  const W=360;
+  let H, DPR, TX, TY, S2, OX, OY;
+  function fit(){
+    const rect=cv.parentElement.getBoundingClientRect();
+    if(!rect.width||!rect.height) return;
+    H=Math.round(W*Math.max(1.0,Math.min(1.6,rect.height/rect.width)));
+    DPR=Math.min(2.5,(window.devicePixelRatio||1)*(rect.width/W));
+    cv.width=Math.round(W*DPR); cv.height=Math.round(H*DPR);
+    TX=W/2; TY=H/2;
+    S2=H/SIMH; OX=W/2-180*S2; OY=H/2-260*S2;
+    // bases cache their screen position, so refresh it against the new box
+    if(typeof bases!=='undefined'&&bases) for(const b of bases){ b.x=gx2s(b.ix); b.y=gy2s(b.iy); }
+  }
   const A15={}; for(const k in window.BREACH_ART){ const im=new Image(); im.src=window.BREACH_ART[k]; A15[k]=im; }
   const A15READY=Object.values(A15).map(im=>im.decode?im.decode().catch(()=>{}):new Promise(r=>{im.onload=im.onerror=r;}));
   const TC=['#e0673f','#4d98cf'];
-  const TX=W/2, TY=H/2;
   const FX={flash:[], smoke:[], boom:[], tracer:[], dirt:[], dust:[], tracks:[]};
   let shake=0;
 
@@ -522,7 +577,21 @@ window.BreachSim=function(seed, humanSlots){
   const pending=[];   // solo-mode input queue
   const BART={A1:{art:'base_sandbag',rot:-0.018},A2:{art:'base_concrete',rot:0.018},
               B1:{art:'base_depot',rot:0.014},B2:{art:'base_dugin',rot:-0.014}};
-  const FPX=256, SIMW=360, SIMH=520, S2=H/SIMH, OX=W/2-180*S2, OY=H/2-260*S2;
+  const FPX=256, SIMW=360, SIMH=520;
+  fit();                       // now that SIMH exists, take the first measurement
+  // Watch the box rather than guessing when it changes: this covers collapsing a
+  // HUD panel, rotating the device, and the first layout settling after fonts
+  // load - the last of which left the very first measurement slightly stale.
+  if(typeof ResizeObserver==='function'){
+    let last='';
+    new ResizeObserver(()=>{
+      const r=cv.parentElement.getBoundingClientRect();
+      const key=Math.round(r.width)+'x'+Math.round(r.height);
+      if(key!==last){ last=key; fit(); }
+    }).observe(cv.parentElement);
+  }
+  addEventListener('resize',fit);
+  addEventListener('orientationchange',fit);
   // Everyone plays from the bottom of their own screen. Team A holds the top of
   // the shared grid, so an A player's camera is rotated 180 degrees. This is a
   // RENDER transform only - the sim and its hash run on ix/iy, untouched, so
@@ -887,6 +956,30 @@ window.BreachSim=function(seed, humanSlots){
   }
   // Both entry points open the SAME lobby: auto-starting hid the model dropdowns,
   // so "solo" silently meant "always three Nova Lites" and could never be joined.
+  // ---- compact / expanded HUD panels -------------------------------------
+  // Both chrome panels start compact so the arena gets the height; either can be
+  // expanded for the full detail and the choice is remembered per device.
+  const PANELS=[{key:'breach.clash.sbOpen', cls:'hud-min', btn:'sbToggle',
+                 open:'Hide details', shut:'Details'},
+                {key:'breach.clash.ordOpen', cls:'orders-min', btn:'ordToggle',
+                 open:'Smaller orders', shut:'Bigger orders'}];
+  function applyPanel(p,expanded){
+    const screen=document.querySelector('.screen'), btn=document.getElementById(p.btn);
+    screen.classList.toggle(p.cls,!expanded);
+    if(btn){ btn.textContent=expanded?p.open:p.shut; btn.setAttribute('aria-expanded',expanded?'true':'false'); }
+    try{ localStorage.setItem(p.key,expanded?'1':'0'); }catch(e){}
+    // the canvas is sized from its box, so it must be remeasured after the
+    // panels change height or the arena renders at the old size
+    if(typeof fit==='function') fit();
+  }
+  for(const p of PANELS){
+    let expanded=false;
+    try{ expanded=localStorage.getItem(p.key)==='1'; }catch(e){}
+    applyPanel(p,expanded);
+    const btn=document.getElementById(p.btn);
+    if(btn) btn.addEventListener('click',()=>applyPanel(p,
+      btn.getAttribute('aria-expanded')!=='true'));
+  }
   document.getElementById('clSolo').onclick=()=>clCreate(false);
   document.getElementById('clJoin').onclick=clJoin;
   document.getElementById('clStart').onclick=clStart;
