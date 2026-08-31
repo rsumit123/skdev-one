@@ -351,12 +351,13 @@ window.BreachSim=function(seed, humanSlots){
         at  :{spd:218,hp:200,dmg:40,db:7,rng:34,cd:10,cost:2800,turn:11,rad:7, amin:90},
         tank:{spd:141,hp:600,dmg:80,db:14,rng:38,cd:19,cost:4500,turn:5, rad:11,amin:38}};
   var HUMAN={}; (humanSlots&&humanSlots.length?humanSlots:['A1']).forEach(function(s){HUMAN[s]=1;});
-  // Repriced 2026-08-31 AFTER the counter matrix landed, because that changed
-  // what a coin is worth. Measured against an identical army-only team:
-  // 36/63/90 lost 0/8 (a trap), 18/32/45 won 8/8 and was fully maxed by 43s
-  // (an auto-buy, not a decision), 21/37/52 wins 6/10 and is never maxed
-  // inside a match - so it stays a choice for the whole game.
-  var ECO_COST=[2100,3700,5200], bases=[
+  // 36/63/90 - the original prices, restored on the owner's call after playing
+  // both. The A/B that argued for cheaper prices only ever compared "always buy
+  // eco first" against "never buy eco"; it could not see the thing that actually
+  // matters, which is a commander choosing WHEN to invest. At 21 the upgrade
+  // costs a fifth of the opening bank and is a reflex; at 36 it costs most of it
+  // and you have to give up the opening units to take it.
+  var ECO_COST=[3600,6300,9000], bases=[
     {id:'A1',team:0,ix:61*FP, iy:83*FP, ihp:1000,alive:true,cd:34,bc:5000,eco:0},
     {id:'A2',team:0,ix:299*FP,iy:83*FP, ihp:1000,alive:true,cd:20,bc:5000,eco:0},
     {id:'B1',team:1,ix:61*FP, iy:437*FP,ihp:1000,alive:true,cd:24,bc:5000,eco:0},

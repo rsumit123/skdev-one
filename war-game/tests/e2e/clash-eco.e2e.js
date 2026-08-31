@@ -9,15 +9,15 @@ const ctx = { window: {}, Math };
 vm.runInNewContext(html.slice(start, end), ctx);
 const sim = ctx.window.BreachSim(1234, ['A1', 'B1']);
 
-// repriced 2026-08-31 after the counter matrix: 36/63/90 was a trap (0/8),
-// 18/32/45 an auto-buy maxed by 43s (8/8); these win 6/10 and never max out
-assert.deepStrictEqual(Array.from(sim.state().ecoCosts), [2100, 3700, 5200]);
+// the original prices, restored: at anything cheaper the upgrade costs a small
+// fraction of the 50-coin opening bank and stops being a decision at all
+assert.deepStrictEqual(Array.from(sim.state().ecoCosts), [3600, 6300, 9000]);
 assert.deepStrictEqual(JSON.parse(JSON.stringify(sim.state().slotEco)), { A1: 0, A2: 0, B1: 0, B2: 0 });
 const before = sim.state().slotCoins.A1;
 const hash0 = sim.hash();
 sim.tick([{ op: 'eco', slot: 'A1' }]);
 assert.strictEqual(sim.state().slotEco.A1, 1);
-assert.strictEqual(sim.state().slotCoins.A1, before - 2100 + 36);
+assert.strictEqual(sim.state().slotCoins.A1, before - 3600 + 36);
 assert.strictEqual(sim.state().slotEco.B1, 0, 'eco upgrade must not affect teammate');
 assert.notStrictEqual(sim.hash(), hash0, 'eco state is included in lockstep hash');
 // Max level is deterministic and cannot spend beyond the third upgrade.
