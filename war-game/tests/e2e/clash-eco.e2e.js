@@ -52,3 +52,27 @@ assert.ok(VS.inf.tank < 100, 'small arms are weak against armour');
 assert.ok(VS.gun.inf > 100, 'gunners shred infantry');
 assert.ok(VS.tank.gun > 100, 'armour rolls over gunners');
 console.log('clash counters: PASS');
+
+// ---- stance is per fort ---------------------------------------------------
+// It used to be team-wide, so a model teammate's stance command overwrote a
+// human's every decision window: you tapped Hold and your units marched anyway.
+{
+  const c2 = { window: {}, Math };
+  vm.runInNewContext(html.slice(start, end), c2);
+  const sim2 = c2.window.BreachSim(9, ['A1', 'A2', 'B1', 'B2']);
+  sim2.tick([{ op: 'stance', v: 1, slot: 'A1' }]);
+  assert.strictEqual(sim2.state().slotStance.A1, 1, 'A1 holds');
+  // the teammate model does what it does every four seconds
+  sim2.tick([{ op: 'stance', v: 0, slot: 'A2' }]);
+  assert.strictEqual(sim2.state().slotStance.A1, 1,
+    "a teammate's stance must not overwrite yours");
+  assert.strictEqual(sim2.state().slotStance.A2, 0, 'and their own fort follows them');
+  // an enemy cannot touch it either
+  sim2.tick([{ op: 'stance', v: 0, slot: 'B1' }]);
+  assert.strictEqual(sim2.state().slotStance.A1, 1, 'nor can the enemy');
+  // stance is part of the lockstep hash, per fort
+  const h1 = sim2.hash();
+  sim2.tick([{ op: 'stance', v: 0, slot: 'A1' }]);
+  assert.notStrictEqual(sim2.hash(), h1, 'stance changes are hashed');
+  console.log('clash stance: PASS');
+}
