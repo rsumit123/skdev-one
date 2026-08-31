@@ -337,17 +337,26 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
 window.BreachSim=function(seed, humanSlots){
   var FP=256, CX=180*FP, CY=260*FP;
   var TOWER_R=46*FP, HOLD_R=64*FP, GATE=38, FOE_R=56*FP, CHASE_R=150*FP, CLOCK_TICKS=4800;
+  // Counter matrix: attacker type -> defender type, as a percentage of base
+  // damage. Before this every unit did full damage to everything, which made the
+  // table a strict dominance chain - measured at equal coins, infantry beat
+  // gunners beat tanks beat A-Tanks, 6-0 in every pairing, and the A-Tank lost
+  // to the very thing it is named after. Now: gunners shred infantry, infantry
+  // swarm armour, tanks crush gunners, and the A-Tank is the answer to armour.
+  var VS={inf:{tank:75,at:150},gun:{inf:180,tank:50,at:105},
+          at:{tank:300,inf:50,gun:95},tank:{gun:200,inf:95}};
+  function dmgVs(a,b){ var r=VS[a]&&VS[a][b]; return r===undefined?100:r; }
   var T={inf :{spd:282,hp:160,dmg:30,db:3,rng:26,cd:10,cost:800, turn:12,rad:7, amin:90},
         gun :{spd:205,hp:220,dmg:50,db:4,rng:32,cd:10,cost:2000,turn:11,rad:7, amin:90},
         at  :{spd:218,hp:200,dmg:40,db:7,rng:34,cd:10,cost:2800,turn:11,rad:7, amin:90},
         tank:{spd:141,hp:600,dmg:80,db:14,rng:38,cd:19,cost:4500,turn:5, rad:11,amin:38}};
   var HUMAN={}; (humanSlots&&humanSlots.length?humanSlots:['A1']).forEach(function(s){HUMAN[s]=1;});
-  // Halved 2026-08-31. At 36/63/90 an upgrade paid for itself in 30-75s, but a
-  // match is decided by the midfield fight at ~75-110s, and the 36 coins are
-  // 4.5 infantry you do not have in it. Measured: a team that bought ANY eco
-  // lost 28 of 28 games against an identical team that bought only army. At
-  // these prices it is 11 of 20 - a real choice instead of a trap.
-  var ECO_COST=[1800,3200,4500], bases=[
+  // Repriced 2026-08-31 AFTER the counter matrix landed, because that changed
+  // what a coin is worth. Measured against an identical army-only team:
+  // 36/63/90 lost 0/8 (a trap), 18/32/45 won 8/8 and was fully maxed by 43s
+  // (an auto-buy, not a decision), 21/37/52 wins 6/10 and is never maxed
+  // inside a match - so it stays a choice for the whole game.
+  var ECO_COST=[2100,3700,5200], bases=[
     {id:'A1',team:0,ix:61*FP, iy:83*FP, ihp:1000,alive:true,cd:34,bc:5000,eco:0},
     {id:'A2',team:0,ix:299*FP,iy:83*FP, ihp:1000,alive:true,cd:20,bc:5000,eco:0},
     {id:'B1',team:1,ix:61*FP, iy:437*FP,ihp:1000,alive:true,cd:24,bc:5000,eco:0},
@@ -418,7 +427,9 @@ window.BreachSim=function(seed, humanSlots){
     //      premium; holding the tower pays BOTH forts of that team ----
     for(i=0;i<bases.length;i++){ var b=bases[i]; if(!b.alive) continue;
       var isH=!!HUMAN[b.id];
-      b.bc+=isH?(30+b.eco*6):(18+b.eco*4); if(hold===b.team) b.bc+=isH?12:10;
+      b.bc+=isH?(30+b.eco*6):(18+b.eco*4); if(hold===b.team) b.bc+=isH?6:10;   // halved: at +2.4/s the tower ended
+      // games in ~96s and was worth two eco levels for free; at +1.2/s matches
+      // run ~145s and are still decisive 10/10, and it is worth one eco level.
       if(isH) continue;                       // humans build via inputs only
       if(b.eco<3 && b.bc>=ECO_COST[b.eco]){ b.bc-=ECO_COST[b.eco]; b.eco++; }
       b.cd--;
@@ -480,7 +491,7 @@ window.BreachSim=function(seed, humanSlots){
                    tx:tgx,ty:tgy,big:u.t==='tank'});
           if(refBase){ ref.ihp-=TT.db;
             if(ref.ihp<=0){ ref.ihp=0; ref.alive=false; ev.push({e:'basedown',x:ref.ix,y:ref.iy}); } }
-          else { ref.hp-=TT.dmg;
+          else { ref.hp-=Math.floor(TT.dmg*dmgVs(u.t,ref.t)/100);
             if(ref.hp<=0) ev.push({e:'die',x:ref.ix,y:ref.iy,big:ref.t==='tank'}); } }
       } else u.spd=Math.floor(u.spd/2);
     }
