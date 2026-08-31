@@ -15,7 +15,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_PKG || '@playwright/test');
   ok(pre.coins==='0'&&pre.inc==='—','pre-game coins 0, no fake eco (was 140 / +3.6/s eco 2)');
   ok(!/holds/.test(pre.held),'pre-game tower not "Team B holds" -> "'+pre.held+'"');
   // multiplayer: real names in the scoreboard
-  await A.p.click('#clCreate');
+  await A.p.click('#clSolo');   // single "New battle" entry now; the old #clCreate is gone
   await A.p.waitForFunction(()=>{const c=document.getElementById('clRoomCode').textContent;return c&&c.length===6&&c!=='------';},{timeout:20000});
   const code=await A.p.evaluate(()=>document.getElementById('clRoomCode').textContent);
   await B.p.fill('#clCode',code); await B.p.click('#clJoin');
@@ -25,7 +25,10 @@ const { chromium } = require(process.env.PLAYWRIGHT_PKG || '@playwright/test');
   await A.p.waitForTimeout(2500);
   const names=await A.p.evaluate(()=>['A1','A2','B1','B2'].map(s=>document.getElementById('nm'+s).textContent));
   ok(names[0]==='You','my slot shows "You" -> '+names[0]);
-  ok(names[1]==='AI Commander'&&names[3]==='AI Commander','empty slots show "AI Commander"');
+  // model seats name the model that is actually driving them, not a generic
+  // "AI Commander" placeholder - the player should know who they are facing.
+  const modelSeat=n=>!!n&&n!=='AI Commander'&&n!=='You'&&!/^[AB][12]$/.test(n);
+  ok(modelSeat(names[1])&&modelSeat(names[3]),'model seats name the real model -> "'+names[1]+'"');
   ok(names[2]&&names[2]!=='B1'&&names[2]!=='AI Commander','opponent shows their real name -> "'+names[2]+'"');
   const live=await A.p.evaluate(()=>({coins:+document.getElementById('coins').textContent,
     inc:document.getElementById('inc').textContent, clk:document.getElementById('clk').textContent}));

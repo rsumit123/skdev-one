@@ -21,8 +21,13 @@ const URL='http://127.0.0.1:8055/clash.html';
   ok(/^[A-Z0-9]{6}$/.test(code),'room code minted: '+code);
   await B.p.fill('#clCode',code); await B.p.click('#clJoin');
   await B.p.waitForFunction(()=>!document.getElementById('clRoom').hidden,{timeout:15000});
-  const slots=await A.p.evaluate(()=>[...document.querySelectorAll('#clSlots .nm')].map(e=>e.textContent));
-  ok(slots.filter(s=>s!=='AI commander').length===2,'2 humans + 2 AI slots shown');
+  // rows live under the per-team boxes now; a human row carries .nm, a model
+  // row carries the model picker instead.
+  const slots=await A.p.evaluate(()=>({
+    humans:[...document.querySelectorAll('#clTeamA .nm,#clTeamB .nm')].map(e=>e.textContent),
+    models:document.querySelectorAll('#clTeamA .model-select,#clTeamB .model-select').length}));
+  ok(slots.humans.length===2&&slots.models===2,
+    '2 humans + 2 model slots shown -> '+slots.humans.join(',')+' + '+slots.models+' models');
 
   console.log('3. Host starts — both go live in lockstep…');
   await A.p.click('#clStart');
@@ -64,10 +69,17 @@ const URL='http://127.0.0.1:8055/clash.html';
   const fAfter=await A.p.evaluate(()=>CLASH_NET.frame);
   ok(fAfter>fBefore,'A keeps advancing after B leaves ('+fBefore+' -> '+fAfter+')');
 
-  console.log('7. Solo mode still works…');
+  console.log('7. A one-player room (three model seats) still works…');
+  // "New battle" no longer auto-starts: it opens a lobby so a friend can join
+  // with the code. The host presses Start when they are done waiting.
   const S=await mk(); await S.p.click('#clSolo');
-  await S.p.waitForFunction(()=>window.BREACH_SIM_DEBUG&&BREACH_SIM_DEBUG.units.length>0,{timeout:8000});
-  ok(true,'solo battle runs');
+  await S.p.waitForFunction(()=>{const c=document.getElementById('clRoomCode').textContent;
+    return c&&c.length===6&&c!=='------';},{timeout:20000});
+  ok(await S.p.evaluate(()=>!document.getElementById('clStart').hidden),
+    'creating a room lands in the lobby with Start available, not mid-battle');
+  await S.p.click('#clStart');
+  await S.p.waitForFunction(()=>window.BREACH_SIM_DEBUG&&BREACH_SIM_DEBUG.units!==undefined,{timeout:15000});
+  ok(true,'battle runs with the remaining seats on models');
   ok(S.errs.length===0&&A.errs.length===0,'no page errors anywhere');
 
   console.log(`\nCLASH MULTIPLAYER E2E: ${pass} passed, ${fail} failed`);
