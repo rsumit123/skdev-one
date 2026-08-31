@@ -7,7 +7,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_PKG || '@playwright/test');
     await p.addInitScript(()=>{try{localStorage.setItem('breach.pubapi','http://127.0.0.1:8050');}catch(e){}});
     await p.goto('http://127.0.0.1:8055/clash.html',{waitUntil:'load'});return {p,errs};};
   const A=await mk(), B=await mk();
-  await A.p.click('#clCreate');
+  await A.p.click('#clSolo');
   await A.p.waitForFunction(()=>{const c=document.getElementById('clRoomCode').textContent;return c&&c.length===6&&c!=='------';},{timeout:20000});
   const code=await A.p.evaluate(()=>document.getElementById('clRoomCode').textContent);
   // team grouping present?

@@ -6,7 +6,9 @@ const { chromium } = require(process.env.PLAYWRIGHT_PKG || '@playwright/test');
   const p=await c.newPage();
   await p.addInitScript(()=>{try{localStorage.setItem('breach.pubapi','http://127.0.0.1:8050');}catch(e){}});
   await p.goto('http://127.0.0.1:8055/clash.html',{waitUntil:'load'});
-  await p.click('#clSolo');                       // vs models
+  await p.click('#clSolo');                       // opens the lobby
+  await p.waitForFunction(()=>!document.getElementById('clRoom').hidden,{timeout:20000});
+  await p.click('#clStart');
   await p.waitForFunction(()=>window.BREACH_SIM_DEBUG,{timeout:20000});
   ok(true,'match started vs model seats');
   // fast-forward the deterministic sim to a finish, then let the client report

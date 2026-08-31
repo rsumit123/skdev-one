@@ -15,7 +15,7 @@ const URL='http://127.0.0.1:8055/clash.html';
   ok(A.errs.length===0&&B.errs.length===0,'no page errors on load');
 
   console.log('2. A creates a room, B joins by code…');
-  await A.p.click('#clCreate');
+  await A.p.click('#clSolo');
   await A.p.waitForFunction(()=>{const c=document.getElementById('clRoomCode').textContent;return c&&c.length===6&&c!=='------';},{timeout:20000});
   const code=await A.p.evaluate(()=>document.getElementById('clRoomCode').textContent);
   ok(/^[A-Z0-9]{6}$/.test(code),'room code minted: '+code);
