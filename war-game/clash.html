@@ -28,14 +28,16 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
    The arena was losing roughly a third of the screen to the two chrome panels.
    Both now default to a compact form and expand on demand, so the board is big
    while the detail stays one tap away. Purely presentational - no game state. */
+/* 17px tall was a fingernail target - these sit on a panel edge on a phone, so
+   they get a real one. The chip stays visually small; the padding does the work. */
 .panel-toggle{position:absolute;z-index:12;display:flex;align-items:center;gap:4px;
   background:rgba(8,14,22,.92);border:1px solid #23344b;color:var(--muted);
-  border-radius:11px;padding:2px 8px;font:600 9px var(--ui);letter-spacing:.09em;
+  border-radius:14px;padding:8px 14px;font:600 9.5px var(--ui);letter-spacing:.09em;
   text-transform:uppercase;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .panel-toggle:active{transform:scale(.96)}
-#sbToggle{top:auto;bottom:-11px;left:50%;transform:translateX(-50%)}
+#sbToggle{top:auto;bottom:-15px;left:50%;transform:translateX(-50%)}
 #sbToggle:active{transform:translateX(-50%) scale(.96)}
-#ordToggle{top:-11px;left:50%;transform:translateX(-50%)}
+#ordToggle{top:-15px;left:50%;transform:translateX(-50%)}
 #ordToggle:active{transform:translateX(-50%) scale(.96)}
 .sb,.orders{position:relative}
 /* --- compact scoreboard: keep both bases readable, drop the words --- */
@@ -238,6 +240,30 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
 .eco-upgrade small{font:600 11px var(--ui);color:#d2bb77}.eco-upgrade:disabled{opacity:.42;cursor:not-allowed}.eco-upgrade:not(:disabled):active{transform:translateY(1px);background:rgba(240,220,154,.18)}
 .build .u{position:relative;min-height:96px;border-radius:9px;padding:6px 3px 6px;border:1px solid #263b55;background-color:#0a111b;box-shadow:inset 0 0 18px rgba(0,0,0,.32),0 2px 8px rgba(0,0,0,.18);overflow:hidden;background-size:cover!important;background-position:center;text-align:center;display:flex;flex-direction:column;justify-content:flex-end;cursor:pointer;user-select:none;-webkit-tap-highlight-color:transparent}
 .build .u:active{transform:scale(.97)}
+/* Order feedback. A tap used to do nothing visible whether it worked or not,
+   and an order the fort could not afford was dropped in silence - measured at
+   48% of one player's gun orders in a real match. */
+.build .u.ordered{animation:buy-ok .36s ease-out}
+@keyframes buy-ok{0%{transform:scale(1)}30%{transform:scale(.93)}100%{transform:scale(1)}}
+.build .u.ordered:before{content:"";position:absolute;inset:0;border-radius:9px;z-index:3;
+  border:2px solid var(--gold);animation:buy-ring .36s ease-out forwards;pointer-events:none}
+@keyframes buy-ring{0%{opacity:1}100%{opacity:0}}
+.build .u.refused{animation:buy-no .34s ease-in-out}
+@keyframes buy-no{0%,100%{transform:translateX(0)}18%{transform:translateX(-5px)}
+  52%{transform:translateX(5px)}80%{transform:translateX(-2px)}}
+.build .u.refused:before{content:"";position:absolute;inset:0;border-radius:9px;z-index:3;
+  border:2px solid #e0673f;animation:buy-ring .34s ease-out forwards;pointer-events:none}
+/* a queued order the sim has not executed yet */
+.build .u .q{position:absolute;top:4px;right:4px;z-index:4;min-width:16px;height:16px;
+  border-radius:9px;background:var(--gold);color:#20180a;font:700 10px/16px var(--ui);
+  text-align:center;padding:0 3px;display:none}
+.build .u.queued .q{display:block}
+/* sits ABOVE the panel-edge toggle, which is also centred on this seam */
+#orderMsg{position:absolute;left:50%;transform:translateX(-50%);top:-42px;z-index:13;
+  background:rgba(224,103,63,.95);color:#fff;font:600 10.5px var(--ui);letter-spacing:.04em;
+  border-radius:11px;padding:3px 10px;white-space:nowrap;opacity:0;transition:opacity .18s;
+  pointer-events:none}
+#orderMsg.on{opacity:1}
 .build .u:after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(1,4,8,.02) 0%,rgba(3,7,12,.12) 42%,rgba(3,7,12,.88) 70%,rgba(3,7,12,.98) 100%)}
 .build .u .g{display:none}
 .build .u .n,.build .u .c{position:relative;z-index:2}
@@ -280,6 +306,7 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
   </div>
   <div class="orders">
     <button type="button" class="panel-toggle" id="ordToggle" aria-expanded="false">Bigger orders</button>
+    <div id="orderMsg" role="status" aria-live="polite"></div>
     <div class="target-row" id="targetRow" hidden>
       <span class="tr-label">Attack</span>
       <span class="tr-btns" id="targetBtns"></span>
@@ -288,10 +315,10 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
       <div class="stance"><b class="on" data-st="push">⚔ Push</b><b data-st="hold">🛡 Hold tower</b></div></div>
     <button class="eco-upgrade" id="ecoUpgrade" type="button" disabled>⬆ Eco <span id="ecoLevel">Lv 0</span><small id="ecoCost">—</small></button>
     <div class="build">
-      <div class="u" data-t="inf"><div class="g">🪖</div><div class="n">Inf</div><div class="c">8</div></div>
-      <div class="u" data-t="gun"><div class="g">🔫</div><div class="n">Gun</div><div class="c">20</div></div>
-      <div class="u" data-t="at"><div class="g">🛡</div><div class="n">A-Tank</div><div class="c">28</div></div>
-      <div class="u" data-t="tank"><div class="g">💥</div><div class="n">Tank</div><div class="c">45</div></div>
+      <div class="u" data-t="inf"><span class="q"></span><div class="g">🪖</div><div class="n">Inf</div><div class="c">8</div></div>
+      <div class="u" data-t="gun"><span class="q"></span><div class="g">🔫</div><div class="n">Gun</div><div class="c">20</div></div>
+      <div class="u" data-t="at"><span class="q"></span><div class="g">🛡</div><div class="n">A-Tank</div><div class="c">28</div></div>
+      <div class="u" data-t="tank"><span class="q"></span><div class="g">💥</div><div class="n">Tank</div><div class="c">45</div></div>
     </div>
   </div>
     <div id="clashLobby"><div class="cl-card">
@@ -1021,10 +1048,57 @@ window.BreachSim=function(seed, humanSlots){
   document.getElementById('clCode').addEventListener('keydown',e=>{if(e.key==='Enter')clJoin();});
 
   // ---- player input -----------------------------------------------------------
+  // Orders you cannot afford used to be sent anyway and dropped by the simulator
+  // in silence - 48% of one player's gun orders in a real match, with no way to
+  // tell a working tap from a wasted one. Coins are checked against what is
+  // actually uncommitted, and every tap now answers.
+  const QUEUED={};                       // unit type -> orders sent, not yet executed
+  function queuedSpend(){ let c=0; for(const t in QUEUED) c+=QUEUED[t]*TYPES[t].cost*100; return c; }
+  // what a tap can actually buy right now: coins, less what is already ordered,
+  // plus the income that will land before the order executes
+  function affordable(st,t){
+    if(!st||!st.slotCoins) return false;
+    const soon=((st.slotInc&&st.slotInc[MYSLOT])||0)*8;
+    return (st.slotCoins[MYSLOT]||0)+soon-queuedSpend() >= TYPES[t].cost*100;
+  }
+  function paintQueue(){
+    document.querySelectorAll('.build .u').forEach(el=>{
+      const n=QUEUED[el.dataset.t]||0;
+      el.classList.toggle('queued',n>0);
+      const q=el.querySelector('.q'); if(q) q.textContent=n>1?n:'';
+    });
+  }
+  let orderMsgT=null;
+  function orderMsg(text){
+    const e=document.getElementById('orderMsg'); if(!e) return;
+    e.textContent=text; e.classList.add('on');
+    clearTimeout(orderMsgT); orderMsgT=setTimeout(()=>e.classList.remove('on'),1400);
+  }
+  function flash(el,cls){ el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls);
+    setTimeout(()=>el.classList.remove(cls),400); }
   document.querySelectorAll('.build .u').forEach(el=>{
-    el.addEventListener('click',()=>{ if(MODEL_PAUSED||!SIM||SIM.state().over) return;
-      if(MODE==='solo') pending.push({op:'buy',t:el.dataset.t,slot:MYSLOT});
-      else if(socket) socket.emit('clash:input',{op:'buy',t:el.dataset.t}); });
+    el.addEventListener('click',()=>{
+      if(MODEL_PAUSED||!SIM||SIM.state().over) return;
+      const t=el.dataset.t, cost=TYPES[t].cost*100;
+      const st=SIM.state();
+      // income keeps arriving between the tap and the frame that executes it, so
+      // allow the ~0.4s it takes to land rather than refusing by a coin or two
+      const soon=((st.slotInc&&st.slotInc[MYSLOT])||0)*8;
+      const free=(st.slotCoins[MYSLOT]||0)+soon-queuedSpend();
+      if(free<cost){
+        flash(el,'refused');
+        orderMsg('Not enough coins for '+el.querySelector('.n').textContent
+          +' \u2013 need '+Math.ceil((cost-free)/100)+' more');
+        return;
+      }
+      QUEUED[t]=(QUEUED[t]||0)+1; paintQueue();
+      // the order lands within a frame or two; clear the hold so it cannot
+      // block later taps if a frame is missed
+      setTimeout(()=>{ if(QUEUED[t]) QUEUED[t]--; paintQueue(); },700);
+      flash(el,'ordered');
+      if(MODE==='solo') pending.push({op:'buy',t,slot:MYSLOT});
+      else if(socket) socket.emit('clash:input',{op:'buy',t});
+    });
   });
   document.querySelectorAll('.stance b').forEach(el=>{
     el.addEventListener('click',()=>{ if(MODEL_PAUSED||!SIM||SIM.state().over) return;
@@ -1273,7 +1347,7 @@ window.BreachSim=function(seed, humanSlots){
     const ecoBtn=document.getElementById('ecoUpgrade');
     if(ecoBtn){ const next=st0.ecoCosts&&st0.ecoCosts[ecoLevel]; txt('ecoLevel','Lv '+ecoLevel); txt('ecoCost',next===undefined?'MAX':Math.round(next/100).toLocaleString()); ecoBtn.disabled=next===undefined||(st0.slotCoins[MYSLOT]||0)<next; }
     const m=Math.floor(st0.clockLeft/60), sc=st0.clockLeft%60; txt('clk',m+':'+(sc<10?'0':'')+sc);
-    document.querySelectorAll('.build .u').forEach(el=>{el.style.opacity=(st0.slotCoins[MYSLOT]||0)>=TYPES[el.dataset.t].cost*100?1:.45;});
+    document.querySelectorAll('.build .u').forEach(el=>{el.style.opacity=affordable(st0,el.dataset.t)?1:.45;});
     if(st0.over){ const w=st0.winner;
       held.textContent=w===0?'Team A wins':w===1?'Team B wins':'Draw';
       held.style.color='#f0dc9a'; st.textContent='◈ Battle over'; st.style.color='#f0dc9a';
