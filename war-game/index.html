@@ -3079,13 +3079,13 @@ async function loadPublicRanksUI(){
     if(PUBLIC_RANK_TAB==='players'){
       data=await apiRequest(`/v1/leaderboards/players?difficulty=${encodeURIComponent(PUBLIC_RANK_DIFFICULTY)}`);
       rows=(data.players||[]).map(publicPlayerRow);list.replaceChildren();
-      rows.forEach(row=>list.append(publicListRow(`#${row.rank} ${row.displayName}`,[
+      rows.forEach(row=>list.append(publicListRow(`#${row.rank} ${commanderName(row)}`,[
         {text:`${row.wins} wins`},{text:`${row.losses} losses`},{text:`${row.winRate}% win rate`,className:'outcome'}
       ])));
     }else if(PUBLIC_RANK_TAB==='pvp'){
       data=await apiRequest('/v1/leaderboards/head-to-head');
       rows=data.players||[];list.replaceChildren();
-      rows.forEach(row=>list.append(publicListRow(`#${row.rank} ${row.displayName}`,[
+      rows.forEach(row=>list.append(publicListRow(`#${row.rank} ${commanderName(row)}`,[
         {text:`${row.wins} wins`},{text:`${row.losses} losses`},{text:`${row.winRate}% win rate`,className:'outcome'}
       ])));
     }else if(PUBLIC_RANK_TAB==='clash'){
@@ -3094,7 +3094,7 @@ async function loadPublicRanksUI(){
       rows=ps.concat(ms); list.replaceChildren();
       if(ps.length){
         list.append(clashGroupHead('Commanders'));
-        ps.forEach(r=>list.append(publicListRow(`#${r.rank} ${r.displayName}`,[
+        ps.forEach(r=>list.append(publicListRow(`#${r.rank} ${commanderName(r)}`,[
           {text:`${r.wins}W · ${r.losses}L`},{text:`${r.games} battles`},
           {text:`${r.winRate}% win rate`,className:'outcome'}])));
       }

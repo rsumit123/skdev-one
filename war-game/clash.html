@@ -46,10 +46,15 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
 /* ---------- arena ---------- */
 .arena{position:relative;flex:1;min-height:0;overflow:hidden;background:#0a1119;box-shadow:inset 0 12px 25px rgba(0,0,0,.16),inset 0 -12px 24px rgba(0,0,0,.22)}
 .arena canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+/* The tag and the toast share row 1, one anchored left and one right. Both grow
+   with their text - a long callsign plus a two-name tower message ran them into
+   each other - so each is capped at just under half the width. */
 .you-tag{position:absolute;top:10px;left:10px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;font-weight:600;
-  color:#fff;background:rgba(224,103,63,.88);border-radius:16px;padding:5px 11px;z-index:6}
+  color:#fff;background:rgba(224,103,63,.88);border-radius:16px;padding:5px 11px;z-index:6;
+  max-width:46%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bonus-toast{position:absolute;top:10px;right:10px;font-size:10px;font-weight:600;
-  color:#20180a;background:var(--gold);border-radius:16px;padding:5px 11px;z-index:6}
+  color:#20180a;background:var(--gold);border-radius:16px;padding:5px 11px;z-index:6;
+  max-width:46%;text-align:right}
 /* ---------- exit + end card ---------- */
 .exit-chip{position:absolute;top:48px;left:10px;z-index:6;font-size:10.5px;letter-spacing:.06em;
   text-transform:uppercase;font-weight:600;color:#cfd8e6;text-decoration:none;
@@ -159,9 +164,12 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
 .target-row button.on.tA{border-color:var(--teamA);color:#ffdcd0;background:rgba(224,103,63,.16)}
 /* models-deciding chip. NB: the arena canvas is position:absolute, so this MUST be
    positioned too - as a static block it rendered underneath the canvas and was
-   invisible, which is why the indicator never appeared in game. */
-#modelThinking{position:absolute;top:46px;left:50%;transform:translateX(-50%);z-index:9;display:none;
+   invisible, which is why the indicator never appeared in game.
+   Row 3: at 46px it shared a line with the "<- Breach" exit chip and, being
+   centred and wider than the gap, covered it every time the models thought. */
+#modelThinking{position:absolute;top:82px;left:50%;transform:translateX(-50%);z-index:9;display:none;
   align-items:center;gap:7px;font-size:10.5px;letter-spacing:.05em;color:#e7dcb6;white-space:nowrap;
+  max-width:calc(100% - 20px);overflow:hidden;
   background:rgba(6,10,18,.9);border:1px solid rgba(240,220,154,.34);border-radius:16px;padding:5px 12px;
   box-shadow:0 4px 14px rgba(0,0,0,.45)}
 #modelThinking.on{display:flex}
@@ -621,7 +629,12 @@ window.BreachSim=function(seed, humanSlots){
       sk.on('clash:result',onNetOver);
       sk.on('clash:model_error',onModelError);
       sk.on('clash:model_thinking',onModelThinking);
-      sk.on('clash:desync',()=>clMsg('Desync detected — please start a new match.'));
+      // #clMsg lives in the lobby, which is hidden once the battle starts, so a
+      // mid-game desync was reported into an element of zero size. netStatus is
+      // the in-game channel.
+      sk.on('clash:desync',()=>{ clMsg('Desync detected — please start a new match.');
+        netStatus('Desync detected — this battle is out of sync. Please start a new match.'); });
+      sk.on('clash:roster',onNetRoster);
       sk.on('disconnect',()=>{ if(MODE==='net'&&SIM&&!SIM.state().over){ netWasDisconnected=true; netStatus('Connection lost — reconnecting…'); clMsg('Connection lost — reconnecting…',true); } });
       sk.on('connect',()=>{ if(netWasDisconnected) resumeNet(); });
       sk.once('connect',()=>res(sk));
@@ -751,6 +764,24 @@ window.BreachSim=function(seed, humanSlots){
   function onNetOver(p){
     if(!p)return;
     if(p.result||p.results||p.winner!==undefined||p.winnerTeam!==undefined) showResults(p.result||p.results||p);
+  }
+  // A seat changed hands mid-battle: someone ran out their reconnect grace and a
+  // model took the fort over. Rename it so the HUD stops crediting a player who
+  // is no longer in the game.
+  function onNetRoster(p){
+    if(!p||!Array.isArray(p.slotMeta))return;
+    const clean=n=>String(n||'').replace(/^Guest\d+:/,'');
+    for(const m of p.slotMeta){ if(m&&SLOTNAME[m.slot]!==undefined) SLOTNAME[m.slot]=clean(slotLabel(m)); }
+    const handed=Array.isArray(p.handedToModel)?p.handedToModel:[];
+    if(handed.length){
+      const who=handed.map(sl=>SLOTNAME[sl]).join(' & ');
+      netStatus(handed.includes(MYSLOT)
+        ? 'You were away too long — '+who+' has taken your fort.'
+        : handed.join(' & ')+' left; '+who+' has taken over.');
+      setTimeout(()=>netStatus('',false),5000);
+    }
+    applySlotNames();      // the scoreboard labels, not hud()
+    buildTargetPicker();   // the attack buttons name the enemy seats too
   }
   function setModelPaused(paused){
     MODEL_PAUSED=!!paused;
