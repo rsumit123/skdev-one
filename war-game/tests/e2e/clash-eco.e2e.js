@@ -105,3 +105,40 @@ console.log('clash counters: PASS');
   assert.ok(push - hold > 120, `push and hold must be clearly different (${Math.round(push)} vs ${Math.round(hold)})`);
   console.log(`clash hold: PASS (push y=${Math.round(push)}, hold y=${Math.round(hold)})`);
 }
+
+// ---- clock ----------------------------------------------------------------
+{
+  const c4 = { window: {}, Math };
+  vm.runInNewContext(html.slice(start, end), c4);
+  const sim4 = c4.window.BreachSim(1, ['A1', 'A2', 'B1', 'B2']);
+  assert.strictEqual(sim4.state().clockLeft, 600, 'a match is ten minutes');
+  console.log('clash clock: PASS (10:00)');
+}
+
+// ---- no friendly fire -----------------------------------------------------
+// Both of team A's forts pump units into the same middle and are told to hold,
+// so they crowd together. With no enemy ever bought, ANY hp loss is friendly fire.
+{
+  const c5 = { window: {}, Math };
+  vm.runInNewContext(html.slice(start, end), c5);
+  const sim5 = c5.window.BreachSim(3, ['A1', 'A2', 'B1', 'B2']);
+  const hp = new Map();
+  let hits = 0;
+  sim5.tick([{ op: 'stance', v: 1, slot: 'A1' }, { op: 'stance', v: 1, slot: 'A2' }]);
+  for (let t = 1; t < 2200; t++) {
+    const ins = [];
+    if (t % 60 === 0) for (const sl of ['A1', 'A2'])
+      if (sim5.state().slotCoins[sl] >= 800) ins.push({ op: 'buy', t: 'inf', slot: sl });
+    sim5.tick(ins);
+    for (const u of sim5.units) {
+      if (u.team !== 0) continue;
+      const prev = hp.get(u.id);
+      if (prev !== undefined && u.hp < prev) hits++;
+      hp.set(u.id, u.hp);
+    }
+  }
+  assert.strictEqual(sim5.units.filter(u => u.team === 1).length, 0, 'no enemy was ever bought');
+  assert.ok(sim5.units.filter(u => u.team === 0).length > 20, 'a real crowd of friendlies formed');
+  assert.strictEqual(hits, 0, `allies must never damage each other (${hits} hits)`);
+  console.log(`clash friendly fire: PASS (${sim5.units.filter(u => u.team === 0).length} allies packed together, 0 hits)`);
+}

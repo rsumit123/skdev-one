@@ -299,7 +299,7 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
       <div class="hprow"><span class="cn" id="nmA1">AI Commander</span><div class="hpbar"><i id="hpA1" style="width:100%;background:linear-gradient(90deg,#6d2515,#e0673f)"></i></div><span class="pct" id="pcA1">100%</span></div>
       <div class="hprow"><span class="cn" id="nmA2">AI Commander</span><div class="hpbar"><i id="hpA2" style="width:100%;background:linear-gradient(90deg,#6d4515,#f0a24a)"></i></div><span class="pct" id="pcA2">100%</span></div>
     </div></div>
-    <div class="mid"><span class="clk" id="clk">4:00</span><span class="tl">Tower</span>
+    <div class="mid"><span class="clk" id="clk">10:00</span><span class="tl">Tower</span>
       <div class="towerbar"><span class="a" id="twA" style="width:50%"></span><span class="b" id="twB" style="width:50%"></span></div>
       <span class="state" id="twState">◈ Neutral</span>
       <span class="held tw-detail" id="twHeld">—</span></div>
@@ -310,7 +310,7 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
   </div>
   <button type="button" class="panel-toggle" id="sbToggle" aria-expanded="false">Details</button>
   <div class="arena"><canvas id="game"></canvas>
-    <div id="clockPill"><b id="clk2">4:00</b><span id="twMini"></span></div>
+    <div id="clockPill"><b id="clk2">10:00</b><span id="twMini"></span></div>
     <div class="you-tag" id="youTag">◉ You · A1 (top)</div>
     <a class="exit-chip" href="./">← Breach</a>
     <div id="endcard"><div class="ec"><div class="et">Victory</div>
@@ -385,7 +385,12 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
      {op:'convert', slot:'B2'}                (fort handed to AI, e.g. disconnect) */
 window.BreachSim=function(seed, humanSlots){
   var FP=256, CX=180*FP, CY=260*FP;
-  var TOWER_R=46*FP, HOLD_R=64*FP, GATE=38, FOE_R=56*FP, CHASE_R=150*FP, CLOCK_TICKS=4800;
+  var TOWER_R=46*FP, HOLD_R=64*FP, GATE=38, FOE_R=56*FP, CHASE_R=150*FP,
+      // 10 minutes. At 4 the clock was cutting matches off mid-fight: only 3 of 6
+      // measured games reached a result, the rest were decided on fort health.
+      // With 600s it is 6 of 6, and they still average ~265s - the extra time is
+      // headroom for a match to finish, not padding.
+      CLOCK_TICKS=12000;
   // Counter matrix: attacker type -> defender type, as a percentage of base
   // damage. Before this every unit did full damage to everything, which made the
   // table a strict dominance chain - measured at equal coins, infantry beat
