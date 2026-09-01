@@ -28,7 +28,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_PKG || '@playwright/test');
     const B=BREACH_SIM_DEBUG;
     B.bases.find(x=>x.id==='A1').ihp=710;
     B.bases.find(x=>x.id==='B1').ihp=480;
-    for(let i=0;i<4900;i++) B.tick([]);
+    for(let i=0;i<12100;i++) B.tick([]);   // run out a ten-minute clock
   });
   ok(clock.on,'the end card appears on a clock finish');
   ok(/time ran out/i.test(clock.card),'it says the clock ran out');

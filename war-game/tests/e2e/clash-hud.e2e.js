@@ -11,7 +11,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_PKG || '@playwright/test');
     clk:document.getElementById('clk').textContent, coins:document.getElementById('coins').textContent,
     inc:document.getElementById('inc').textContent, held:document.getElementById('twHeld').textContent}));
   ok(pre.hp.every(h=>h==='100%'),'pre-game base HP all 100% (was 82/61/74/69) -> '+pre.hp.join(','));
-  ok(pre.clk==='4:00','pre-game clock 4:00 (was 1:52)');
+  ok(pre.clk==='10:00','pre-game clock 10:00 (was a mock 1:52)');
   ok(pre.coins==='0'&&pre.inc==='—','pre-game coins 0, no fake eco (was 140 / +3.6/s eco 2)');
   ok(!/holds/.test(pre.held),'pre-game tower not "Team B holds" -> "'+pre.held+'"');
   // multiplayer: real names in the scoreboard
@@ -35,7 +35,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_PKG || '@playwright/test');
   // forts open EMPTY and earn 1.0/s, ramping - the original Breach curve
   ok(live.coins>=0&&live.coins<20,'a fort opens empty and earns slowly -> '+live.coins);
   ok(/^\+1\.\d\/s income/.test(live.inc),'income starts at about 1/s -> '+live.inc);
-  ok(live.clk!=='4:00','clock is actually running -> '+live.clk);
+  ok(live.clk!=='10:00','clock is actually running -> '+live.clk);
   console.log(`HUD: ${pass} passed, ${fail} failed`);
   await b.close(); process.exit(fail?1:0);
 })();
