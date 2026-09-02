@@ -142,3 +142,23 @@ console.log('clash counters: PASS');
   assert.strictEqual(hits, 0, `allies must never damage each other (${hits} hits)`);
   console.log(`clash friendly fire: PASS (${sim5.units.filter(u => u.team === 0).length} allies packed together, 0 hits)`);
 }
+
+// ---- the model seats can see the win condition -----------------------------
+// slotHp is what the match is decided by, and it was absent from the state the
+// browser reports, so no model seat could tell whether it was winning.
+{
+  const c6 = { window: {}, Math };
+  vm.runInNewContext(html.slice(start, end), c6);
+  const sim6 = c6.window.BreachSim(1, ['A1', 'A2', 'B1', 'B2']);
+  // the sim runs in its own VM realm, so compare values not object identity
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(sim6.state().slotHp)),
+    { A1: 100, A2: 100, B1: 100, B2: 100 });
+  sim6.bases.find(b => b.id === 'B1').ihp = 314;
+  assert.strictEqual(sim6.state().slotHp.B1, 31, 'fort health is reported as a percentage');
+  sim6.bases.find(b => b.id === 'B1').ihp = -5;
+  assert.strictEqual(sim6.state().slotHp.B1, 0, 'a destroyed fort never reports negative health');
+  // and the browser actually sends it
+  assert.ok(/units:modelUnitCounts\(\)/.test(html), 'unit counts are reported');
+  assert.ok(/state:SIM\.state\(\)/.test(html), 'the full state (now including slotHp) is reported');
+  console.log('clash model vision: PASS');
+}

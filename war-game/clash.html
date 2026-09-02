@@ -623,8 +623,13 @@ window.BreachSim=function(seed, humanSlots){
       mix(u.id); mix(u.ix); mix(u.iy); mix(u.fx&0xffff); mix(u.fy&0xffff); mix(u.hp); mix(u.spd); }
     return h; }
   return { FP:FP, units:units, bases:bases, targets:TARGET, tick:api_tick, hash:api_hash,
-    state:function(){ var sc={}, se={}, si={}; bases.forEach(function(b){sc[b.id]=b.bc; se[b.id]=b.eco; si[b.id]=b.inc|0;});
-      return { slotCoins:sc, slotEco:se, slotInc:si, ecoCosts:ECO_COST.slice(), slotStance:{A1:stanceS.A1,A2:stanceS.A2,B1:stanceS.B1,B2:stanceS.B2},
+    state:function(){ var sc={}, se={}, si={}, sh={};
+      // slotHp is what the whole game is won by, and it was the one thing the
+      // model seats could not see: they were told the objective was to destroy
+      // forts, then handed a state with no fort health in it.
+      bases.forEach(function(b){sc[b.id]=b.bc; se[b.id]=b.eco; si[b.id]=b.inc|0;
+        sh[b.id]=Math.max(0,Math.round(b.ihp/10));});
+      return { slotCoins:sc, slotEco:se, slotInc:si, slotHp:sh, ecoCosts:ECO_COST.slice(), slotStance:{A1:stanceS.A1,A2:stanceS.A2,B1:stanceS.B1,B2:stanceS.B2},
         stance:[stanceS.A1,stanceS.B1], ctrl:ctrl, over:over, winner:winner,
         clockLeft:Math.max(0,Math.ceil((CLOCK_TICKS-tick)/20)) }; } };
 };
