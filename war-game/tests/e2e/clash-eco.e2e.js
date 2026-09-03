@@ -182,3 +182,29 @@ console.log('clash counters: PASS');
   assert.ok(/state:SIM\.state\(\)/.test(html), 'the full state (now including slotHp) is reported');
   console.log('clash model vision: PASS');
 }
+
+// ---- the tower actually bombards -------------------------------------------
+// Clash shipped without the original's tower bolt, so holding the middle all
+// match did nothing to the enemy - and a contested game had no way to resolve.
+{
+  const c8 = { window: {}, Math };
+  vm.runInNewContext(html.slice(start, end), c8);
+  const sim8 = c8.window.BreachSim(4, ['A1', 'A2', 'B1', 'B2']);
+  let bolts = 0;
+  sim8.tick([{ op: 'stance', v: 1, slot: 'A1' }, { op: 'stance', v: 1, slot: 'A2' }]);
+  for (let t = 1; t < 3000; t++) {
+    const ins = [];
+    if (t % 80 === 0) for (const sl of ['A1', 'A2'])
+      if (sim8.state().slotCoins[sl] >= 800) ins.push({ op: 'buy', t: 'inf', slot: sl });
+    for (const e of sim8.tick(ins)) if (e.e === 'bolt') bolts++;
+  }
+  const hp = sim8.state().slotHp;
+  assert.ok(bolts >= 4, `holding the tower must bombard, got ${bolts} bolts`);
+  assert.ok(hp.B1 < 100 || hp.B2 < 100,
+    `the enemy must take damage from a held tower, got ${JSON.stringify(hp)}`);
+  assert.strictEqual(hp.A1, 100, 'and the holder is not hit by its own tower');
+  // it aims at the weaker fort rather than splitting damage
+  assert.ok(hp.B1 === 0 || hp.B2 === 100 || hp.B1 < hp.B2,
+    `it should finish one fort, got ${JSON.stringify(hp)}`);
+  console.log(`clash tower bolt: PASS (${bolts} bolts, enemy at ${hp.B1}%/${hp.B2}%)`);
+}
