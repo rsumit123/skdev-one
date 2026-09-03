@@ -1039,6 +1039,13 @@ window.BreachSim=function(seed, humanSlots){
     document.getElementById('modelErrorCard').classList.toggle('on',MODEL_PAUSED);
   }
   function onModelThinking(p){
+    // The seats are demonstrably answering, so any "retrying" banner has served
+    // its purpose - clear it however it got set, not just if this client set the
+    // timer. A stale banner outliving the thing it describes is the bug.
+    const ns=document.getElementById('netStatus');
+    if(ns&&/retrying/i.test(ns.textContent||'')){
+      clearTimeout(retryStatusT); retryStatusT=null; netStatus('',false);
+    }
     const el=document.getElementById('modelThinking'); if(!el) return;
     const on=!!(p&&p.thinking), n=((p&&p.seats)||[]).length;
     const t=document.getElementById('mtText');
@@ -1060,11 +1067,21 @@ window.BreachSim=function(seed, humanSlots){
     setModelPaused(true);
     netStatus(MODEL_ERR[code]?'Model budget reached':'Model commander paused');
   }
+  let retryStatusT=null;
   async function retryModelTurn(){
     const btn=document.getElementById('modelRetry'); clBusy(btn,true);
     const r=await emitAck('clash:model_retry',{});
     if(!r||!r.ok){ clMsg(ERR[r&&r.code]||'Retry failed. You can try again or end the battle.'); }
-    else { setModelPaused(false); netStatus('Model turn retrying…'); }
+    else {
+      setModelPaused(false);
+      // ...and clear it again. This used to be set and never taken down, so the
+      // banner sat in the corner for the rest of the match after a successful
+      // retry. onModelThinking clears it the moment the seats actually answer;
+      // this is the backstop if no window arrives.
+      netStatus('Model turn retrying…');
+      clearTimeout(retryStatusT);
+      retryStatusT=setTimeout(()=>netStatus('',false),8000);
+    }
     clBusy(btn,false);
   }
   function endModelBattle(){
