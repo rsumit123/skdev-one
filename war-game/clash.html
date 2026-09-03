@@ -386,6 +386,11 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
 window.BreachSim=function(seed, humanSlots){
   var FP=256, CX=180*FP, CY=260*FP;
   var TOWER_R=46*FP, HOLD_R=64*FP, GATE=38, FOE_R=56*FP, CHASE_R=150*FP,
+      // The original Breach's tower does not just pay: every BOLT_PERIOD of
+      // unbroken hold it fires a bolt into the enemy base (120 of 600 hp there).
+      // Clash shipped without it, so holding the middle all match did nothing to
+      // the enemy - which is also why a contested game had no way to resolve.
+      BOLT_PERIOD=400, BOLT_DMG=150,
       // 10 minutes. At 4 the clock was cutting matches off mid-fight: only 3 of 6
       // measured games reached a result, the rest were decided on fort health.
       // With 600s it is 6 of 6, and they still average ~265s - the extra time is
@@ -429,7 +434,7 @@ window.BreachSim=function(seed, humanSlots){
   // model teammate reset a human's choice every decision window: you tapped
   // Hold, and four seconds later A2 sent its own stance and your units marched
   // off anyway. Your fort now obeys you and only you.
-  var units=[], nextId=1, stanceS={A1:0,A2:0,B1:0,B2:0}, ctrl=512, holdTeam=-1, tick=0, over=false, winner=-1;
+  var units=[], nextId=1, stanceS={A1:0,A2:0,B1:0,B2:0}, ctrl=512, holdTeam=-1, boltT=BOLT_PERIOD, tick=0, over=false, winner=-1;
   var TARGET={};   // slot -> chosen enemy fort id (or undefined = nearest)
   var rs=(seed>>>0)||1;
   function rnd(n){ rs^=(rs<<13); rs>>>=0; rs^=(rs>>>17); rs^=(rs<<5); rs>>>=0; return rs%n; }
@@ -488,8 +493,27 @@ window.BreachSim=function(seed, humanSlots){
         if(hb && hb.alive && HUMAN[inp.slot] && hb.bc>=T[inp.t].cost){
           hb.bc-=T[inp.t].cost; spawn(hb,inp.t,rnd(45*FP)-22*FP); } } }
     // ---- tower hold: hysteresis push-rights ----
+    var prevHold=holdTeam;
     if(ctrl>563) holdTeam=0; else if(ctrl<461) holdTeam=1;
     var hold=holdTeam;
+    // The tower bombards. Losing it resets the countdown, so this rewards holding
+    // the middle rather than merely touching it, and gives a stalled match a way
+    // to end: it aims at the enemy team's weakest standing fort and finishes it.
+    if(hold!==prevHold) boltT=BOLT_PERIOD;
+    if(hold===0||hold===1){
+      if(--boltT<=0){
+        boltT=BOLT_PERIOD;
+        var tgt=null;
+        for(i=0;i<bases.length;i++){ var cb=bases[i];
+          if(!cb.alive||cb.team===hold) continue;
+          if(!tgt||cb.ihp<tgt.ihp) tgt=cb; }
+        if(tgt){
+          tgt.ihp-=BOLT_DMG;
+          ev.push({e:'bolt',x:CX,y:CY,tx:tgt.ix,ty:tgt.iy});
+          if(tgt.ihp<=0){ tgt.ihp=0; tgt.alive=false; ev.push({e:'basedown',x:tgt.ix,y:tgt.iy}); }
+        }
+      }
+    } else boltT=BOLT_PERIOD;
     // ---- economies: every fort pays for its units; humans get a commander
     //      premium; holding the tower pays BOTH forts of that team ----
     for(i=0;i<bases.length;i++){ var b=bases[i]; if(!b.alive) continue;
@@ -621,7 +645,7 @@ window.BreachSim=function(seed, humanSlots){
   }
   function api_hash(){ var h=2166136261>>>0, i;
     function mix(v){ h^=(v>>>0)&0xffffffff; h=(h*16777619)>>>0; }
-    mix(tick); mix(ctrl); mix(rs);
+    mix(tick); mix(ctrl); mix(rs); mix(boltT); mix(holdTeam+2);
     for(i=0;i<4;i++) mix(stanceS[['A1','A2','B1','B2'][i]]);
     for(i=0;i<4;i++){ var ts=['A1','B1','A2','B2'][i], tv=TARGET[ts];
       mix(tv?(tv.charCodeAt(0)*31+tv.charCodeAt(1)):0); }
@@ -1236,6 +1260,16 @@ window.BreachSim=function(seed, humanSlots){
         if(e.big){ shake=Math.min(2.6,shake+1.5); FX.smoke.push({x,y,r:2.5,life:0}); } }
       else if(e.e==='die') boom(x,y,!!e.big);
       else if(e.e==='basedown') boom(x,y,true);
+      else if(e.e==='bolt'){
+        // the tower strike: a heavy tracer from the mast into the fort it hits,
+        // so holding the middle visibly does something
+        const tx=gx2s(e.tx), ty=gy2s(e.ty);
+        FX.flash.push({x,y,life:0,big:true});
+        FX.tracer.push({x0:x,y0:y,x1:tx,y1:ty,life:0,big:true});
+        boom(tx,ty,true);
+        shake=Math.min(3.2,shake+2.2);
+        towerStrike=perf;
+      }
     }
   }
   const flatten=fr=>[].concat(...Object.values(fr.inputs||{}),(fr.convert||[]).map(sl=>({op:'convert',slot:sl})));
@@ -1488,7 +1522,9 @@ window.BreachSim=function(seed, humanSlots){
     txt('clk',clock); txt('clk2',clock);
     // the floating clock also carries the tower state, the one thing the map
     // bar cannot spell out
-    txt('twMini', towerA>0.55?'Tower: Team A':towerA<0.45?'Tower: Team B':'Tower contested');
+    // announce the strike briefly - it is the tower's whole point
+    txt('twMini', (perf-towerStrike)<1600 ? 'TOWER STRIKE'
+      : towerA>0.55?'Tower: Team A':towerA<0.45?'Tower: Team B':'Tower contested');
     document.querySelectorAll('.build .u').forEach(el=>{el.style.opacity=affordable(st0,el.dataset.t)?1:.45;});
     if(st0.over){ const w=st0.winner;
       held.textContent=w===0?'Team A wins':w===1?'Team B wins':'Draw';
@@ -1507,7 +1543,7 @@ window.BreachSim=function(seed, humanSlots){
           teams:{0:['A1','A2'].map(s=>SLOTNAME[s]),1:['B1','B2'].map(s=>SLOTNAME[s])}});
         setTimeout(()=>ec.classList.add('on'),900); } }
   }
-  let towerA=0.5, last=0, perf=0;
+  let towerA=0.5, last=0, perf=0, towerStrike=-1e9;
   function frame(ts){ if(!last)last=ts; const dt=Math.min(.05,(ts-last)/1000); last=ts; perf=ts;
     step(dt);
     ctx.setTransform(DPR,0,0,DPR,0,0); ctx.clearRect(0,0,W,H);
