@@ -411,7 +411,14 @@ window.BreachSim=function(seed, humanSlots){
   // matters, which is a commander choosing WHEN to invest. At 21 the upgrade
   // costs a fifth of the opening bank and is a reflex; at 36 it costs most of it
   // and you have to give up the opening units to take it.
-  var RAMP_DEN=1100;   // 55 seconds at 20 ticks/sec - the original's doubling time
+  // 110s doubling time. The original uses 55s over a 300s match, peaking at
+  // 6.4x. We doubled the clock to 600s and left this alone, so income kept
+  // compounding to ~12x - and a recorded 10-minute match froze: base health
+  // unchanged from 255s to 600s while two forts finished on 2436 and 2670
+  // idle coins. Stretching the denominator keeps the ORIGINAL's curve shape
+  // over the longer match. Measured with hard-spending seats: coin pile-up
+  // drops from 213 to 23 and games go from 5/6 decisive to 6/6.
+  var RAMP_DEN=2200;
   var ECO_COST=[3600,6300,9000], bases=[
     {id:'A1',team:0,ix:61*FP, iy:83*FP, ihp:1000,alive:true,cd:34,bc:0,eco:0},
     {id:'A2',team:0,ix:299*FP,iy:83*FP, ihp:1000,alive:true,cd:20,bc:0,eco:0},
