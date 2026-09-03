@@ -106,6 +106,26 @@ console.log('clash counters: PASS');
   console.log(`clash hold: PASS (push y=${Math.round(push)}, hold y=${Math.round(hold)})`);
 }
 
+// ---- income curve ---------------------------------------------------------
+// The clock doubled to 600s but the ramp did not, so income compounded to ~12x
+// where the original game peaks at 6.4x - and a recorded match froze solid with
+// two forts sitting on 2400+ idle coins.
+{
+  const rate = (sec) => {
+    const c7 = { window: {}, Math };
+    vm.runInNewContext(html.slice(start, end), c7);
+    const sim7 = c7.window.BreachSim(7, ['A1', 'A2', 'B1', 'B2']);
+    for (let t = 0; t < sec * 20; t++) sim7.tick([]);
+    return sim7.state().slotInc.A1 * 20 / 100;
+  };
+  // NB: `end` is the script-slice index in this file's outer scope - do not shadow it
+  const openRate = rate(1), finalRate = rate(600);
+  assert.ok(openRate >= 0.9 && openRate <= 1.1, `a fort opens on about 1 coin a second, got ${openRate}`);
+  assert.ok(finalRate >= 6.0 && finalRate <= 7.0,
+    `income must peak near the original's 6.4/s, got ${finalRate}/s - a runaway late game froze a real match`);
+  console.log(`clash income curve: PASS (${openRate}/s -> ${finalRate}/s over ten minutes)`);
+}
+
 // ---- clock ----------------------------------------------------------------
 {
   const c4 = { window: {}, Math };
