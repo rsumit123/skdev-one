@@ -400,7 +400,12 @@ window.BreachSim=function(seed, humanSlots){
       // unbroken hold it fires a bolt into the enemy base (120 of 600 hp there).
       // Clash shipped without it, so holding the middle all match did nothing to
       // the enemy - which is also why a contested game had no way to resolve.
-      BOLT_PERIOD=400, BOLT_DMG=150,
+      // Toned down from 150/20s on the owner's call after a recorded game: the
+      // tower landed 9 bolts for 1350 damage against a 1000hp fort and had done
+      // more than enough to decide the match on its own. At 100/30s uncontested
+      // control needs the whole 10-minute clock to kill a team, so it is a strong
+      // advantage that closes out a stalled game rather than a near-decider.
+      BOLT_PERIOD=600, BOLT_DMG=100,
       // 10 minutes. At 4 the clock was cutting matches off mid-fight: only 3 of 6
       // measured games reached a result, the rest were decided on fort health.
       // With 600s it is 6 of 6, and they still average ~265s - the extra time is
