@@ -36,6 +36,15 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
 .screen.hud-min #clockPill{display:flex}
 #clockPill b{font-family:var(--hd);font-weight:800;font-size:20px;letter-spacing:.03em;color:#f4f0e6}
 #clockPill span{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+/* a destroyed fort issues no orders - show that, do not just refuse taps */
+.screen.fort-down .orders .build,
+.screen.fort-down .orders .eco,
+.screen.fort-down .orders .eco-upgrade,
+.screen.fort-down .orders .target-row{opacity:.32;filter:saturate(.25);pointer-events:none}
+.screen.fort-down #fortDown{display:block}
+#fortDown{display:none;position:absolute;left:50%;transform:translateX(-50%);top:-42px;z-index:13;
+  background:rgba(207,90,68,.96);color:#fff;font:700 10.5px var(--ui);letter-spacing:.05em;
+  text-transform:uppercase;border-radius:11px;padding:4px 12px;white-space:nowrap;pointer-events:none}
 /* ---------- compact/expanded HUD ----------
    The arena was losing roughly a third of the screen to the two chrome panels.
    Both now default to a compact form and expand on demand, so the board is big
@@ -329,6 +338,7 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
   <div class="orders">
     <button type="button" class="panel-toggle" id="ordToggle" aria-expanded="false">Bigger orders</button>
     <div id="orderMsg" role="status" aria-live="polite"></div>
+    <div id="fortDown" role="status">Your fort is destroyed</div>
     <div class="target-row" id="targetRow" hidden>
       <span class="tr-label">Attack</span>
       <span class="tr-btns" id="targetBtns"></span>
@@ -789,6 +799,7 @@ window.BreachSim=function(seed, humanSlots){
   }
   function setTarget(v){
     if(!SIM||SIM.state().over) return;
+    if(ordersBlocked()) return;      // hoisted; declared with the other handlers
     MYTARGET=v; paintTarget();
     if(MODE==='solo') pending.push({op:'target',v,slot:MYSLOT});
     else if(socket) socket.emit('clash:input',{op:'target',v});
@@ -1216,9 +1227,23 @@ window.BreachSim=function(seed, humanSlots){
   }
   function flash(el,cls){ el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls);
     setTimeout(()=>el.classList.remove(cls),400); }
+  // A destroyed fort builds nothing - the simulator has always required
+  // hb.alive - but the deck stayed live, so a tap still pulsed gold and queued a
+  // unit that could never arrive. Silence would have been bad; a false
+  // confirmation is worse.
+  function myFortDown(){
+    if(!SIM||!bases||!bases.length) return false;
+    const mine=bases.find(b=>b.id===MYSLOT);
+    return !!mine && !mine.alive;
+  }
+  function ordersBlocked(){
+    if(MODEL_PAUSED||!SIM||SIM.state().over) return true;
+    if(myFortDown()){ orderMsg('Your fort is destroyed \u2013 no more orders'); return true; }
+    return false;
+  }
   document.querySelectorAll('.build .u').forEach(el=>{
     el.addEventListener('click',()=>{
-      if(MODEL_PAUSED||!SIM||SIM.state().over) return;
+      if(ordersBlocked()) return;
       const t=el.dataset.t, cost=TYPES[t].cost*100;
       const st=SIM.state();
       // income keeps arriving between the tap and the frame that executes it, so
@@ -1241,14 +1266,14 @@ window.BreachSim=function(seed, humanSlots){
     });
   });
   document.querySelectorAll('.stance b').forEach(el=>{
-    el.addEventListener('click',()=>{ if(MODEL_PAUSED||!SIM||SIM.state().over) return;
+    el.addEventListener('click',()=>{ if(ordersBlocked()) return;
       const v=el.dataset.st==='hold'?1:0;
       if(MODE==='solo') pending.push({op:'stance',v,slot:MYSLOT});
       else if(socket) socket.emit('clash:input',{op:'stance',v});
       document.querySelectorAll('.stance b').forEach(x=>x.classList.toggle('on',x===el)); });
   });
   document.getElementById('ecoUpgrade').addEventListener('click',()=>{
-    if(MODEL_PAUSED||!SIM||SIM.state().over) return;
+    if(ordersBlocked()) return;
     if(MODE==='solo') pending.push({op:'eco',slot:MYSLOT});
     else if(socket) socket.emit('clash:input',{op:'eco'});
   });
@@ -1543,6 +1568,7 @@ window.BreachSim=function(seed, humanSlots){
     txt('twMini', (perf-towerStrike)<1600 ? 'TOWER STRIKE'
       : towerA>0.55?'Tower: Team A':towerA<0.45?'Tower: Team B':'Tower contested');
     document.querySelectorAll('.build .u').forEach(el=>{el.style.opacity=affordable(st0,el.dataset.t)?1:.45;});
+    document.querySelector('.screen').classList.toggle('fort-down', myFortDown()&&!st0.over);
     if(st0.over){ const w=st0.winner;
       held.textContent=w===0?'Team A wins':w===1?'Team B wins':'Draw';
       held.classList.add('tw-final');
