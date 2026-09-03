@@ -199,7 +199,10 @@ console.log('clash counters: PASS');
     for (const e of sim8.tick(ins)) if (e.e === 'bolt') bolts++;
   }
   const hp = sim8.state().slotHp;
-  assert.ok(bolts >= 4, `holding the tower must bombard, got ${bolts} bolts`);
+  // 100 damage every 30s: strong, but uncontested control needs the whole clock
+  // to finish a team rather than deciding the match on its own
+  assert.ok(bolts >= 3, `holding the tower must bombard, got ${bolts} bolts`);
+  assert.ok(bolts <= 6, `...but not every few seconds, got ${bolts} in 150s`);
   assert.ok(hp.B1 < 100 || hp.B2 < 100,
     `the enemy must take damage from a held tower, got ${JSON.stringify(hp)}`);
   assert.strictEqual(hp.A1, 100, 'and the holder is not hit by its own tower');
