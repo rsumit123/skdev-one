@@ -1145,12 +1145,24 @@ window.BreachSim=function(seed, humanSlots){
   // input log reproduces it exactly, and the deterministic simulator lives in
   // this file. Model text is untrusted, so everything is set with textContent.
   const esc=t=>{const d=document.createElement('div'); d.textContent=String(t==null?'':t); return d;};
-  function rpName(roster,slot){
-    const r=(roster&&roster[slot])||{};
-    const n=r.name||r.modelId||slot;
-    return String(n).replace(/^Guest\d+:/,'');
+  // Two seats on the same team are routinely the same model, and "google/
+  // gemini-3.7-flash" twice over tells the reader nothing about who did what.
+  // Drop the vendor prefix - it is the same for both - and number them only
+  // when they would otherwise be indistinguishable.
+  function rpNames(roster){
+    const out={}, seen={};
+    for(const sl of ['A1','A2','B1','B2']){
+      const r=(roster&&roster[sl])||{};
+      const raw=String(r.name||r.modelId||sl).replace(/^Guest\d+:/,'');
+      out[sl]=r.kind==='model'?raw.replace(/^[^/]+\//,''):raw;
+      seen[out[sl]]=(seen[out[sl]]||0)+1;
+    }
+    const n={};
+    for(const sl of ['A1','A2','B1','B2'])
+      if(seen[out[sl]]>1){ n[out[sl]]=(n[out[sl]]||0)+1; out[sl]+=' #'+n[out[sl]]; }
+    return out;
   }
-  function rpIsModel(roster,slot){ return !!(roster&&roster[slot]&&roster[slot].kind==='model'); }
+  const rpShow=(names,slot)=>(names&&names[slot])||slot;
   function rebuildMatch(rep){
     const sim=window.BreachSim(rep.seed,['A1','A2','B1','B2']);
     const log=rep.log||[];
@@ -1180,6 +1192,7 @@ window.BreachSim=function(seed, humanSlots){
   function renderReport(rep){
     const body=document.getElementById('rpBody'); body.innerHTML='';
     const roster=rep.roster||{};
+    const NAMES=rpNames(roster);
     const add=(parent,cls,text)=>{const d=esc(text); d.className=cls; parent.appendChild(d); return d;};
     const card=(title)=>{const c=document.createElement('div'); c.className='rp-card';
       if(title){const h=document.createElement('h3'); h.textContent=title; c.appendChild(h);} 
@@ -1194,14 +1207,14 @@ window.BreachSim=function(seed, humanSlots){
     const mine=teamOf(MYSLOT);
     const v=add(c1,'rp-verdict', w===null||w===undefined?'No result':w===mine?'Victory':'Defeat');
     v.style.color = (w===mine)?'#8fbf7a':(w===null||w===undefined)?'#f0dc9a':'#e0673f';
-    const names=t=>[t?'B1':'A1',t?'B2':'A2'].map(sl=>rpName(roster,sl)).join(' & ');
+    const names=t=>[t?'B1':'A1',t?'B2':'A2'].map(sl=>rpShow(NAMES,sl)).join(' & ');
     add(c1,'rp-line',(w===0||w===1)?names(w)+' won':'The battle had no recorded winner');
     if(m){
       add(c1,'rp-sub','Room '+rep.roomCode+' · lasted '+Math.floor(m.endedAt/60)+'m '+(m.endedAt%60)+'s'
         +' · ended '+(rep.reason==='timecap'?'on the clock':'by fort destruction'));
       add(c1,'rp-line','Fort health at the end — '
-        +rpName(roster,'A1')+' '+(m.final.A1|0)+'% · '+rpName(roster,'A2')+' '+(m.final.A2|0)+'%'
-        +'  vs  '+rpName(roster,'B1')+' '+(m.final.B1|0)+'% · '+rpName(roster,'B2')+' '+(m.final.B2|0)+'%');
+        +rpShow(NAMES,'A1')+' '+(m.final.A1|0)+'% · '+rpShow(NAMES,'A2')+' '+(m.final.A2|0)+'%'
+        +'  vs  '+rpShow(NAMES,'B1')+' '+(m.final.B1|0)+'% · '+rpShow(NAMES,'B2')+' '+(m.final.B2|0)+'%');
     }
 
     // ---- why it went that way
@@ -1212,13 +1225,13 @@ window.BreachSim=function(seed, humanSlots){
       add(c2,'rp-line','Tower held — Team A '+pctA+'% of the match, Team B '+pctB+'%');
       add(c2,'rp-line','Tower strikes landed: '+m.bolts+' ('+(m.bolts*100)+' damage)');
       const hits=Object.keys(m.firstHit).sort((a,b)=>m.firstHit[a]-m.firstHit[b]);
-      if(hits.length) add(c2,'rp-sub','First fort to take damage: '+rpName(roster,hits[0])
+      if(hits.length) add(c2,'rp-sub','First fort to take damage: '+rpShow(NAMES,hits[0])
         +' at '+m.firstHit[hits[0]]+'s');
       const buys=sl=>{const b=m.bought[sl]||{}; const parts=[];
         for(const k of ['inf','gun','at','tank']) if(b[k]) parts.push(b[k]+' '+k);
         return parts.join(', ')||'nothing';};
       for(const sl of ['A1','A2','B1','B2'])
-        add(c2,'rp-sub',rpName(roster,sl)+' built '+buys(sl));
+        add(c2,'rp-sub',rpShow(NAMES,sl)+' built '+buys(sl));
     }
 
     // ---- turn by turn
@@ -1237,7 +1250,7 @@ window.BreachSim=function(seed, humanSlots){
         add(t,'rp-when',Math.round((wnd.frame||0)/5)+'s');
         for(const [slot,cmds] of Object.entries(wnd.commands||{})){
           const row=document.createElement('div'); row.className='rp-seat'; t.appendChild(row);
-          const tag=esc(rpName(roster,slot)); tag.className='rp-tag '+slot[0]; row.appendChild(tag);
+          const tag=esc(rpShow(NAMES,slot)); tag.className='rp-tag '+slot[0]; row.appendChild(tag);
           const col=document.createElement('div'); row.appendChild(col);
           add(col,'rp-did',(cmds||[]).map(c=>c.op+(c.t?' '+c.t:'')+(c.v!==undefined&&c.v!==null?' '+c.v:'')).join(', ')||'no orders');
         }
@@ -1248,7 +1261,7 @@ window.BreachSim=function(seed, humanSlots){
         add(t,'rp-when',Math.round((wnd.frame||0)/5)+'s'+(wnd.ms?' · '+wnd.ms+'ms':''));
         for(const [slot,why] of Object.entries(wnd.why||{})){
           const row=document.createElement('div'); row.className='rp-seat'; t.appendChild(row);
-          const tag=esc(rpName(roster,slot)); tag.className='rp-tag '+slot[0]; row.appendChild(tag);
+          const tag=esc(rpShow(NAMES,slot)); tag.className='rp-tag '+slot[0]; row.appendChild(tag);
           const col=document.createElement('div'); row.appendChild(col);
           add(col,'rp-said','“'+why+'”');
           const cmds=(wnd.commands||{})[slot]||[];

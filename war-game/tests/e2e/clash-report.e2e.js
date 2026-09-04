@@ -124,6 +124,25 @@ const REPLAY = {
   ok(/Defeat/.test(await p.evaluate(() => document.getElementById('rpBody').textContent)),
     'the verdict survives a truncated log');
 
+  console.log('9. Two seats on the same model are told apart…');
+  // both B seats being the same model is the common case, and "google/
+  // gemini-3.7-flash" twice tells the reader nothing about who did what
+  const dupRoster = { ...REPLAY.roster,
+    B1: { kind: 'model', modelId: 'google/gemini-3.7-flash' },
+    B2: { kind: 'model', modelId: 'google/gemini-3.7-flash' } };
+  await p.unroute('**/v1/clash/replay/**');
+  await p.route('**/v1/clash/replay/**', route => route.fulfill({
+    status: 200, contentType: 'application/json', headers: CORS,
+    body: JSON.stringify({ ...REPLAY, roster: dupRoster }) }));
+  await p.goto('about:blank');
+  await p.goto(URL + '#report=TEST01', { waitUntil: 'load' });
+  await p.waitForFunction(() => /Fort health/.test(document.getElementById('rpBody').textContent), { timeout: 10000 });
+  const dup = await p.evaluate(() => document.getElementById('rpBody').textContent);
+  ok(/gemini-3\.7-flash #1/.test(dup) && /gemini-3\.7-flash #2/.test(dup),
+    'identical model seats are numbered');
+  ok(!/google\//.test(dup), 'the vendor prefix is dropped - it is the same for both');
+  ok(!/nova-lite-v1 #/.test(dup), 'a seat with a unique model is not numbered');
+
   ok(errs.length === 0, 'no page errors -> ' + errs.join(' | '));
   console.log(`\nCLASH REPORT: ${pass} passed, ${fail} failed`);
   await b.close(); process.exit(fail ? 1 : 0);
