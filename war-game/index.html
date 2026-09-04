@@ -588,6 +588,7 @@ button.loading::after{content:"";position:absolute;top:50%;left:50%;width:15px;h
 .cup-when{font-family:ui-monospace,monospace;font-size:11px;color:rgba(255,255,255,.5)}
 .cup-meta{font-family:ui-monospace,monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase;
   color:rgba(255,255,255,.5);margin-top:4px}
+.cup-report{display:inline-block;margin-top:9px;font:600 11px var(--ui);letter-spacing:.04em;color:var(--gold);text-decoration:none;border:1px solid rgba(240,220,154,.34);border-radius:8px;padding:6px 11px}
 .cup-roster{display:flex;flex-wrap:wrap;gap:6px;margin-top:11px}
 .cup-player{font-family:"Saira Condensed","Oswald",sans-serif;font-weight:600;text-transform:uppercase;font-size:13px;
   letter-spacing:.02em;padding:4px 10px;border-radius:20px;border:1px solid rgba(255,255,255,.14);color:rgba(255,255,255,.8)}
@@ -3026,7 +3027,17 @@ function clashCard(b){
     if(st.isModel)chip.style.opacity='.85';
     roster.append(chip);
   });
-  card.append(head,meta,roster);return card;
+  card.append(head,meta,roster);
+  // A battle report only makes sense when a model actually played - a human-only
+  // match has no reasoning to show.
+  if(b.code&&(b.seats||[]).some(st=>st.isModel)){
+    const a=document.createElement('a');
+    a.className='cup-report';
+    a.href='./clash.html#report='+encodeURIComponent(b.code);
+    a.textContent='Battle report \u203a';
+    card.append(a);
+  }
+  return card;
 }
 async function loadCupsUI(){
   const list=document.getElementById('cupsList');setAuthError('cupsError','');
