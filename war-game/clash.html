@@ -45,6 +45,38 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
 #fortDown{display:none;position:absolute;left:50%;transform:translateX(-50%);top:-42px;z-index:13;
   background:rgba(207,90,68,.96);color:#fff;font:700 10.5px var(--ui);letter-spacing:.05em;
   text-transform:uppercase;border-radius:11px;padding:4px 12px;white-space:nowrap;pointer-events:none}
+/* ---------- post-match report ---------- */
+#reportView{position:absolute;inset:0;z-index:40;display:none;flex-direction:column;
+  background:#05090f;overflow-y:auto;-webkit-overflow-scrolling:touch}
+#reportView.on{display:flex}
+.rp-head{position:sticky;top:0;z-index:2;background:rgba(5,9,15,.97);border-bottom:1px solid #1b2a3e;
+  padding:calc(12px + env(safe-area-inset-top,0)) 14px 12px;display:flex;align-items:center;gap:10px}
+.rp-head h2{font-family:var(--hd);font-weight:800;text-transform:uppercase;font-size:16px;
+  letter-spacing:.05em;color:var(--gold);margin:0;flex:1}
+.rp-close{background:rgba(8,14,22,.9);border:1px solid #23344b;color:#cfd8e6;border-radius:14px;
+  padding:8px 14px;font:600 10px var(--ui);letter-spacing:.08em;text-transform:uppercase;cursor:pointer}
+.rp-body{padding:14px 14px calc(22px + env(safe-area-inset-bottom,0));display:flex;
+  flex-direction:column;gap:14px}
+.rp-card{border:1px solid #1e2f45;border-radius:12px;background:#080e17;padding:12px 13px}
+.rp-card h3{margin:0 0 8px;font:700 10px var(--ui);letter-spacing:.12em;text-transform:uppercase;
+  color:var(--muted)}
+.rp-verdict{font-family:var(--hd);font-weight:800;font-size:22px;text-transform:uppercase;
+  letter-spacing:.04em;margin-bottom:4px}
+.rp-line{font-size:12px;color:var(--text);line-height:1.65}
+.rp-line b{color:var(--gold);font-weight:700}
+.rp-sub{font-size:11px;color:var(--faint);line-height:1.6}
+.rp-turn{border-top:1px solid #16243a;padding:9px 0}
+.rp-turn:first-of-type{border-top:0}
+.rp-when{font:700 10px var(--ui);letter-spacing:.08em;color:var(--gold);text-transform:uppercase}
+.rp-seat{display:flex;gap:8px;margin-top:5px}
+.rp-tag{flex:none;font:700 9.5px var(--ui);letter-spacing:.04em;border-radius:5px;padding:2px 6px;
+  height:fit-content;background:#12203a;color:#9fb6d4;white-space:nowrap;max-width:104px;
+  overflow:hidden;text-overflow:ellipsis}
+.rp-tag.A{background:rgba(224,103,63,.17);color:#f0a68b}
+.rp-tag.B{background:rgba(77,152,207,.17);color:#9ccdf0}
+.rp-said{font-size:11.5px;color:#d7dde8;line-height:1.55;font-style:italic}
+.rp-did{font-size:10.5px;color:var(--faint);margin-top:2px}
+.rp-empty{font-size:11.5px;color:var(--faint);line-height:1.6}
 /* ---------- compact/expanded HUD ----------
    The arena was losing roughly a third of the screen to the two chrome panels.
    Both now default to a compact form and expand on demand, so the board is big
@@ -324,6 +356,7 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
     <a class="exit-chip" href="./">← Breach</a>
     <div id="endcard"><div class="ec"><div class="et">Victory</div>
       <div class="es">Clash Arena · beta</div><div id="resultSummary" class="result-summary"></div>
+      <button type="button" id="btnReport" hidden>Battle report</button>
       <button onclick="location.reload()">Play again</button>
       <a href="./">Back to Breach</a></div></div>
     <div id="modelErrorCard" role="alertdialog" aria-modal="true" aria-labelledby="modelErrorTitle">
@@ -353,7 +386,12 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
       <div class="u" data-t="tank"><span class="q"></span><div class="g">💥</div><div class="n">Tank</div><div class="c">45</div></div>
     </div>
   </div>
-    <div id="clashLobby"><div class="cl-card">
+    <div id="reportView" role="dialog" aria-modal="true" aria-label="Battle report">
+    <div class="rp-head"><h2>Battle report</h2>
+      <button type="button" class="rp-close" id="rpClose">Close</button></div>
+    <div class="rp-body" id="rpBody"></div>
+  </div>
+  <div id="clashLobby"><div class="cl-card">
       <div class="cl-title">Clash Arena</div>
       <div class="cl-sub">2v2 · four forts · humans + AI · beta</div>
       <div id="clMenu">
@@ -765,6 +803,9 @@ window.BreachSim=function(seed, humanSlots){
   let MODEL_CATALOG=[];
   let MODEL_PAUSED=false;
   let SLOTNAME={A1:DEFAULT_MODEL_NAME,A2:DEFAULT_MODEL_NAME,B1:DEFAULT_MODEL_NAME,B2:DEFAULT_MODEL_NAME};
+  // which seats are model-driven: the battle report is only worth offering
+  // when one of them was
+  let SLOTKIND={A1:'',A2:'',B1:'',B2:''};
   function modelName(modelId){
     const found=MODEL_CATALOG.find(m=>m&&m.id===modelId);
     return (found&&(found.name||found.displayName))||DEFAULT_MODEL_NAME;
@@ -843,6 +884,16 @@ window.BreachSim=function(seed, humanSlots){
     const r=await fetch(PUBLIC_API+path,{method:'POST',credentials:'include',
       headers:{'Content-Type':'application/json',...(t?{'X-Breach-Guest':t}:{})},
       body:JSON.stringify(body||{})});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok) throw Object.assign(new Error(d.code||'error'),{status:r.status,code:d.code});
+    return d;
+  }
+  // Most of this API is POST-only; the read-only endpoints (the battle report)
+  // are GET, and sending them a POST body just earns a 405.
+  async function apiGet(path){
+    let t=''; try{t=localStorage.getItem('breach.guestToken')||'';}catch(e){}
+    const r=await fetch(PUBLIC_API+path,{method:'GET',credentials:'include',
+      headers:{...(t?{'X-Breach-Guest':t}:{})}});
     const d=await r.json().catch(()=>({}));
     if(!r.ok) throw Object.assign(new Error(d.code||'error'),{status:r.status,code:d.code});
     return d;
@@ -1014,7 +1065,9 @@ window.BreachSim=function(seed, humanSlots){
     const clean=n=>String(n||'').replace(/^Guest\d+:/,'');
     const meta=p.slotMeta||p.slots||{};
     for(const sl of ['A1','A2','B1','B2']){ const raw=Array.isArray(meta)?meta.find(x=>x.slot===sl):meta[sl];
-      SLOTNAME[sl]=clean(slotLabel(raw)); }
+      SLOTNAME[sl]=clean(slotLabel(raw));
+      SLOTKIND[sl]=(raw&&raw.kind)||(raw&&raw.modelId?'model':'');
+    }
     frameQ=[]; tickInFrame=0; lastFrameN=-1; overSent=false; netGeneration=p.generation||p.roomGeneration||null;
     // Model seats are commanded by the server. Passing every slot here prevents
     // the client-side deterministic filler AI from inventing commands for them.
@@ -1037,7 +1090,10 @@ window.BreachSim=function(seed, humanSlots){
   function onNetRoster(p){
     if(!p||!Array.isArray(p.slotMeta))return;
     const clean=n=>String(n||'').replace(/^Guest\d+:/,'');
-    for(const m of p.slotMeta){ if(m&&SLOTNAME[m.slot]!==undefined) SLOTNAME[m.slot]=clean(slotLabel(m)); }
+    for(const m of p.slotMeta){ if(m&&SLOTNAME[m.slot]!==undefined){
+      SLOTNAME[m.slot]=clean(slotLabel(m));
+      SLOTKIND[m.slot]=(m.kind)||(m.modelId?'model':SLOTKIND[m.slot]);
+    } }
     const handed=Array.isArray(p.handedToModel)?p.handedToModel:[];
     if(handed.length){
       const who=handed.map(sl=>SLOTNAME[sl]).join(' & ');
@@ -1084,6 +1140,140 @@ window.BreachSim=function(seed, humanSlots){
     netStatus(MODEL_ERR[code]?'Model budget reached':'Model commander paused');
   }
   let retryStatusT=null;
+  // ---- post-match report -----------------------------------------------------
+  // The battle is rebuilt here rather than on the server: seed + the ordered
+  // input log reproduces it exactly, and the deterministic simulator lives in
+  // this file. Model text is untrusted, so everything is set with textContent.
+  const esc=t=>{const d=document.createElement('div'); d.textContent=String(t==null?'':t); return d;};
+  function rpName(roster,slot){
+    const r=(roster&&roster[slot])||{};
+    const n=r.name||r.modelId||slot;
+    return String(n).replace(/^Guest\d+:/,'');
+  }
+  function rpIsModel(roster,slot){ return !!(roster&&roster[slot]&&roster[slot].kind==='model'); }
+  function rebuildMatch(rep){
+    const sim=window.BreachSim(rep.seed,['A1','A2','B1','B2']);
+    const log=rep.log||[];
+    const out={bolts:0,holdTicks:{0:0,1:0},firstHit:{},timeline:[],endedAt:0,
+               bought:{A1:{},A2:{},B1:{},B2:{}}};
+    let frames=0;
+    for(const fr of log){
+      const ins=[].concat(...Object.values(fr.inputs||{}));
+      for(const i of ins) if(i.op==='buy'&&out.bought[i.slot])
+        out.bought[i.slot][i.t]=(out.bought[i.slot][i.t]||0)+1;
+      for(let k=0;k<4;k++){
+        for(const e of sim.tick(k?[]:ins)) if(e.e==='bolt') out.bolts++;
+      }
+      frames++;
+      const st=sim.state();
+      if(st.ctrl>563) out.holdTicks[0]++; else if(st.ctrl<461) out.holdTicks[1]++;
+      for(const b of sim.bases) if(b.ihp<1000 && out.firstHit[b.id]===undefined)
+        out.firstHit[b.id]=Math.round(frames/5);
+      if(frames%75===0) out.timeline.push({sec:Math.round(frames/5),hp:Object.assign({},st.slotHp)});
+      if(st.over) break;
+    }
+    out.endedAt=Math.round(frames/5);
+    out.final=sim.state().slotHp;
+    out.frames=frames;
+    return out;
+  }
+  function renderReport(rep){
+    const body=document.getElementById('rpBody'); body.innerHTML='';
+    const roster=rep.roster||{};
+    const add=(parent,cls,text)=>{const d=esc(text); d.className=cls; parent.appendChild(d); return d;};
+    const card=(title)=>{const c=document.createElement('div'); c.className='rp-card';
+      if(title){const h=document.createElement('h3'); h.textContent=title; c.appendChild(h);} 
+      body.appendChild(c); return c;};
+
+    let m=null;
+    try{ m=rebuildMatch(rep); }catch(e){ m=null; }
+
+    // ---- verdict
+    const c1=card('');
+    const w=rep.winnerTeam;
+    const mine=teamOf(MYSLOT);
+    const v=add(c1,'rp-verdict', w===null||w===undefined?'No result':w===mine?'Victory':'Defeat');
+    v.style.color = (w===mine)?'#8fbf7a':(w===null||w===undefined)?'#f0dc9a':'#e0673f';
+    const names=t=>[t?'B1':'A1',t?'B2':'A2'].map(sl=>rpName(roster,sl)).join(' & ');
+    add(c1,'rp-line',(w===0||w===1)?names(w)+' won':'The battle had no recorded winner');
+    if(m){
+      add(c1,'rp-sub','Room '+rep.roomCode+' · lasted '+Math.floor(m.endedAt/60)+'m '+(m.endedAt%60)+'s'
+        +' · ended '+(rep.reason==='timecap'?'on the clock':'by fort destruction'));
+      add(c1,'rp-line','Fort health at the end — '
+        +rpName(roster,'A1')+' '+(m.final.A1|0)+'% · '+rpName(roster,'A2')+' '+(m.final.A2|0)+'%'
+        +'  vs  '+rpName(roster,'B1')+' '+(m.final.B1|0)+'% · '+rpName(roster,'B2')+' '+(m.final.B2|0)+'%');
+    }
+
+    // ---- why it went that way
+    if(m){
+      const c2=card('Why it went that way');
+      const total=Math.max(1,m.holdTicks[0]+m.holdTicks[1]);
+      const pctA=Math.round(m.holdTicks[0]/(m.frames||1)*100), pctB=Math.round(m.holdTicks[1]/(m.frames||1)*100);
+      add(c2,'rp-line','Tower held — Team A '+pctA+'% of the match, Team B '+pctB+'%');
+      add(c2,'rp-line','Tower strikes landed: '+m.bolts+' ('+(m.bolts*100)+' damage)');
+      const hits=Object.keys(m.firstHit).sort((a,b)=>m.firstHit[a]-m.firstHit[b]);
+      if(hits.length) add(c2,'rp-sub','First fort to take damage: '+rpName(roster,hits[0])
+        +' at '+m.firstHit[hits[0]]+'s');
+      const buys=sl=>{const b=m.bought[sl]||{}; const parts=[];
+        for(const k of ['inf','gun','at','tank']) if(b[k]) parts.push(b[k]+' '+k);
+        return parts.join(', ')||'nothing';};
+      for(const sl of ['A1','A2','B1','B2'])
+        add(c2,'rp-sub',rpName(roster,sl)+' built '+buys(sl));
+    }
+
+    // ---- turn by turn
+    // a model log over the storage cap is saved as {truncated:true}, not an
+    // array - treating that as "no model seats" beats throwing here
+    const ml=Array.isArray(rep.modelLog)?rep.modelLog:[];
+    const withWhy=ml.filter(x=>x&&x.why&&Object.keys(x.why).length);
+    const c3=card('Turn by turn');
+    if(!ml.length){
+      add(c3,'rp-empty','No model seats played in this battle.');
+    } else if(!withWhy.length){
+      add(c3,'rp-empty','This battle was played before the commanders were asked to '
+        +'explain themselves, so only their orders were recorded. New battles include their reasoning.');
+      for(const wnd of ml.slice(0,40)){
+        const t=document.createElement('div'); t.className='rp-turn'; c3.appendChild(t);
+        add(t,'rp-when',Math.round((wnd.frame||0)/5)+'s');
+        for(const [slot,cmds] of Object.entries(wnd.commands||{})){
+          const row=document.createElement('div'); row.className='rp-seat'; t.appendChild(row);
+          const tag=esc(rpName(roster,slot)); tag.className='rp-tag '+slot[0]; row.appendChild(tag);
+          const col=document.createElement('div'); row.appendChild(col);
+          add(col,'rp-did',(cmds||[]).map(c=>c.op+(c.t?' '+c.t:'')+(c.v!==undefined&&c.v!==null?' '+c.v:'')).join(', ')||'no orders');
+        }
+      }
+    } else {
+      for(const wnd of withWhy){
+        const t=document.createElement('div'); t.className='rp-turn'; c3.appendChild(t);
+        add(t,'rp-when',Math.round((wnd.frame||0)/5)+'s'+(wnd.ms?' · '+wnd.ms+'ms':''));
+        for(const [slot,why] of Object.entries(wnd.why||{})){
+          const row=document.createElement('div'); row.className='rp-seat'; t.appendChild(row);
+          const tag=esc(rpName(roster,slot)); tag.className='rp-tag '+slot[0]; row.appendChild(tag);
+          const col=document.createElement('div'); row.appendChild(col);
+          add(col,'rp-said','“'+why+'”');
+          const cmds=(wnd.commands||{})[slot]||[];
+          add(col,'rp-did',cmds.map(c=>c.op+(c.t?' '+c.t:'')+(c.v!==undefined&&c.v!==null?' '+c.v:'')).join(', ')||'no orders');
+        }
+        if(wnd.error) add(t,'rp-sub','seat failed: '+wnd.error);
+      }
+    }
+  }
+  async function openReport(code){
+    const view=document.getElementById('reportView');
+    const body=document.getElementById('rpBody');
+    body.innerHTML=''; const p=esc('Loading the battle report…'); p.className='rp-empty'; body.appendChild(p);
+    view.classList.add('on');
+    try{
+      const rep=await apiGet('/v1/clash/replay/'+encodeURIComponent(code));
+      renderReport(rep);
+    }catch(e){
+      body.innerHTML='';
+      const m=esc(e&&e.status===404
+        ? 'No report for that battle - it may predate match recording.'
+        : 'Could not load the battle report.');
+      m.className='rp-empty'; body.appendChild(m);
+    }
+  }
   async function retryModelTurn(){
     const btn=document.getElementById('modelRetry'); clBusy(btn,true);
     const r=await emitAck('clash:model_retry',{});
@@ -1191,6 +1381,15 @@ window.BreachSim=function(seed, humanSlots){
     const btn=document.getElementById(p.btn);
     if(btn) btn.addEventListener('click',()=>applyPanel(p,
       btn.getAttribute('aria-expanded')!=='true'));
+  }
+  document.getElementById('rpClose').onclick=()=>{
+    document.getElementById('reportView').classList.remove('on');
+    if(location.hash.startsWith('#report=')) history.replaceState(null,'',location.pathname);
+  };
+  // deep link, so My Clash history can open a specific battle's report
+  if(location.hash.startsWith('#report=')){
+    const code=decodeURIComponent(location.hash.slice(8)).toUpperCase();
+    if(/^[A-Z0-9]{4,8}$/.test(code)) openReport(code);
   }
   document.getElementById('clSolo').onclick=()=>clCreate(false);
   document.getElementById('clJoin').onclick=clJoin;
@@ -1586,6 +1785,14 @@ window.BreachSim=function(seed, humanSlots){
         // needs no round trip - the server records the result but never sends
         // one back, which is why the summary used to come up blank.
         const hp={}; for(const bb of bases) hp[bb.id]=Math.max(0,Math.round(bb.ihp/10));
+        // the report is only interesting when a model played: a human-only match
+        // has no reasoning to show
+        const rb=document.getElementById('btnReport');
+        if(rb&&CLASH_CODE){
+          const anyModel=['A1','A2','B1','B2'].some(sl=>SLOTKIND[sl]==='model');
+          rb.hidden=!anyModel;
+          rb.onclick=()=>openReport(CLASH_CODE);
+        }
         fillResultSummary({winnerTeam:w,hp:hp,
           endedOnClock:(st0.clockLeft|0)<=0,
           teams:{0:['A1','A2'].map(s=>SLOTNAME[s]),1:['B1','B2'].map(s=>SLOTNAME[s])}});
