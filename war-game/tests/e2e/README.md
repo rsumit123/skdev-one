@@ -48,3 +48,18 @@ node tests/e2e/pvp.e2e.js
 
 The frontend points at the local backend via the `?api=http://127.0.0.1:8050`
 query override (see `PUBLIC_API` in `index.html`).
+
+## `clash-friends.e2e.js` — the human-vs-human path, end to end
+
+Two, three and four real browsers: room creation, joining by code, seat claiming,
+the start, four-way lockstep, orders relaying between players, a match **played
+to a real result through the deck** (no poking the simulator), and the end cards
+both players actually see - mirrored verdicts, one winner, agreeing scoreboards.
+
+It plays a full match, so it takes **4-6 minutes**. That is the point: nothing
+about the result is faked. Run it before shipping anything that touches the
+lobby, the lockstep relay, or the end card.
+
+```sh
+node tests/e2e/clash-friends.e2e.js
+```
