@@ -22,9 +22,12 @@ Prereqs (three terminals, or background the first two):
 # 1. backend with sockets (breach-api, branch feature/breach-pvp)
 #
 # The three extra knobs are not optional if you want a clean run:
-#   BREACH_RATE   - the per-IP limiter counts every browser context this suite
-#                   opens, so the default 60 starts returning 429 partway
-#                   through the tournament suite and after ~8 suite runs.
+#   BREACH_GUEST_PER_HOUR - each browser context mints a guest, and the real
+#                   ceiling is 20 per IP per hour held in memory. A single full
+#                   suite run needs more than that, so without this every suite
+#                   after the twentieth guest fails as an opaque waitForFunction
+#                   timeout (the 429 is only visible in the browser console).
+#                   (BREACH_RATE is the general API limiter and is NOT this one.)
 #   BREACH_PVP_GRACE - pvp-phase4 waits 12s for a forfeit; the real 60s grace
 #                   would time it out.
 #   OPENROUTER_API_KEY - the Clash suites drive real model seats. Without a key
@@ -32,7 +35,7 @@ Prereqs (three terminals, or background the first two):
 #                   goes pointer-events:none, so clicks silently time out.
 BREACH_DB=/tmp/breach-e2e.db \
 BREACH_ORIGINS=http://localhost:8055,http://127.0.0.1:8055 \
-BREACH_RATE=6000 BREACH_PVP_GRACE=3 \
+BREACH_GUEST_PER_HOUR=5000 BREACH_RATE=6000 BREACH_PVP_GRACE=3 \
 OPENROUTER_API_KEY="$openrouter_api_key" \
 python3 -m uvicorn app.main:app --host 127.0.0.1 --port 8050
 

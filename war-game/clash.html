@@ -139,12 +139,21 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
 /* The tag and the toast share row 1, one anchored left and one right. Both grow
    with their text - a long callsign plus a two-name tower message ran them into
    each other - so each is capped at just under half the width. */
+/* Both are read once and then just sit on the battlefield. They dim themselves
+   a few seconds in rather than competing with the fighting for the whole match. */
+.arena.settled .you-tag,.arena.settled .exit-chip{opacity:.42}
+.you-tag,.exit-chip{transition:opacity .8s ease}
 .you-tag{position:absolute;bottom:46px;left:10px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;font-weight:600;
   color:#fff;background:rgba(224,103,63,.88);border-radius:16px;padding:5px 11px;z-index:6;
   max-width:46%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .bonus-toast{position:absolute;bottom:46px;right:10px;font-size:10px;font-weight:600;
   color:#20180a;background:var(--gold);border-radius:16px;padding:5px 11px;z-index:6;
-  max-width:46%;text-align:right}
+  max-width:46%;text-align:right;
+  /* It used to sit there for the whole match, in the brightest colour on screen,
+     covering a fort. It announces a change of hands and then gets out of the way;
+     the top bar and the tower ring carry the ongoing state. */
+  opacity:0;pointer-events:none;transition:opacity .45s ease}
+.bonus-toast.on{opacity:1}
 /* ---------- exit + end card ---------- */
 .exit-chip{position:absolute;bottom:78px;left:10px;z-index:6;font-size:10.5px;letter-spacing:.06em;
   text-transform:uppercase;font-weight:600;color:#cfd8e6;text-decoration:none;
@@ -267,9 +276,11 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
 .target-row[hidden]{display:none}   /* display:flex would otherwise beat the hidden attribute */
 .target-row .tr-label{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);flex:none}
 .target-row .tr-btns{display:flex;gap:6px;flex:1}
-.target-row button{flex:1;font-size:11px;font-weight:700;letter-spacing:.03em;padding:7px 6px;border-radius:8px;
+/* A commander's name needs the room; "Nearest" does not. */
+.target-row button{flex:1.25;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10.5px;font-weight:700;letter-spacing:.03em;padding:7px 6px;border-radius:8px;
   border:1px solid #23344b;background:rgba(7,13,21,.92);color:var(--muted);cursor:pointer;
   text-transform:uppercase;-webkit-tap-highlight-color:transparent;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.target-row button.tr-near{flex:.85;letter-spacing:.04em}
 .target-row button.on{border-color:var(--teamB);color:#dcefff;background:rgba(77,152,207,.16)}
 .target-row button.on.tA{border-color:var(--teamA);color:#ffdcd0;background:rgba(224,103,63,.16)}
 /* models-deciding chip. NB: the arena canvas is position:absolute, so this MUST be
@@ -277,7 +288,11 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
    invisible, which is why the indicator never appeared in game.
    Row 3: at 46px it shared a line with the "<- Breach" exit chip and, being
    centred and wider than the gap, covered it every time the models thought. */
-#modelThinking{position:absolute;top:calc(50% - 78px);left:50%;transform:translateX(-50%);z-index:9;display:none;
+/* Row 4: at 50%-78px it sat in the middle of the lane the armies march up, so
+   it covered the fighting every time the seats thought. Raised into the quiet
+   band between the far forts and the tower. Not into the clock row - that is
+   already the clock, the tower state and the Details chip. */
+#modelThinking{position:absolute;top:31%;left:50%;transform:translateX(-50%);z-index:9;display:none;
   align-items:center;gap:7px;font-size:10.5px;letter-spacing:.05em;color:#e7dcb6;white-space:nowrap;
   max-width:calc(100% - 20px);overflow:hidden;
   background:rgba(6,10,18,.9);border:1px solid rgba(240,220,154,.34);border-radius:16px;padding:5px 12px;
@@ -373,7 +388,6 @@ body{color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;
     <div id="orderMsg" role="status" aria-live="polite"></div>
     <div id="fortDown" role="status">Your fort is destroyed</div>
     <div class="target-row" id="targetRow" hidden>
-      <span class="tr-label">Attack</span>
       <span class="tr-btns" id="targetBtns"></span>
     </div>
     <div class="eco"><div class="coins"><span id="coins">0</span> <small id="inc">—</small></div>
@@ -816,6 +830,37 @@ window.BreachSim=function(seed, humanSlots){
     if(raw.kind==='model'||raw.modelId) return raw.modelName||raw.modelDisplayName||(raw.model&&raw.model.name)||modelName(raw.modelId);
     return raw.name||raw.displayName||DEFAULT_MODEL_NAME;
   }
+  // Three forts all reading "Amazon Nova ..." told you nothing about who was who
+  // - the vendor is the half that survives truncation and it is the half that
+  // does not identify anyone. SHORTNAME drops it and numbers seats only when
+  // they would otherwise be identical. SLOTNAME is left alone: several places
+  // compare it against DEFAULT_MODEL_NAME to decide styling and fallbacks.
+  let SHORTNAME={A1:'',A2:'',B1:'',B2:''};
+  function refreshShortNames(){
+    const out={}, seen={};
+    for(const sl of ['A1','A2','B1','B2']){
+      const raw=String(SLOTNAME[sl]||'');
+      // the vendor is the leading word of the display name AND of the model id
+      const n=SLOTKIND[sl]==='model'
+        ? raw.replace(/^(Amazon|Google|Microsoft|Qwen|OpenAI|Meta|Mistral|Anthropic|DeepSeek|xAI)\s+/i,'')
+        : raw;
+      out[sl]=n||raw||sl;
+      seen[out[sl]]=(seen[out[sl]]||0)+1;
+    }
+    const n={};
+    for(const sl of ['A1','A2','B1','B2'])
+      if(seen[out[sl]]>1){ n[out[sl]]=(n[out[sl]]||0)+1; out[sl]+=' #'+n[out[sl]]; }
+    SHORTNAME=out;
+  }
+  // Trim the NAME and re-attach the "#2" - trimming the whole string ate the one
+  // character that tells two identical seats apart.
+  function trimSeatName(n,max){
+    n=String(n==null?'':n);
+    const m=n.match(/^(.*?)( #\d+)$/);
+    const base=m?m[1]:n, tail=m?m[2]:'';
+    const room=max-tail.length;
+    return base.length>room?base.slice(0,Math.max(1,room-1))+'\u2026'+tail:base+tail;
+  }
   let MYTARGET=null;
   function buildTargetPicker(){
     const row=document.getElementById('targetRow'), box=document.getElementById('targetBtns');
@@ -828,14 +873,14 @@ window.BreachSim=function(seed, humanSlots){
       b.onclick=()=>setTarget(val);
       box.appendChild(b);
     };
+    // The button says exactly what the fort says on the map. It used to read
+    // "B1 · Nova Lite" against a map label of "Amazon Nova ...", so tapping a
+    // target and then finding it on the board was a puzzle.
     enemies.forEach(sl=>{
-      const who=SLOTNAME[sl];
-      const short=who&&who!=='AI Commander'
-        ? who.replace(/^(Amazon|Google|Microsoft|Qwen)\s+/i,'').split(' ').slice(0,2).join(' ')
-        : '';
-      add(short?sl+' · '+short:sl, sl, sl.charAt(0)==='A'?'tA':null);
+      const who=SHORTNAME[sl];
+      add(who&&who!==DEFAULT_MODEL_NAME?trimSeatName(who,16):sl, sl, sl.charAt(0)==='A'?'tA':null);
     });
-    add('Nearest',null,null);
+    add('\u25ce Nearest',null,'tr-near');
     row.hidden=false; paintTarget();
   }
   function paintTarget(){
@@ -853,18 +898,22 @@ window.BreachSim=function(seed, humanSlots){
   function applySlotNames(){
     for(const sl of ['A1','A2','B1','B2']){
       const e=document.getElementById('nm'+sl);
-      if(e){ const me=sl===MYSLOT; e.textContent=me?'You':SLOTNAME[sl];
+      if(e){ const me=sl===MYSLOT; e.textContent=me?'You':(SHORTNAME[sl]||SLOTNAME[sl]);
         e.style.color=me?'#f0dc9a':(SLOTNAME[sl]===DEFAULT_MODEL_NAME?'var(--faint)':'var(--text)');
         e.title=SLOTNAME[sl]; }
     }
   }
   function teamLabel(team){
     const slots=team?['B1','B2']:['A1','A2'];
-    const names=slots.map(sl=>SLOTNAME[sl]).filter(Boolean);
+    const names=slots.map(sl=>SHORTNAME[sl]||SLOTNAME[sl]).filter(Boolean);
     return names.length?names.join(' & '):'Model commanders';
   }
   function setupWorld(sim){
     SIM=sim; window.BREACH_SIM_DEBUG=SIM;
+    // what the HUD believes about the seats, for the readability tests - the
+    // file's own bindings are module-scoped and not reachable from evaluate()
+    window.CLASH_HUD={slot:()=>MYSLOT,team:()=>MYTEAM,names:()=>Object.assign({},SLOTNAME),
+      short:()=>Object.assign({},SHORTNAME),announceTower:h=>announceTower(h)};
     units=SIM.units; bases=SIM.bases;
     for(const b of bases){ Object.assign(b,BART[b.id]); b.x=gx2s(b.ix); b.y=gy2s(b.iy); b.hp=b.ihp/10; }
     const yt=document.getElementById('youTag');
@@ -874,8 +923,9 @@ window.BreachSim=function(seed, humanSlots){
       +' · '+MYSLOT;
     applySlotNames();
     buildTargetPicker();
-    const bt=document.getElementById('bonusToast'); if(bt) bt.textContent='🏰 Tower → +income to '+teamLabel(MYTEAM);
     document.getElementById('clashLobby').classList.add('off');
+    const ar=document.querySelector('.arena');
+    if(ar){ ar.classList.remove('settled'); setTimeout(()=>ar.classList.add('settled'),6000); }
   }
 
   // ---- identity + socket (reuses the main game's stored guest/session) --------
@@ -1068,6 +1118,7 @@ window.BreachSim=function(seed, humanSlots){
       SLOTNAME[sl]=clean(slotLabel(raw));
       SLOTKIND[sl]=(raw&&raw.kind)||(raw&&raw.modelId?'model':'');
     }
+    refreshShortNames();
     frameQ=[]; tickInFrame=0; lastFrameN=-1; overSent=false; netGeneration=p.generation||p.roomGeneration||null;
     // Model seats are commanded by the server. Passing every slot here prevents
     // the client-side deterministic filler AI from inventing commands for them.
@@ -1094,6 +1145,8 @@ window.BreachSim=function(seed, humanSlots){
       SLOTNAME[m.slot]=clean(slotLabel(m));
       SLOTKIND[m.slot]=(m.kind)||(m.modelId?'model':SLOTKIND[m.slot]);
     } }
+    refreshShortNames();
+    buildTargetPicker();
     const handed=Array.isArray(p.handedToModel)?p.handedToModel:[];
     if(handed.length){
       const who=handed.map(sl=>SLOTNAME[sl]).join(' & ');
@@ -1325,7 +1378,7 @@ window.BreachSim=function(seed, humanSlots){
         if(razed(0)||razed(1)){
           const out=razed(0)?0:1;
           const lost=out?['B1','B2']:['A1','A2'];
-          const nm=k=>k===MYSLOT?'Your':(SLOTNAME[k]||k)+"'s";
+          const nm=k=>k===MYSLOT?'Your':(SHORTNAME[k]||SLOTNAME[k]||k)+"'s";
           why=(out===MYTEAM?'Both of your forts were destroyed.'
                 : nm(lost[0]).replace(/'s$/,'')+' and '+nm(lost[1])+' forts were destroyed.');
         } else if(result.endedOnClock){
@@ -1335,7 +1388,7 @@ window.BreachSim=function(seed, humanSlots){
         }
         if(why) lines.push('<div class="result-why">'+why+'</div>');
         // name the forts by who held them, not by slot code
-        const fort=k=>{const n=SLOTNAME[k]||k; return k===MYSLOT?'You':
+        const fort=k=>{const n=SHORTNAME[k]||SLOTNAME[k]||k; return k===MYSLOT?'You':
           (String(n).length>14?String(n).slice(0,13)+'\u2026':n);};
         lines.push('<div class="result-hp">Fort health at the end<br>'
           +fort('A1')+' '+(hp.A1|0)+'% &middot; '+fort('A2')+' '+(hp.A2|0)+'%'
@@ -1442,7 +1495,12 @@ window.BreachSim=function(seed, humanSlots){
     e.textContent=text; e.classList.add('on');
     clearTimeout(orderMsgT); orderMsgT=setTimeout(()=>e.classList.remove('on'),1400);
   }
+  // Android exposes a vibrator; iOS Safari does not, and silently ignores this.
+  // Confirmations get a tick, refusals a double buzz - the same split the gold
+  // pulse and the red shake already make visually.
+  function buzz(ms){ try{ if(navigator.vibrate) navigator.vibrate(ms); }catch(e){} }
   function flash(el,cls){ el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls);
+    buzz(cls==='refused'?[18,40,18]:12);
     setTimeout(()=>el.classList.remove(cls),400); }
   // A destroyed fort builds nothing - the simulator has always required
   // hb.alive - but the deck stayed live, so a tap still pulsed gold and queued a
@@ -1653,11 +1711,10 @@ window.BreachSim=function(seed, humanSlots){
   // Who holds this fort, not its slot code. Names are trimmed so a long model
   // name cannot run across the battlefield.
   function fortLabel(b){
-    let n=SLOTNAME[b.id];
+    let n=SHORTNAME[b.id]||SLOTNAME[b.id];
     if(!n||n===DEFAULT_MODEL_NAME&&!SLOTNAME[b.id]) n=b.id;
     if(b.id===MYSLOT) n='You';
-    n=String(n);
-    return n.length>13?n.slice(0,12)+'\u2026':n;
+    return trimSeatName(n,16);
   }
   function drawBase(b){
     const im15=A15[b.art];
@@ -1750,6 +1807,19 @@ window.BreachSim=function(seed, humanSlots){
     hpBar(u.x,u.y-T.h*.62,T.h*.55,u.hp/u.max,u.team);
   }
   const HD='"Roboto Condensed","Arial Narrow",system-ui,sans-serif';
+  // Shown when the tower changes hands and then faded out. Every transient
+  // status in this file that was set without being cleared has ended up as a
+  // bug report; this one pairs its set with a timeout from the start.
+  let lastHold=null, bonusT=null;
+  function announceTower(hold){
+    const bt=document.getElementById('bonusToast'); if(!bt) return;
+    bt.textContent = hold===-1 ? '\u2694 Tower contested'
+      : hold===MYTEAM ? '\u{1f3f0} Tower taken \u2014 +income for your team'
+      : '\u{1f3f0} ' + teamLabel(hold) + ' took the tower';
+    bt.classList.add('on');
+    clearTimeout(bonusT);
+    bonusT=setTimeout(()=>bt.classList.remove('on'),2400);
+  }
   function hud(){
     if(!SIM){ return; }   // pre-game values are neutral in the markup (100% / 4:00 / 50-50)
     const set=(id,v)=>{const e=document.getElementById(id);if(e)e.style.width=Math.max(0,v)+'%';};
@@ -1763,6 +1833,8 @@ window.BreachSim=function(seed, humanSlots){
     if(towerA>0.55){st.textContent='◤ Secured';st.style.color=TC[0];held.textContent=teamLabel(0)+' holds ▾';held.style.color=TC[0];}
     else if(towerA<0.45){st.textContent='Secured ◥';st.style.color=TC[1];held.textContent=teamLabel(1)+' holds ▾';held.style.color=TC[1];}
     else{st.textContent='◈ Contested';st.style.color='#f0dc9a';held.textContent=teamLabel(a>=bb?0:1)+' pressing ▾';held.style.color='#8a97ad';}
+    const holdNow=towerA>0.55?0:towerA<0.45?1:-1;
+    if(holdNow!==lastHold){ if(lastHold!==null) announceTower(holdNow); lastHold=holdNow; }
     txt('coins',Math.floor((st0.slotCoins[MYSLOT]||0)/100));
     // income is derived from the sim's real rates: 26/tick human + 12/tick tower bonus,
     // 20 ticks/s, coins are x100 -> 5.2/s base, 7.6/s while your team holds the relay
