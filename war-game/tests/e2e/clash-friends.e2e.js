@@ -233,6 +233,40 @@ const MATCH_BUDGET_MS = 8 * 60 * 1000;
   ok(T.every(X => X.errs.length === 0), 'no page errors');
   for (const X of T) await X.c.close();
 
+  // ---------------------------------------------------------------- scenario 4
+  console.log('\n=== A friend\'s phone locks mid-match and the tab reloads ===');
+  const H = await mk(), F = await mk();
+  const codeR = await host(H);
+  await join(F, codeR);
+  await H.p.click('#clStart');
+  await Promise.all([live(H), live(F)]);
+  const fSlot = await F.p.evaluate(() => CLASH_HUD.slot());
+  await H.p.waitForTimeout(18000);          // let a real backlog build up
+  const atReload = await H.p.evaluate(() => CLASH_NET.frame);
+  await F.p.reload({ waitUntil: 'load' });
+  const rejoined = await F.p.waitForFunction(
+    () => window.BREACH_SIM_DEBUG && window.CLASH_NET && CLASH_NET.frame > 0, { timeout: 30000 })
+    .then(() => true).catch(() => false);
+  ok(rejoined, 'a full page reload walks straight back into the battle (was: dumped on the entry screen)');
+  if (rejoined) {
+    ok(await F.p.evaluate(() => CLASH_HUD.slot()) === fSlot,
+      'they get their own fort back, not a new seat -> ' + fSlot);
+    ok(await F.p.evaluate(() => document.getElementById('clashLobby').classList.contains('off')),
+      'and land on the battlefield, not the lobby');
+    // the replayed backlog must be burnt through, not played out at 5 frames a
+    // second - left buffered they would trail their opponent for the whole match
+    await H.p.waitForTimeout(4000);
+    const gap = Math.abs((await H.p.evaluate(() => CLASH_NET.frame)) -
+                         (await F.p.evaluate(() => CLASH_NET.frame)));
+    ok(gap <= 2, 'they come back level with the battle, not seconds behind -> ' + gap + ' frames apart');
+    const stepR = await inStep([H, F], 200);
+    ok(stepR.sampled && stepR.equal, 'and the two simulations agree again after the rejoin');
+  }
+  ok(await H.p.evaluate(() => CLASH_NET.frame) > atReload, 'the other player never stalled');
+  ok(H.errs.length === 0 && F.errs.length === 0,
+    'no page errors -> ' + [...H.errs, ...F.errs].join(' | '));
+  for (const X of [H, F]) await X.c.close();
+
   console.log(`\nCLASH WITH FRIENDS: ${pass} passed, ${fail} failed`);
   await b.close(); process.exit(fail ? 1 : 0);
 })();

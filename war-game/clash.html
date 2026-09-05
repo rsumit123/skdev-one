@@ -1119,10 +1119,50 @@ window.BreachSim=function(seed, humanSlots){
       SLOTKIND[sl]=(raw&&raw.kind)||(raw&&raw.modelId?'model':'');
     }
     refreshShortNames();
+    if(CLASH_CODE) rememberBattle(CLASH_CODE);
     frameQ=[]; tickInFrame=0; lastFrameN=-1; overSent=false; netGeneration=p.generation||p.roomGeneration||null;
     // Model seats are commanded by the server. Passing every slot here prevents
     // the client-side deterministic filler AI from inventing commands for them.
     setupWorld(window.BreachSim(p.seed,['A1','A2','B1','B2']));
+  }
+  // A phone that locks, a discarded tab, a stray refresh: the battle is still
+  // running and your fort is under fire, but the page came back knowing nothing
+  // and dropped you on the entry screen with no way in. The server has always
+  // been able to resume a seat (clash:resume); only the client forgot which room
+  // it was in. Nothing sensitive here - a room code and a timestamp.
+  const LIVE_KEY='breach.clash.live';
+  function rememberBattle(code){
+    try{ localStorage.setItem(LIVE_KEY,JSON.stringify({code,ts:Date.now()})); }catch(e){}
+  }
+  function forgetBattle(){ try{ localStorage.removeItem(LIVE_KEY); }catch(e){} }
+  function rememberedBattle(){
+    try{
+      const v=JSON.parse(localStorage.getItem(LIVE_KEY)||'null');
+      // a match is at most ten minutes; anything older is a dead code, and
+      // firing it would drop the player into someone else's finished game
+      if(v&&/^[A-Z0-9]{4,8}$/.test(v.code||'')&&Date.now()-(v.ts||0)<15*60*1000) return v.code;
+    }catch(e){}
+    return null;
+  }
+  // Walk back into a battle after a full page load. resumeNet() cannot do this:
+  // it requires MODE==='net' and a CLASH_CODE, both of which a fresh page lacks.
+  async function rejoinAfterReload(code){
+    try{
+      await ensureSocket();
+      const r=await emitAck('clash:resume',{code,lastFrame:-1,generation:null});
+      if(!r||r.ok===false){ forgetBattle(); return false; }
+      const payload=r.resync||r.start||r;
+      if(!payload||payload.seed===undefined){ forgetBattle(); return false; }
+      MODE='net'; CLASH_CODE=code;
+      onNetStart(payload);            // this is what hides the lobby and draws the board
+      applyResumePayload(payload);
+      const replay=r.frames||r.replay||[];
+      if(Array.isArray(replay)) replay.filter(fr=>fr&&fr.n>lastFrameN).forEach(onNetFrame);
+      if(r.generation!==undefined) netGeneration=r.generation;
+      catchUp(1);                    // arrive level with everyone else, not 2s behind
+      netStatus('Back in the battle'); setTimeout(()=>netStatus('',false),1800);
+      return true;
+    }catch(e){ forgetBattle(); return false; }
   }
   function applyResumePayload(p){
     if(p.seed!==undefined && (!SIM || MODE!=='net')) onNetStart(p);
@@ -1404,6 +1444,7 @@ window.BreachSim=function(seed, humanSlots){
   }
   function showResults(result){
     if(!result)return;
+    forgetBattle();
     fillResultSummary(result);
     const card=document.getElementById('endcard');
     const winner=result.winnerTeam!==undefined?result.winnerTeam:result.winner;
@@ -1419,6 +1460,7 @@ window.BreachSim=function(seed, humanSlots){
       if(payload) applyResumePayload(payload);
       const replay=r.frames||r.replay||[]; if(Array.isArray(replay)) replay.filter(fr=>fr&&fr.n>lastFrameN).forEach(onNetFrame);
       if(r.generation!==undefined) netGeneration=r.generation;
+      catchUp(1);                    // same for a socket that dropped and came back
       netWasDisconnected=false; netStatus('Reconnected'); setTimeout(()=>netStatus('',false),1400);
     } else netStatus('Reconnect failed — battle may have ended');
     netResuming=false;
@@ -1458,6 +1500,13 @@ window.BreachSim=function(seed, humanSlots){
     const code=decodeURIComponent(location.hash.slice(8)).toUpperCase();
     if(/^[A-Z0-9]{4,8}$/.test(code)) openReport(code);
   }
+  // If the last thing this device was doing was a battle, walk straight back in.
+  (function(){
+    const code=rememberedBattle();
+    if(!code||location.hash.startsWith('#report=')) return;
+    clMsg('Rejoining your battle…',true);
+    rejoinAfterReload(code).then(back=>{ if(!back) clMsg(''); });
+  })();
   document.getElementById('clSolo').onclick=()=>clCreate(false);
   document.getElementById('clJoin').onclick=clJoin;
   document.getElementById('clStart').onclick=clStart;
@@ -1601,6 +1650,23 @@ window.BreachSim=function(seed, humanSlots){
     if(socket) socket.emit('clash:state',{frame,state:SIM.state(),units:modelUnitCounts()});
   }
 
+  // Burn through a backlog of frames without drawing them. `keep` is the cushion
+  // left behind: 10 frames of slack is right for a tab that was hidden and will
+  // keep drifting, but a client that just replayed a whole match on resume must
+  // come back level - left at 10 it would sit two seconds behind its opponent
+  // for the rest of the game, seeing the battle late and ordering late.
+  function catchUp(keep){
+    if(!SIM) return 0;
+    let n=0;
+    while(frameQ.length>keep){
+      const fr=frameQ.shift(); const ins=flatten(fr);
+      SIM.tick(ins); SIM.tick([]); SIM.tick([]); SIM.tick([]);
+      tickInFrame=0; lastFrameN=fr.n; n++;
+      window.CLASH_NET={frame:lastFrameN,tick:0};
+      reportClashState(lastFrameN);
+    }
+    return n;
+  }
   // ---- fixed-tick driver ------------------------------------------------------
   let acc=0;
   function step(dt){
@@ -1625,12 +1691,7 @@ window.BreachSim=function(seed, humanSlots){
             socket.emit('clash:hash',{frame:lastFrameN,hash:SIM.hash()});
         }
         // fell far behind (hidden tab): fast-forward silently, no FX spam
-        while(frameQ.length>10){
-          const fr=frameQ.shift(); const ins=flatten(fr);
-          SIM.tick(ins); SIM.tick([]); SIM.tick([]); SIM.tick([]);
-          tickInFrame=0; lastFrameN=fr.n;
-          reportClashState(lastFrameN);
-        }
+        catchUp(10);
         const st=SIM.state();
         if(st.over&&!overSent&&socket){ overSent=true; socket.emit('clash:over',{winner:SIM.state().winner,reason:SIM.state().clockLeft>0?'base':'timecap'}); }
       }
