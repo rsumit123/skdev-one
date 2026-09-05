@@ -1388,8 +1388,9 @@ window.BreachSim=function(seed, humanSlots){
         }
         if(why) lines.push('<div class="result-why">'+why+'</div>');
         // name the forts by who held them, not by slot code
-        const fort=k=>{const n=SHORTNAME[k]||SLOTNAME[k]||k; return k===MYSLOT?'You':
-          (String(n).length>14?String(n).slice(0,13)+'\u2026':n);};
+        // trimSeatName keeps the "#2": trimming the whole string at 14 turned
+        // "Nova Lite v1 #1" and "Nova Lite v1 #2" into the same "Nova Lite v1 ..."
+        const fort=k=>k===MYSLOT?'You':trimSeatName(SHORTNAME[k]||SLOTNAME[k]||k,16);
         lines.push('<div class="result-hp">Fort health at the end<br>'
           +fort('A1')+' '+(hp.A1|0)+'% &middot; '+fort('A2')+' '+(hp.A2|0)+'%'
           +' &nbsp;=&nbsp; '+tot(0)+'%<br>'
