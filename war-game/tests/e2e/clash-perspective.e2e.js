@@ -35,14 +35,19 @@ const { chromium } = require(process.env.PLAYWRIGHT_PKG || '@playwright/test');
   ok(a.team!==bb.team,'the two clients really are on opposite teams');
 
   // the camera moved; the simulation must not have
-  const sample=X=>X.p.evaluate(()=>({f:window.CLASH_NET&&CLASH_NET.frame,h:BREACH_SIM_DEBUG.hash()}));
+  // A client advances four sim ticks per flushed frame, so two clients can share
+  // a frame number and still be up to three ticks apart - comparing hashes on
+  // frame alone reported a false desync. Match the tick too, as the multiplayer
+  // suite already does.
+  const sample=X=>X.p.evaluate(()=>({f:window.CLASH_NET&&CLASH_NET.frame,
+    t:(window.CLASH_NET&&CLASH_NET.tick)||0, h:BREACH_SIM_DEBUG.hash()}));
   let matched=false;
   for(let i=0;i<40&&!matched;i++){
     const [x,y]=await Promise.all([sample(A),sample(B)]);
-    if(x.f===y.f){ matched=true; ok(x.h===y.h,'sim hashes identical at frame '+x.f+' — the flip is render-only'); }
-    else await A.p.waitForTimeout(60);
+    if(x.f===y.f&&x.t===y.t){ matched=true; ok(x.h===y.h,'sim hashes identical at frame '+x.f+' — the flip is render-only'); }
+    else await A.p.waitForTimeout(37);
   }
-  ok(matched,'sampled both clients at the same frame');
+  ok(matched,'sampled both clients at the same frame and tick');
   ok(A.errs.length===0&&B.errs.length===0,'no page errors: '+JSON.stringify([A.errs,B.errs]));
   console.log(`\nPERSPECTIVE: ${pass} passed, ${fail} failed`);
   await b.close(); process.exit(fail?1:0);
