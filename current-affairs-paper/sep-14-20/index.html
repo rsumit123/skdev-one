@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Current affairs quiz — 14 to 20 September 2026</title>
+<style>
+  :root{ color-scheme: only light; }
+  *{box-sizing:border-box}
+  html{background:#F7F6F2}
+  body{
+    margin:0;padding:0;
+    background:#F7F6F2;
+    color:#1C222C;
+    font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  .registration{position:sticky;top:0;z-index:20;display:flex;height:6px;background:#D8D5CC}
+  .registration span{height:100%;transition:flex-grow .35s ease}
+  .reg-c{background:#0E7C9B}
+  .reg-m{background:#B32570}
+  .reg-y{background:#C9971B}
+  .reg-k{background:#1C222C}
+
+  .wrap{max-width:680px;margin:0 auto;padding:0 20px 96px}
+
+  header{padding:50px 0 32px;border-bottom:1px solid #D8D5CC}
+  h1{
+    font-family:Georgia,"Times New Roman",serif;
+    font-weight:400;font-size:40px;line-height:1.12;
+    margin:0 0 14px;letter-spacing:-0.01em;color:#1C222C;
+  }
+  .standfirst{color:#5A6472;font-size:15px;margin:0;max-width:54ch}
+  .meta{margin-top:20px;font-size:13px;color:#5A6472}
+
+  .progress{
+    position:sticky;top:6px;z-index:19;
+    background:rgba(247,246,242,.95);
+    backdrop-filter:blur(6px);
+    border-bottom:1px solid #D8D5CC;
+    padding:11px 0;margin-bottom:6px;
+    font-size:13px;color:#5A6472;
+    display:flex;justify-content:space-between;align-items:center;
+  }
+
+  .q{padding:32px 0;border-bottom:1px solid #D8D5CC}
+  .q-head{display:flex;gap:12px;align-items:baseline;margin-bottom:12px;flex-wrap:wrap}
+  .folio{font-family:Georgia,serif;font-size:14px;color:#5A6472;min-width:26px}
+  .dateline{font-size:11px;color:#FFFFFF;background:#5A6472;padding:2px 7px;border-radius:2px}
+  .topic{font-size:12px;color:#5A6472}
+  .context{
+    font-size:14px;color:#5A6472;margin:0 0 14px;
+    padding-left:14px;border-left:2px solid #D8D5CC;max-width:60ch;
+  }
+  .prompt{
+    font-family:Georgia,"Times New Roman",serif;
+    font-size:19px;line-height:1.45;margin:0 0 18px;color:#1C222C;
+  }
+  .opts{display:grid;gap:8px}
+  label.opt{
+    display:flex;gap:12px;align-items:flex-start;
+    background:#FFFFFF;color:#1C222C;
+    border:1px solid #D8D5CC;
+    border-radius:4px;padding:13px 15px;cursor:pointer;
+    transition:background .12s ease,border-color .12s ease;
+    font-size:15px;
+  }
+  label.opt:hover{background:#EFEDE6}
+  label.opt input{margin:3px 0 0;accent-color:#0E7C9B;flex:none}
+  label.opt:focus-within{outline:2px solid #0E7C9B;outline-offset:2px}
+  label.opt.picked{border-color:#0E7C9B;background:#EFEDE6}
+  label.opt.correct{border-color:#1F7A55;border-width:2px}
+  label.opt.wrong{border-color:#B23A35;border-width:2px}
+  .tag{margin-left:auto;font-size:12px;flex:none;padding-left:10px}
+  .tag.ok{color:#1F7A55}
+  .tag.no{color:#B23A35}
+
+  .actions{
+    position:fixed;left:0;right:0;bottom:0;z-index:25;
+    background:rgba(247,246,242,.97);border-top:1px solid #D8D5CC;
+    padding:14px 20px;display:flex;gap:12px;justify-content:center;align-items:center;
+    backdrop-filter:blur(6px);
+  }
+  button{
+    font:inherit;font-size:15px;border-radius:4px;cursor:pointer;
+    padding:11px 22px;border:1px solid #D8D5CC;background:#FFFFFF;color:#1C222C;
+  }
+  button.primary{background:#1C222C;color:#FFFFFF;border-color:#1C222C}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  button:focus-visible{outline:2px solid #0E7C9B;outline-offset:2px}
+
+  .result{display:none;padding:38px 0 10px;border-bottom:1px solid #D8D5CC}
+  .result.show{display:block}
+  .score{font-family:Georgia,serif;font-size:64px;line-height:1;margin:0;color:#1C222C}
+  .score small{font-size:26px;color:#5A6472}
+  .verdict{margin:12px 0 0;color:#5A6472;font-size:15px}
+  .compare{
+    margin-top:18px;padding:12px 15px;border-left:3px solid #C9971B;
+    background:#FFFFFF;font-size:14px;color:#1C222C;
+  }
+  .review-head{font-family:Georgia,serif;font-size:22px;margin:36px 0 6px;font-weight:400;color:#1C222C}
+  .review-sub{color:#5A6472;font-size:14px;margin:0 0 18px}
+  .miss{
+    border-left:3px solid #B23A35;background:#FFFFFF;border-top:1px solid #D8D5CC;
+    border-right:1px solid #D8D5CC;border-bottom:1px solid #D8D5CC;
+    padding:14px 16px;margin-bottom:12px;font-size:14px;border-radius:0 4px 4px 0;
+  }
+  .miss p{margin:0 0 7px}
+  .miss .qt{font-family:Georgia,serif;font-size:16px;color:#1C222C}
+  .miss .you{color:#B23A35}
+  .miss .right{color:#1F7A55}
+  .miss .note{color:#5A6472;font-size:13px;margin:0}
+  .allright{
+    border-left:3px solid #1F7A55;background:#FFFFFF;
+    border-top:1px solid #D8D5CC;border-right:1px solid #D8D5CC;border-bottom:1px solid #D8D5CC;
+    padding:14px 16px;font-size:14px;border-radius:0 4px 4px 0;color:#1C222C;
+  }
+
+  @media (max-width:560px){
+    h1{font-size:31px}
+    .prompt{font-size:17px}
+    .score{font-size:52px}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+  @media (forced-colors:active){
+    label.opt{border:1px solid currentColor}
+    label.opt.correct,label.opt.wrong{border-width:3px}
+  }
+</style>
+</head>
+<body>
+
+<div class="registration" aria-hidden="true">
+  <span class="reg-c" id="regC" style="flex-grow:0"></span>
+  <span class="reg-m" id="regM" style="flex-grow:0"></span>
+  <span class="reg-y" id="regY" style="flex-grow:0"></span>
+  <span class="reg-k" id="regK" style="flex-grow:0"></span>
+</div>
+
+<div class="wrap">
+
+<header>
+  <h1>Current affairs: the week of 14 to 20 September</h1>
+  <p class="standfirst">Ten topics, two questions each. Every question sets up its own background first, so you can reason your way through even if you missed the story when it ran.</p>
+  <p class="meta">One answer each. Nothing is scored until you check.</p>
+</header>
+
+<div class="progress">
+  <span id="counter">0 of 20 answered</span>
+  <span id="lastScore"></span>
+</div>
+
+<form id="quiz"></form>
+
+<section class="result" id="result" aria-live="polite">
+  <p class="score"><span id="scoreNum">0</span><small> / 20</small></p>
+  <p class="verdict" id="verdict"></p>
+  <div class="compare" id="compare" style="display:none"></div>
+  <h2 class="review-head" id="reviewHead">What you missed</h2>
+  <p class="review-sub" id="reviewSub"></p>
+  <div id="review"></div>
+</section>
+
+</div>
+
+<div class="actions">
+  <button type="button" class="primary" id="check" disabled>Check answers</button>
+  <button type="button" id="reset">Start over</button>
+</div>
+
+<script>
+const QUESTIONS = [
+  {
+    day: "Sep 15", topic: "UPI charges",
+    ctx: "The Finance Ministry confirmed there would be no charge on UPI payments up to Rs 2,000. Only about 4 per cent of person-to-merchant payments last year were for more than that amount.",
+    q: "Why does a fee confined to that small slice of transactions still matter a great deal?",
+    opts: [
+      "Those payments carry the highest fraud risk",
+      "Those few transactions carry most of the value",
+      "Small payments are already charged by banks",
+      "Large payments are mostly made by companies"
+    ],
+    a: 1,
+    note: "Payments above Rs 2,000 are roughly two-thirds of all person-to-merchant value, so the exempt band covers most transactions but little money."
+  },
+  {
+    day: "Sep 16", topic: "UPI charges",
+    ctx: "From October 15 merchants pay 0.4 per cent on UPI payments above Rs 2,000, with person-to-person transfers left untouched. The Explained box set out the case for it.",
+    q: "What was the stated justification for charging merchants at all?",
+    opts: [
+      "It funds the technology the system runs on",
+      "It discourages the use of cash by consumers",
+      "It brings UPI in line with global card rates",
+      "It compensates banks for their lost deposits"
+    ],
+    a: 0,
+    note: "The argument is that a free system has no revenue to pay for its own upkeep, and the fee lets new entrants into the payments business."
+  },
+
+  {
+    day: "Sep 20", topic: "Russia sanctions",
+    ctx: "Trump signed the Lindsey O Graham Sanctioning Russia and Iran Act into law on Friday. It concerns countries that keep buying Russian oil and gas, India and China among them.",
+    q: "What does the Act actually hand the US President?",
+    opts: [
+      "An obligation to bar all Russian energy trade",
+      "A ban on US firms operating in those countries",
+      "A discretionary power to impose steep tariffs",
+      "A duty to report buyers to the UN each quarter"
+    ],
+    a: 2,
+    note: "The power is discretionary, which is what makes it leverage. Delhi reads it as a bargaining chip in the trade talks rather than a fixed penalty."
+  },
+  {
+    day: "Sep 20", topic: "Russia sanctions",
+    ctx: "Russian crude was about 45 per cent of India's oil imports in August, down from a peak of 53.6 per cent in June. Experts say India will push for waivers rather than switch suppliers.",
+    q: "Why is simply replacing Russian oil not a realistic option right now?",
+    opts: [
+      "Indian refineries can only process Russian grades",
+      "The war in West Asia has choked the alternatives",
+      "Long-term contracts run to the end of the decade",
+      "Domestic production cannot be scaled back further"
+    ],
+    a: 1,
+    note: "The Iran conflict has squeezed the Gulf routes that would normally absorb the shortfall, so the alternative supply is not sitting there waiting."
+  },
+
+  {
+    day: "Sep 17", topic: "Tata Sons",
+    ctx: "The RBI rejected Tata Sons' request to surrender its registration as a core investment company. Tata Sons was classified in the Upper Layer of non-banking financial companies in September 2022.",
+    q: "Why does that classification create the pressure it does?",
+    opts: [
+      "Upper Layer firms must list within three years",
+      "Upper Layer firms cannot hold overseas assets",
+      "Upper Layer firms face a cap on their lending",
+      "Upper Layer firms need RBI sign-off on mergers"
+    ],
+    a: 0,
+    note: "Surrendering the registration was the route out of the listing obligation. With that refused, the listing question comes back to the board."
+  },
+  {
+    day: "Sep 19", topic: "Tata Sons",
+    ctx: "The Tata Sons board cleared a five-year extension for N Chandrasekaran with Noel Tata objecting. Former Chief Justice DY Chandrachud gave a legal opinion on that vote.",
+    q: "On what ground did he call the extension invalid?",
+    opts: [
+      "A five-year term exceeds the statutory limit",
+      "The proposal needed shareholder approval first",
+      "The board lacked a quorum at that meeting",
+      "It needs the Trusts' nominee directors to agree"
+    ],
+    a: 3,
+    note: "The Articles require the affirmative vote of the nominee directors from Tata Trusts, so one objection among them is not a minority view but a block."
+  },
+
+  {
+    day: "Sep 15", topic: "Uniform Civil Code",
+    ctx: "Amit Shah said a Uniform Civil Code would be in place across all 21 NDA-ruled states before 2029. Four BJP states have already passed one, though only Uttarakhand's is in force.",
+    q: "Why is the party going state by state instead of passing one central law?",
+    opts: [
+      "State laws are harder to challenge in the courts",
+      "It avoids the full constitutional fight for now",
+      "Personal law is beyond Parliament's competence",
+      "A central law would need the states to ratify it"
+    ],
+    a: 1,
+    note: "The state route lets different models be tested without confronting the political and constitutional complexity of a nationwide statute."
+  },
+  {
+    day: "Sep 15", topic: "Uniform Civil Code",
+    ctx: "Article 44 places a uniform civil code among the Directive Principles of State Policy rather than among the fundamental rights.",
+    q: "What follows from where it sits in the Constitution?",
+    opts: [
+      "It binds the Centre but not the state governments",
+      "It applies only where a state has no personal law",
+      "It guides governance but no court can enforce it",
+      "It requires a constitutional amendment to enact"
+    ],
+    a: 2,
+    note: "Directive Principles are fundamental to governance but not justiciable, which is why the push is legislative rather than through the courts."
+  },
+
+  {
+    day: "Sep 17", topic: "US rates",
+    ctx: "The Federal Reserve raised its key rate by 25 basis points to 3.75-4 per cent and signalled more tightening. Commentators split immediately over how to read it.",
+    q: "What makes the same decision readable as either hawkish or dovish?",
+    opts: [
+      "The vote was split among the board members",
+      "The rise was smaller than markets expected",
+      "What it implies about the bigger concern",
+      "The chair declined to take any questions"
+    ],
+    a: 2,
+    note: "A hike reads as hawkish if inflation is the worry and dovish if the Fed judges the economy strong enough to take it. The move alone does not say which."
+  },
+  {
+    day: "Sep 18", topic: "US rates",
+    ctx: "US government debt has crossed a record $40 trillion and interest payments on it have ballooned to $1.3 trillion. Bond yields have been rising since 2020.",
+    q: "Why does a rising yield on US bonds trouble borrowers everywhere?",
+    opts: [
+      "It is the safe benchmark everything else prices off",
+      "It forces foreign central banks to sell reserves",
+      "It raises the cost of dollar-denominated imports",
+      "It signals that the US intends to default soon"
+    ],
+    a: 0,
+    note: "US bonds are treated as being as safe as gold. If the safest borrower has to pay more, every riskier borrower pays more too."
+  },
+
+  {
+    day: "Sep 18", topic: "Electoral rolls",
+    ctx: "The Election Commission filed an affidavit on Bengal's Special Intensive Revision, reporting 38.20 lakh appeals filed and 1.02 lakh disposed of. Prasenjit Bose had sought something more specific.",
+    q: "What was missing from the affidavit?",
+    opts: [
+      "The districts where the appeals were filed",
+      "The split between inclusion and exclusion",
+      "The names of the officers who ruled on them",
+      "The dates by which each will be decided"
+    ],
+    a: 1,
+    note: "Without that break-up you cannot tell whether people are fighting to get on the roll or to keep others off it, which is the whole political question."
+  },
+  {
+    day: "Sep 15", topic: "Electoral rolls",
+    ctx: "The Supreme Court permitted Aadhaar as one of the documents for establishing identity in the revision. The lead editorial took that further.",
+    q: "What was the paper's argument for relying on it more heavily?",
+    opts: [
+      "The Election Commission already holds the database",
+      "Aadhaar was designed for exactly this purpose",
+      "No other document covers the whole population",
+      "The state trusts it to deliver rations and pensions"
+    ],
+    a: 3,
+    note: "The editorial's point is about consistency. Trusting a system for welfare and distrusting it for the roll is hard to defend."
+  },
+
+  {
+    day: "Sep 19", topic: "Karnataka jobs scam",
+    ctx: "The head of the Karnataka Public Service Commission was suspended in August over a paper leak and a job for his daughter. The Express investigation asked why he lasted three years.",
+    q: "What did the investigation find about how he survived so long?",
+    opts: [
+      "Both parties in turn had reason to shield him",
+      "The complaints never reached the state government",
+      "A court had stayed all action against the commission",
+      "His appointment could not legally be revoked midway"
+    ],
+    a: 0,
+    note: "Picked by the BJP and protected by the Congress, with officials who flagged his conduct moved out under the latter."
+  },
+  {
+    day: "Sep 20", topic: "Karnataka jobs scam",
+    ctx: "Part two of the investigation set out what job aspirants and commission insiders had flagged to both parties over those years.",
+    q: "Which of these was among the irregularities documented?",
+    opts: [
+      "Exams were held without any invigilators present",
+      "Recruitment was paused without informing anyone",
+      "Top scorers were targeted and marks withheld",
+      "Results were published before exams were held"
+    ],
+    a: 2,
+    note: "Along with bribes for interview panels, altered tabulation records, tampered answer sheets and papers leaked to selected candidates."
+  },
+
+  {
+    day: "Sep 20", topic: "AI risk",
+    ctx: "Anthropic's chief executive spent the week arguing that the industry is moving faster than its safeguards, and put a timeframe on his concern.",
+    q: "What specific danger did Dario Amodei point to?",
+    opts: [
+      "Models leaking the training data they memorised",
+      "Misaligned agents building persistent botnets",
+      "Chips being diverted to unauthorised buyers",
+      "Open models being copied by rival countries"
+    ],
+    a: 1,
+    note: "He put it within six to twelve months, with economic damage running into hundreds of billions of dollars."
+  },
+  {
+    day: "Sep 16", topic: "AI risk",
+    ctx: "An MIT report looked at what happens on campus when students hand more of their thinking to AI tools. It called the effect cognitive surrender.",
+    q: "What change in student behaviour did the report actually document?",
+    opts: [
+      "A sharp fall in the number of degrees completed",
+      "A rise in students reporting academic misconduct",
+      "A shift towards technical courses and away from arts",
+      "Students skipping office hours and studying alone"
+    ],
+    a: 3,
+    note: "The finding is social rather than academic. The tool replaces the conversations that used to do the teaching."
+  },
+
+  {
+    day: "Sep 14", topic: "India and China",
+    ctx: "Modi and Xi met on the summit sidelines, five years after the Ladakh standoff. Chinese Foreign Minister Wang Yi described what he called the most important consensus reached.",
+    q: "What was that consensus?",
+    opts: [
+      "The two nations should be partners, not rivals",
+      "The boundary will be settled within five years",
+      "Trade barriers will be lifted on both sides",
+      "Patrolling rights return to their 2019 position"
+    ],
+    a: 0,
+    note: "The framing matters more than anything operational. Both sides also agreed differences should not harden into disputes."
+  },
+  {
+    day: "Sep 14", topic: "India and China",
+    ctx: "Kanti Bajpai read the meeting as producing a stable but fragile arrangement, one in which neither side gains from being the first to move.",
+    q: "What did he name as the thing most likely to break it?",
+    opts: [
+      "A collapse in bilateral trade volumes",
+      "A change of government in either capital",
+      "An India-Pakistan fight drawing China in",
+      "A new US treaty with one of the two"
+    ],
+    a: 2,
+    note: "That, or a domestic loss of face for either leader. Both would make holding the current position politically impossible."
+  },
+
+  {
+    day: "Sep 20", topic: "Asian Games",
+    ctx: "India's shooters went into Nagoya using biofeedback and simulated pressure in training, hoping to match their 22-medal haul from Hangzhou.",
+    q: "Why does breathing get that much attention in rifle shooting?",
+    opts: [
+      "It determines how long a shooter can hold aim",
+      "Every heartbeat and breath moves the barrel",
+      "Slow breathing reduces the pull of the trigger",
+      "It keeps the shooter's vision from blurring"
+    ],
+    a: 1,
+    note: "At that distance, movement too small to see with the naked eye is enough to miss. The aim is to fire between heartbeats."
+  },
+  {
+    day: "Sep 15", topic: "Asian Games",
+    ctx: "India won the Asia Cup but did not collect the trophy from Mohsin Naqvi, who heads both the Asian Cricket Council and the Pakistan board. Devajit Saikia later explained the call.",
+    q: "How did the BCCI frame the decision?",
+    opts: [
+      "The board had no advance notice of the ceremony",
+      "The council had breached its own tournament rules",
+      "Receiving it in that manner was not appropriate",
+      "The captain was not available at the presentation"
+    ],
+    a: 2,
+    note: "Saikia said the board took a conscious decision considering the prevailing circumstances and sentiments in the country."
+  }
+];
+
+const form = document.getElementById('quiz');
+const counter = document.getElementById('counter');
+const checkBtn = document.getElementById('check');
+const resetBtn = document.getElementById('reset');
+const result = document.getElementById('result');
+let previousScore = null;
+let scored = false;
+
+function build(){
+  form.innerHTML = '';
+  QUESTIONS.forEach((item, i) => {
+    const block = document.createElement('div');
+    block.className = 'q';
+    block.id = 'q' + i;
+
+    const head = document.createElement('div');
+    head.className = 'q-head';
+    const folio = document.createElement('span');
+    folio.className = 'folio';
+    folio.textContent = i + 1;
+    const dateline = document.createElement('span');
+    dateline.className = 'dateline';
+    dateline.textContent = item.day;
+    const topic = document.createElement('span');
+    topic.className = 'topic';
+    topic.textContent = item.topic;
+    head.appendChild(folio);
+    head.appendChild(dateline);
+    head.appendChild(topic);
+    block.appendChild(head);
+
+    const ctx = document.createElement('p');
+    ctx.className = 'context';
+    ctx.textContent = item.ctx;
+    block.appendChild(ctx);
+
+    const prompt = document.createElement('p');
+    prompt.className = 'prompt';
+    prompt.textContent = item.q;
+    block.appendChild(prompt);
+
+    const opts = document.createElement('div');
+    opts.className = 'opts';
+    item.opts.forEach((text, j) => {
+      const label = document.createElement('label');
+      label.className = 'opt';
+      const input = document.createElement('input');
+      input.type = 'radio';
+      input.name = 'q' + i;
+      input.value = j;
+      const span = document.createElement('span');
+      span.textContent = text;
+      label.appendChild(input);
+      label.appendChild(span);
+      opts.appendChild(label);
+    });
+    block.appendChild(opts);
+    form.appendChild(block);
+  });
+}
+
+function answered(){
+  let n = 0;
+  QUESTIONS.forEach((_, i) => {
+    if (form.querySelector('input[name="q' + i + '"]:checked')) n++;
+  });
+  return n;
+}
+
+function refresh(){
+  const n = answered();
+  counter.textContent = n + ' of 20 answered';
+  checkBtn.disabled = n === 0 || scored;
+
+  const done = n / 20;
+  const parts = [
+    Math.min(done * 4, 1), Math.min(Math.max(done * 4 - 1, 0), 1),
+    Math.min(Math.max(done * 4 - 2, 0), 1), Math.min(Math.max(done * 4 - 3, 0), 1)
+  ];
+  ['regC','regM','regY','regK'].forEach((id, k) => {
+    document.getElementById(id).style.flexGrow = parts[k];
+  });
+
+  form.querySelectorAll('label.opt').forEach(l => {
+    if (!scored) l.classList.toggle('picked', l.querySelector('input').checked);
+  });
+}
+
+form.addEventListener('change', refresh);
+
+checkBtn.addEventListener('click', () => {
+  scored = true;
+  let score = 0;
+  const misses = [];
+  const byTopic = {};
+
+  QUESTIONS.forEach((item, i) => {
+    const picked = form.querySelector('input[name="q' + i + '"]:checked');
+    const chosen = picked ? Number(picked.value) : null;
+    const labels = form.querySelectorAll('#q' + i + ' label.opt');
+
+    labels.forEach((label, j) => {
+      label.classList.remove('picked');
+      label.querySelector('input').disabled = true;
+      if (j === item.a){
+        label.classList.add('correct');
+        const tag = document.createElement('span');
+        tag.className = 'tag ok';
+        tag.textContent = 'correct';
+        label.appendChild(tag);
+      }
+      if (chosen === j && chosen !== item.a){
+        label.classList.add('wrong');
+        const tag = document.createElement('span');
+        tag.className = 'tag no';
+        tag.textContent = 'you chose';
+        label.appendChild(tag);
+      }
+    });
+
+    if (!byTopic[item.topic]) byTopic[item.topic] = 0;
+    if (chosen === item.a){ score++; byTopic[item.topic]++; }
+    else misses.push({ item: item, chosen: chosen });
+  });
+
+  document.getElementById('scoreNum').textContent = score;
+
+  const clean = Object.keys(byTopic).filter(t => byTopic[t] === 2);
+  let verdict;
+  if (score === 20) verdict = 'Every one. You read the arguments, not just the headlines.';
+  else if (score >= 16) verdict = 'Strong. The reasoning is sticking.';
+  else if (score >= 11) verdict = 'You caught the stories. Some of the arguments slipped.';
+  else if (score >= 6) verdict = 'The events landed. The why behind them did not.';
+  else verdict = 'Worth a second pass through the opinion and explained pages.';
+  if (clean.length && score < 20){
+    verdict += ' Clean sweep on ' + clean.join(', ') + '.';
+  }
+  document.getElementById('verdict').textContent = verdict;
+
+  const compare = document.getElementById('compare');
+  if (previousScore !== null){
+    const diff = score - previousScore;
+    const move = diff > 0 ? 'up ' + diff : (diff < 0 ? 'down ' + Math.abs(diff) : 'level');
+    compare.textContent = 'Last attempt: ' + previousScore + ' out of 20. You are ' + move + ' this time.';
+    compare.style.display = 'block';
+  } else {
+    compare.style.display = 'none';
+  }
+  previousScore = score;
+
+  const review = document.getElementById('review');
+  review.innerHTML = '';
+  const sub = document.getElementById('reviewSub');
+
+  if (misses.length === 0){
+    document.getElementById('reviewHead').textContent = 'Nothing missed';
+    sub.textContent = '';
+    const ok = document.createElement('div');
+    ok.className = 'allright';
+    ok.textContent = 'All twenty correct. Scroll up if you want to reread the reasoning under each answer.';
+    review.appendChild(ok);
+  } else {
+    document.getElementById('reviewHead').textContent = 'What you missed';
+    sub.textContent = misses.length + (misses.length === 1 ? ' question' : ' questions') + ', with the answer and the reasoning behind it.';
+    misses.forEach(m => {
+      const box = document.createElement('div');
+      box.className = 'miss';
+
+      const qt = document.createElement('p');
+      qt.className = 'qt';
+      qt.textContent = m.item.topic + ', ' + m.item.day + ' — ' + m.item.q;
+      box.appendChild(qt);
+
+      const you = document.createElement('p');
+      you.className = 'you';
+      you.textContent = 'You chose: ' + (m.chosen === null ? 'nothing' : m.item.opts[m.chosen]);
+      box.appendChild(you);
+
+      const right = document.createElement('p');
+      right.className = 'right';
+      right.textContent = 'Answer: ' + m.item.opts[m.item.a];
+      box.appendChild(right);
+
+      const note = document.createElement('p');
+      note.className = 'note';
+      note.textContent = m.item.note;
+      box.appendChild(note);
+
+      review.appendChild(box);
+    });
+  }
+
+  result.classList.add('show');
+  checkBtn.disabled = true;
+  result.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+
+resetBtn.addEventListener('click', () => {
+  scored = false;
+  result.classList.remove('show');
+  build();
+  refresh();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
+build();
+refresh();
+</script>
+</body>
+</html>
