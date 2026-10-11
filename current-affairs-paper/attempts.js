@@ -5,17 +5,24 @@
  * the score from QUESTIONS and the form rather than scraping the rendered
  * results, records it via /api/attempts, and lists what everyone has scored.
  *
+ * Recording is explicit: one "Record this attempt" button, placed inside the
+ * results box under the score so it is on screen the moment you are scored.
+ * It stays disabled, with a reason, until there is something to record and a
+ * name to record it under - an earlier version recorded silently on "Check
+ * answers" and dropped the attempt when no name had been saved yet.
+ *
  * Everything from the API is rendered with textContent, never innerHTML:
  * names are typed by whoever is playing and are not to be trusted as markup.
  *
- * If the API is unreachable or unconfigured the section simply never appears -
- * a quiz that works offline should not grow a broken box.
+ * If the API is unreachable or unconfigured nothing appears - a quiz that
+ * works offline should not grow a broken box.
  */
 (function () {
   'use strict';
 
   var API = '/api/attempts';
   var NAME_KEY = 'ca.name';
+  var MAX_NAME = 24;
 
   var week = (function () {
     var m = location.pathname.match(/current-affairs-paper\/([a-z]{3}-\d{1,2}-\d{1,2})/);
@@ -23,7 +30,9 @@
   }());
 
   var checkBtn = document.getElementById('check');
+  var resetBtn = document.getElementById('reset');
   var result = document.getElementById('result');
+  var verdict = document.getElementById('verdict');
   if (!week || !checkBtn || !result || typeof QUESTIONS === 'undefined') return;
 
   function stored(key) {
@@ -37,18 +46,23 @@
 
   var css = document.createElement('style');
   css.textContent = [
+    '.att-bar{margin:22px 0 4px;padding:16px 18px;border:1px solid #D8D5CC;background:#FFFFFF}',
+    '.att-bar[hidden]{display:none}',
+    '.att-bar h3{font-family:Georgia,"Times New Roman",serif;font-weight:400;font-size:17px;',
+    '  margin:0 0 12px;color:#1C222C}',
+    '.att-bar-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}',
+    '.att-bar label{font-size:13px;color:#5A6472}',
+    '.att-bar input{font:inherit;font-size:14px;padding:7px 9px;border:1px solid #D8D5CC;',
+    '  background:#FFFFFF;color:#1C222C;border-radius:2px;min-width:0;width:11em}',
+    '.att-bar button{font:inherit;font-size:13px;padding:8px 14px;border:1px solid #1C222C;',
+    '  background:#1C222C;color:#F7F6F2;border-radius:2px;cursor:pointer}',
+    '.att-bar button:disabled{opacity:.4;cursor:not-allowed}',
+    '.att-hint{font-size:13px;color:#5A6472;margin:10px 0 0}',
     '.att{padding:32px 0 0;border-top:1px solid #D8D5CC;margin-top:8px}',
     '.att[hidden]{display:none}',
     '.att h2{font-family:Georgia,"Times New Roman",serif;font-weight:400;',
     '  font-size:24px;margin:0 0 6px;color:#1C222C}',
     '.att-sub{font-size:13px;color:#5A6472;margin:0 0 20px}',
-    '.att-who{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 22px}',
-    '.att-who label{font-size:13px;color:#5A6472}',
-    '.att-who input{font:inherit;font-size:14px;padding:7px 9px;border:1px solid #D8D5CC;',
-    '  background:#FFFFFF;color:#1C222C;border-radius:2px;min-width:0;width:11em}',
-    '.att-who button{font:inherit;font-size:13px;padding:7px 12px;border:1px solid #1C222C;',
-    '  background:#1C222C;color:#F7F6F2;border-radius:2px;cursor:pointer}',
-    '.att-who button:disabled{opacity:.5;cursor:default}',
     '.att-row{padding:14px 0;border-bottom:1px solid #D8D5CC;font-size:14px}',
     '.att-row:first-of-type{border-top:1px solid #D8D5CC}',
     '.att-line{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}',
@@ -63,7 +77,49 @@
   ].join('');
   document.head.appendChild(css);
 
-  // ---------------------------------------------------------------- the panel
+  // --------------------------------------------------------- the record bar
+  // Inside the results box, directly under the verdict, so it is the first
+  // thing below the score rather than something to scroll past the review for.
+
+  var bar = document.createElement('div');
+  bar.className = 'att-bar';
+  bar.hidden = true;
+
+  var barHead = document.createElement('h3');
+  barHead.textContent = 'Add this score to the attempts list';
+  bar.appendChild(barHead);
+
+  var barRow = document.createElement('div');
+  barRow.className = 'att-bar-row';
+  var nameLabel = document.createElement('label');
+  nameLabel.setAttribute('for', 'att-name');
+  nameLabel.textContent = 'Your name';
+  var nameInput = document.createElement('input');
+  nameInput.id = 'att-name';
+  nameInput.type = 'text';
+  nameInput.maxLength = MAX_NAME;
+  nameInput.autocomplete = 'nickname';
+  nameInput.placeholder = 'so the score has a name on it';
+  nameInput.value = stored(NAME_KEY) || '';
+  var recordBtn = document.createElement('button');
+  recordBtn.type = 'button';
+  recordBtn.textContent = 'Record this attempt';
+  barRow.appendChild(nameLabel);
+  barRow.appendChild(nameInput);
+  barRow.appendChild(recordBtn);
+  bar.appendChild(barRow);
+
+  var hint = document.createElement('p');
+  hint.className = 'att-hint';
+  bar.appendChild(hint);
+
+  if (verdict && verdict.parentNode === result) {
+    result.insertBefore(bar, verdict.nextSibling);
+  } else {
+    result.appendChild(bar);
+  }
+
+  // -------------------------------------------------------- the history list
 
   var panel = document.createElement('section');
   panel.className = 'att';
@@ -76,25 +132,6 @@
   var sub = document.createElement('p');
   sub.className = 'att-sub';
   panel.appendChild(sub);
-
-  var who = document.createElement('div');
-  who.className = 'att-who';
-  var whoLabel = document.createElement('label');
-  whoLabel.setAttribute('for', 'att-name');
-  whoLabel.textContent = 'Your name';
-  var whoInput = document.createElement('input');
-  whoInput.id = 'att-name';
-  whoInput.type = 'text';
-  whoInput.maxLength = 24;
-  whoInput.autocomplete = 'nickname';
-  whoInput.placeholder = 'so scores have a name on them';
-  var whoSave = document.createElement('button');
-  whoSave.type = 'button';
-  whoSave.textContent = 'Save';
-  who.appendChild(whoLabel);
-  who.appendChild(whoInput);
-  who.appendChild(whoSave);
-  panel.appendChild(who);
 
   var rowsBox = document.createElement('div');
   panel.appendChild(rowsBox);
@@ -114,8 +151,28 @@
     return d + (d === 1 ? ' day ago' : ' days ago');
   }
 
+  function typedName() {
+    return nameInput.value.replace(/\s+/g, ' ').trim().slice(0, MAX_NAME);
+  }
+
   function myName() {
-    return stored(NAME_KEY) || '';
+    return typedName() || stored(NAME_KEY) || '';
+  }
+
+  function scoredNow() {
+    return result.classList.contains('show');
+  }
+
+  function tally() {
+    var score = 0;
+    var wrong = [];
+    for (var i = 0; i < QUESTIONS.length; i++) {
+      var picked = document.querySelector('input[name="q' + i + '"]:checked');
+      var chosen = picked ? Number(picked.value) : null;
+      if (chosen === QUESTIONS[i].a) score++;
+      else wrong.push(i);
+    }
+    return { score: score, wrong: wrong, total: QUESTIONS.length };
   }
 
   function missedText(wrong) {
@@ -127,18 +184,99 @@
     return names.join(' · ');
   }
 
-  var lastAttempts = [];
+  // --------------------------------------------------------- the record flow
+
+  var apiUp = false;      // nothing is offered until a read has succeeded
+  var state = 'idle';     // idle | sending | done | failed
+
+  function sync() {
+    if (!apiUp) { bar.hidden = true; return; }
+    bar.hidden = false;
+
+    if (state === 'sending') {
+      recordBtn.disabled = true;
+      recordBtn.textContent = 'Recording…';
+      hint.textContent = '';
+      return;
+    }
+
+    if (state === 'done') {
+      recordBtn.disabled = true;
+      recordBtn.textContent = 'Recorded';
+      hint.textContent = 'Saved as ' + myName() + '. It is in the list below, and on the index page.';
+      return;
+    }
+
+    recordBtn.textContent = 'Record this attempt';
+
+    if (!scoredNow()) {
+      recordBtn.disabled = true;
+      hint.textContent = 'Check your answers first — then this button records the score.';
+      return;
+    }
+
+    if (!typedName()) {
+      recordBtn.disabled = true;
+      hint.textContent = 'Type your name above, then press Record.';
+      return;
+    }
+
+    var t = tally();
+    recordBtn.disabled = false;
+    hint.textContent = state === 'failed'
+      ? 'That did not save. Press Record to try again.'
+      : t.score + ' out of ' + t.total + ', ready to record. Nothing is shared until you press Record.';
+  }
+
+  recordBtn.addEventListener('click', function () {
+    if (recordBtn.disabled) return;
+    var name = typedName();
+    if (!name || !scoredNow()) { sync(); return; }
+
+    store(NAME_KEY, name);
+    var t = tally();
+    state = 'sending';
+    sync();
+
+    fetch(API, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ week: week, name: name, score: t.score, total: t.total, wrong: t.wrong })
+    })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); })
+      .then(function () {
+        state = 'done';
+        return load();
+      })
+      .catch(function () {
+        state = 'failed';
+        sync();
+      });
+  });
+
+  nameInput.addEventListener('input', function () { if (state !== 'done') sync(); });
+
+  // The paper shows the results box on check and hides it again on start over,
+  // so both are just cues to re-read that state.
+  checkBtn.addEventListener('click', function () { setTimeout(sync, 0); });
+  if (resetBtn) {
+    resetBtn.addEventListener('click', function () {
+      state = 'idle';
+      setTimeout(sync, 0);
+    });
+  }
+
+  // --------------------------------------------------------------- rendering
 
   function render(attempts) {
-    lastAttempts = attempts || [];
-    attempts = lastAttempts;
+    attempts = attempts || [];
     rowsBox.textContent = '';
-    var mine = myName();
+    var mine = stored(NAME_KEY) || '';
 
     if (!attempts.length) {
       var none = document.createElement('p');
       none.className = 'att-none';
-      none.textContent = 'No attempts recorded yet. Answer the questions and check them, and your score lands here.';
+      none.textContent = 'No attempts recorded yet. Answer the questions, check them, then press Record and your score lands here.';
       rowsBox.appendChild(none);
       sub.textContent = 'Scores are shared with anyone who has this link.';
       return;
@@ -198,53 +336,17 @@
     return fetch(API + '?week=' + encodeURIComponent(week), { headers: { accept: 'application/json' } })
       .then(function (r) { return r.ok ? r.json() : Promise.reject(new Error(r.status)); })
       .then(function (data) {
-        whoInput.value = myName();
+        apiUp = true;
         render(data.attempts || []);
         panel.hidden = false;
+        sync();
       })
-      .catch(function () { panel.hidden = true; });
+      .catch(function () {
+        apiUp = false;
+        panel.hidden = true;
+        sync();
+      });
   }
-
-  // ------------------------------------------------------------- interaction
-
-  whoSave.addEventListener('click', function () {
-    var value = whoInput.value.replace(/\s+/g, ' ').trim().slice(0, 24);
-    if (!value) return;
-    store(NAME_KEY, value);
-    whoSave.textContent = 'Saved';
-    setTimeout(function () { whoSave.textContent = 'Save'; }, 1500);
-    render(lastAttempts);
-  });
-
-  function submit() {
-    var name = myName();
-    if (!name) return;                       // nothing to attribute it to
-
-    var score = 0;
-    var wrong = [];
-    for (var i = 0; i < QUESTIONS.length; i++) {
-      var picked = document.querySelector('input[name="q' + i + '"]:checked');
-      var chosen = picked ? Number(picked.value) : null;
-      if (chosen === QUESTIONS[i].a) score++;
-      else wrong.push(i);
-    }
-
-    return fetch(API, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ week: week, name: name, score: score, total: QUESTIONS.length, wrong: wrong })
-    })
-      .then(function () { return load(); })
-      .catch(function () { /* leave the panel as it was */ });
-  }
-
-  // Capture phase, so the inputs are read before the paper's own handler
-  // disables them. The paper disables the button once scored, which keeps this
-  // from firing twice; the server de-duplicates a rapid resubmit anyway.
-  checkBtn.addEventListener('click', function () {
-    if (checkBtn.disabled) return;
-    setTimeout(submit, 0);
-  }, true);
 
   load();
 }());
