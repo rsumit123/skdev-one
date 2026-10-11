@@ -2,6 +2,17 @@
   "week": "oct-4-11",
   "attempts": [
     {
+      "name": "browser check",
+      "score": 17,
+      "total": 20,
+      "wrong": [
+        2,
+        7,
+        14
+      ],
+      "at": 1791715846827
+    },
+    {
       "name": "deploy probe",
       "score": 15,
       "total": 20,
