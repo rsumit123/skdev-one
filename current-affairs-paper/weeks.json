@@ -1,0 +1,53 @@
+[
+  {
+    "slug": "oct-4-11",
+    "range": "4 to 11 October",
+    "end": "2026-10-11",
+    "topics": [
+      "AI governance",
+      "Bengal bypolls",
+      "Election Commission",
+      "GST reform",
+      "Monetary policy",
+      "Nobel prizes",
+      "Tata Sons",
+      "Ukraine war",
+      "US work visas",
+      "Yemen war"
+    ]
+  },
+  {
+    "slug": "sep-14-20",
+    "range": "14 to 20 September",
+    "end": "2026-09-20",
+    "topics": [
+      "AI risk",
+      "Asian Games",
+      "Electoral rolls",
+      "India and China",
+      "Karnataka jobs scam",
+      "Russia sanctions",
+      "Tata Sons",
+      "Uniform Civil Code",
+      "UPI charges",
+      "US rates"
+    ]
+  },
+  {
+    "slug": "sep-9-13",
+    "range": "9 to 13 September",
+    "end": "2026-09-13",
+    "topics": [
+      "9/11 at 25",
+      "Artificial intelligence",
+      "Bihar floods",
+      "BRICS",
+      "Courts and liberties",
+      "Electoral rolls",
+      "Green cards",
+      "India and China",
+      "Map projections",
+      "Marital rape"
+    ]
+  }
+]
