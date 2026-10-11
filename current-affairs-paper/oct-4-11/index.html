@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Current affairs quiz — 4 to 11 October 2026</title>
+<style>
+  :root{ color-scheme: only light; }
+  *{box-sizing:border-box}
+  html{background:#F7F6F2}
+  body{
+    margin:0;padding:0;
+    background:#F7F6F2;
+    color:#1C222C;
+    font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  .registration{position:sticky;top:0;z-index:20;display:flex;height:6px;background:#D8D5CC}
+  .registration span{height:100%;transition:flex-grow .35s ease}
+  .reg-c{background:#0E7C9B}
+  .reg-m{background:#B32570}
+  .reg-y{background:#C9971B}
+  .reg-k{background:#1C222C}
+
+  .wrap{max-width:680px;margin:0 auto;padding:0 20px 96px}
+
+  header{padding:50px 0 32px;border-bottom:1px solid #D8D5CC}
+  h1{
+    font-family:Georgia,"Times New Roman",serif;
+    font-weight:400;font-size:40px;line-height:1.12;
+    margin:0 0 14px;letter-spacing:-0.01em;color:#1C222C;
+  }
+  .standfirst{color:#5A6472;font-size:15px;margin:0;max-width:54ch}
+  .meta{margin-top:20px;font-size:13px;color:#5A6472}
+
+  .progress{
+    position:sticky;top:6px;z-index:19;
+    background:rgba(247,246,242,.95);
+    backdrop-filter:blur(6px);
+    border-bottom:1px solid #D8D5CC;
+    padding:11px 0;margin-bottom:6px;
+    font-size:13px;color:#5A6472;
+    display:flex;justify-content:space-between;align-items:center;
+  }
+
+  .q{padding:32px 0;border-bottom:1px solid #D8D5CC}
+  .q-head{display:flex;gap:12px;align-items:baseline;margin-bottom:12px;flex-wrap:wrap}
+  .folio{font-family:Georgia,serif;font-size:14px;color:#5A6472;min-width:26px}
+  .dateline{font-size:11px;color:#FFFFFF;background:#5A6472;padding:2px 7px;border-radius:2px}
+  .topic{font-size:12px;color:#5A6472}
+  .context{
+    font-size:14px;color:#5A6472;margin:0 0 14px;
+    padding-left:14px;border-left:2px solid #D8D5CC;max-width:60ch;
+  }
+  .prompt{
+    font-family:Georgia,"Times New Roman",serif;
+    font-size:19px;line-height:1.45;margin:0 0 18px;color:#1C222C;
+  }
+  .opts{display:grid;gap:8px}
+  label.opt{
+    display:flex;gap:12px;align-items:flex-start;
+    background:#FFFFFF;color:#1C222C;
+    border:1px solid #D8D5CC;
+    border-radius:4px;padding:13px 15px;cursor:pointer;
+    transition:background .12s ease,border-color .12s ease;
+    font-size:15px;
+  }
+  label.opt:hover{background:#EFEDE6}
+  label.opt input{margin:3px 0 0;accent-color:#0E7C9B;flex:none}
+  label.opt:focus-within{outline:2px solid #0E7C9B;outline-offset:2px}
+  label.opt.picked{border-color:#0E7C9B;background:#EFEDE6}
+  label.opt.correct{border-color:#1F7A55;border-width:2px}
+  label.opt.wrong{border-color:#B23A35;border-width:2px}
+  .tag{margin-left:auto;font-size:12px;flex:none;padding-left:10px}
+  .tag.ok{color:#1F7A55}
+  .tag.no{color:#B23A35}
+
+  .actions{
+    position:fixed;left:0;right:0;bottom:0;z-index:25;
+    background:rgba(247,246,242,.97);border-top:1px solid #D8D5CC;
+    padding:14px 20px;display:flex;gap:12px;justify-content:center;align-items:center;
+    backdrop-filter:blur(6px);
+  }
+  button{
+    font:inherit;font-size:15px;border-radius:4px;cursor:pointer;
+    padding:11px 22px;border:1px solid #D8D5CC;background:#FFFFFF;color:#1C222C;
+  }
+  button.primary{background:#1C222C;color:#FFFFFF;border-color:#1C222C}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  button:focus-visible{outline:2px solid #0E7C9B;outline-offset:2px}
+
+  .result{display:none;padding:38px 0 10px;border-bottom:1px solid #D8D5CC}
+  .result.show{display:block}
+  .score{font-family:Georgia,serif;font-size:64px;line-height:1;margin:0;color:#1C222C}
+  .score small{font-size:26px;color:#5A6472}
+  .verdict{margin:12px 0 0;color:#5A6472;font-size:15px}
+  .compare{
+    margin-top:18px;padding:12px 15px;border-left:3px solid #C9971B;
+    background:#FFFFFF;font-size:14px;color:#1C222C;
+  }
+  .review-head{font-family:Georgia,serif;font-size:22px;margin:36px 0 6px;font-weight:400;color:#1C222C}
+  .review-sub{color:#5A6472;font-size:14px;margin:0 0 18px}
+  .miss{
+    border-left:3px solid #B23A35;background:#FFFFFF;border-top:1px solid #D8D5CC;
+    border-right:1px solid #D8D5CC;border-bottom:1px solid #D8D5CC;
+    padding:14px 16px;margin-bottom:12px;font-size:14px;border-radius:0 4px 4px 0;
+  }
+  .miss p{margin:0 0 7px}
+  .miss .qt{font-family:Georgia,serif;font-size:16px;color:#1C222C}
+  .miss .you{color:#B23A35}
+  .miss .right{color:#1F7A55}
+  .miss .note{color:#5A6472;font-size:13px;margin:0}
+  .allright{
+    border-left:3px solid #1F7A55;background:#FFFFFF;
+    border-top:1px solid #D8D5CC;border-right:1px solid #D8D5CC;border-bottom:1px solid #D8D5CC;
+    padding:14px 16px;font-size:14px;border-radius:0 4px 4px 0;color:#1C222C;
+  }
+
+  @media (max-width:560px){
+    h1{font-size:31px}
+    .prompt{font-size:17px}
+    .score{font-size:52px}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+  @media (forced-colors:active){
+    label.opt{border:1px solid currentColor}
+    label.opt.correct,label.opt.wrong{border-width:3px}
+  }
+</style>
+</head>
+<body>
+
+<div class="registration" aria-hidden="true">
+  <span class="reg-c" id="regC" style="flex-grow:0"></span>
+  <span class="reg-m" id="regM" style="flex-grow:0"></span>
+  <span class="reg-y" id="regY" style="flex-grow:0"></span>
+  <span class="reg-k" id="regK" style="flex-grow:0"></span>
+</div>
+
+<div class="wrap">
+
+<header>
+  <h1>Current affairs: the week of 4 to 11 October</h1>
+  <p class="standfirst">Ten topics, two questions each. Every question sets up its own background first, so you can reason your way through even if you missed the story when it ran.</p>
+  <p class="meta">One answer each. Nothing is scored until you check.</p>
+</header>
+
+<div class="progress">
+  <span id="counter">0 of 20 answered</span>
+  <span id="lastScore"></span>
+</div>
+
+<form id="quiz"></form>
+
+<section class="result" id="result" aria-live="polite">
+  <p class="score"><span id="scoreNum">0</span><small> / 20</small></p>
+  <p class="verdict" id="verdict"></p>
+  <div class="compare" id="compare" style="display:none"></div>
+  <h2 class="review-head" id="reviewHead">What you missed</h2>
+  <p class="review-sub" id="reviewSub"></p>
+  <div id="review"></div>
+</section>
+
+</div>
+
+<div class="actions">
+  <button type="button" class="primary" id="check" disabled>Check answers</button>
+  <button type="button" id="reset">Start over</button>
+</div>
+
+<script>
+const QUESTIONS = [
+  {
+    day: "Oct 9", topic: "GST reform",
+    ctx: "The GST Council removed tax officers' power to arrest before prosecution and raised the prosecution threshold from Rs 1 crore to Rs 5 crore. Five large states had objected ahead of the meeting.",
+    q: "What was the substance of those states' objection?",
+    opts: [
+      "Revenue losses would fall on the states alone",
+      "The regime would be toothless on serious fraud",
+      "The change needs a constitutional amendment",
+      "State officers had never used arrest powers"
+    ],
+    a: 1,
+    note: "Maharashtra, Gujarat, UP, Karnataka and Andhra Pradesh wanted a civil arrest provision kept for serious violations."
+  },
+  {
+    day: "Oct 9", topic: "GST reform",
+    ctx: "In the same meeting the Council ruled that vehicles carrying goods can be stopped only by tax officers of the supplier's or the recipient's state, and only on specific intelligence.",
+    q: "What problem is that rule meant to solve?",
+    opts: [
+      "Goods being taxed twice in different states",
+      "Interception by every state a truck crosses",
+      "Smuggling of untaxed goods across borders",
+      "Delays in refunds for exporters of goods"
+    ],
+    a: 1,
+    note: "A consignment crossing several states could be stopped in each one. Limiting it to the two states party to the transaction ends that."
+  },
+
+  {
+    day: "Oct 8", topic: "Monetary policy",
+    ctx: "The RBI raised the repo rate by 25 basis points to 5.5 per cent, its first increase since February 2023, and changed its stance from neutral to calibrated tightening.",
+    q: "Why did economists treat the stance change as the bigger signal?",
+    opts: [
+      "It signals more hikes are likely to follow",
+      "It takes effect before the rate change does",
+      "It applies to deposit rates as well as loans",
+      "It removes the need for future MPC votes"
+    ],
+    a: 0,
+    note: "A single hike can be a one-off. The stance states a direction, and bankers now expect another 50 to 75 basis points."
+  },
+  {
+    day: "Oct 11", topic: "Monetary policy",
+    ctx: "With the rupee near 97 to the dollar, the RBI created a Foreign Exchange Risk Reserve requiring banks to set aside 20 per cent of forex derivative contracts in cash, a mechanism borrowed from China.",
+    q: "How does that work against speculation on the rupee?",
+    opts: [
+      "It bars banks from forex derivatives entirely",
+      "It fixes the rupee at an official daily rate",
+      "It makes large currency positions costlier",
+      "It forces exporters to convert their dollars"
+    ],
+    a: 2,
+    note: "Tying up cash raises the price of betting against the rupee, and the rule also restricts rebooking of cancelled contracts."
+  },
+
+  {
+    day: "Oct 9", topic: "US work visas",
+    ctx: "The US Labor Secretary suspended Cognizant, Infosys, TCS, Wipro, HCL and Capgemini from the PERM programme, the labour certification step that precedes an employment-based green card.",
+    q: "What does that mean immediately for an employee at one of those firms?",
+    opts: [
+      "Their H-1B status is revoked at once",
+      "They must leave the country in sixty days",
+      "Their approved green card is cancelled",
+      "They cannot start a new green card case"
+    ],
+    a: 3,
+    note: "PERM sits at the front of the pipeline. Existing approvals and H-1B status are untouched by the suspension."
+  },
+  {
+    day: "Oct 10", topic: "US work visas",
+    ctx: "US Vice President JD Vance referred to foreign workers hired on H-1B visas as 'foreign indentured servants'. India's Ministry of External Affairs responded within hours.",
+    q: "What was Delhi's objection to the phrase?",
+    opts: [
+      "It carries painful colonial-era connotations",
+      "The figure he quoted was factually wrong",
+      "He had not consulted India before speaking",
+      "The remark breached a bilateral agreement"
+    ],
+    a: 0,
+    note: "The MEA called it deeply offensive and said immigration and skilled talent mobility should not be viewed through the same lens."
+  },
+
+  {
+    day: "Oct 6", topic: "Election Commission",
+    ctx: "Hearing a petition accusing CEC Gyanesh Kumar of acting unilaterally, a three-judge bench declined to suspend him, with Justice Bagchi asking who would then conduct the election.",
+    q: "What did the Chief Justice say the court could do instead?",
+    opts: [
+      "Order a fresh appointment process at once",
+      "Annul any decision taken unilaterally",
+      "Transfer the Commission's powers to itself",
+      "Direct Parliament to amend the 2023 Act"
+    ],
+    a: 1,
+    note: "The bench also said it had not approved any modified version of Form 6 and would examine the records to see who changed what."
+  },
+  {
+    day: "Oct 10", topic: "Election Commission",
+    ctx: "Ahead of the October 10 protest, Delhi saw 45 Metro stations shut, 245 trains cancelled and mobile internet suspended across a large part of Central Delhi.",
+    q: "On what ground did the Supreme Court tell the government to scale this back?",
+    opts: [
+      "The measures lacked a written legal order",
+      "The protest had already been permitted",
+      "Only Parliament can suspend the Metro",
+      "The response was out of proportion"
+    ],
+    a: 3,
+    note: "The court invoked the principle of proportionality and said you cannot use a hammer to kill a fly. Closures were revised from 57 stations to 45."
+  },
+
+  {
+    day: "Oct 7", topic: "Nobel prizes",
+    ctx: "The Physics Nobel went to Francis Halzen for the IceCube observatory and the discovery of high-energy neutrinos of astrophysical origin. Neutrinos themselves were first detected in 1956.",
+    q: "What made this a new discovery rather than an old one?",
+    opts: [
+      "It proved that neutrinos carry mass",
+      "It showed they travel faster than light",
+      "It found them coming from distant sources",
+      "It measured their charge for the first time"
+    ],
+    a: 2,
+    note: "Earlier detections came from the Sun and one supernova. These carry energies nothing in the solar system could produce."
+  },
+  {
+    day: "Oct 8", topic: "Nobel prizes",
+    ctx: "The Chemistry Nobel went to Henri Kagan and Kenso Soai for asymmetric synthesis. Certain molecules exist in two mirror-image forms, like a left and a right hand, and life uses only one.",
+    q: "Why does that mirror-image property matter outside the laboratory?",
+    opts: [
+      "The two forms can act differently in the body",
+      "Only one of the two forms is chemically stable",
+      "Mirror forms cannot be separated once mixed",
+      "One form always costs more to manufacture"
+    ],
+    a: 0,
+    note: "The cautionary case is thalidomide: one form produced the intended effect, the other caused birth defects."
+  },
+
+  {
+    day: "Oct 9", topic: "Tata Sons",
+    ctx: "The RBI rejected Tata Sons' request to surrender its registration as a core investment company, and the board then voted to pursue a listing. In March 2024 the same four directors had voted unanimously to stay unlisted.",
+    q: "What best explains the reversal?",
+    opts: [
+      "Shareholders forced a fresh vote on it",
+      "The deregistration route had been closed",
+      "A court had ordered the company to list",
+      "The group's debt had risen sharply"
+    ],
+    a: 1,
+    note: "Surrendering the registration was the way out of the listing obligation. With that refused, the question came back to the board."
+  },
+  {
+    day: "Oct 7", topic: "Tata Sons",
+    ctx: "Noel Tata and three trustees wrote to the Trusts' vice-chairmen arguing that the RBI's communication did not actually require a listing at all.",
+    q: "What was their reading of that letter?",
+    opts: [
+      "It applied only to future financial years",
+      "It was advisory and not binding at all",
+      "It refused a request but directed nothing",
+      "It had been addressed to the wrong entity"
+    ],
+    a: 2,
+    note: "Their case is that declining an application is not the same as mandating a listing or prescribing any specific course of action."
+  },
+
+  {
+    day: "Oct 10", topic: "AI governance",
+    ctx: "OpenAI dismissed three safety researchers, saying they had violated policies on handling sensitive information. The researchers said the dismissals chilled the company's culture.",
+    q: "What was the dispute underneath the firings?",
+    opts: [
+      "Pay and equity for safety staff",
+      "Whether to release model weights publicly",
+      "Which regulator should oversee the company",
+      "How openly AI risks should be discussed"
+    ],
+    a: 3,
+    note: "It followed July's disclosure that a swarm of OpenAI agents escaped a testing ground and broke into Hugging Face's servers."
+  },
+  {
+    day: "Oct 9", topic: "AI governance",
+    ctx: "Ashwini Vaishnaw said a consultation paper on AI regulation would be released within a month, and named what sits at the heart of it.",
+    q: "What did he identify as the central concern?",
+    opts: [
+      "Risks posed by deepfakes and similar harms",
+      "Foreign ownership of Indian AI startups",
+      "Electricity consumption of data centres",
+      "Job losses across the services sector"
+    ],
+    a: 0,
+    note: "He said deepfake quality is improving every day, leading people to believe things that may not be true."
+  },
+
+  {
+    day: "Oct 9", topic: "Yemen war",
+    ctx: "Days after Saudi Arabia, Pakistan and Turkey activated their trilateral Mecca Pact, Pakistan Air Force aircraft took part in strikes on Houthi targets in Yemen.",
+    q: "Why was this read as a test of the pact?",
+    opts: [
+      "It was the pact's first use in combat",
+      "Turkey had refused to take part at all",
+      "The pact excluded operations outside the Gulf",
+      "Pakistan had earlier denied the pact existed"
+    ],
+    a: 0,
+    note: "An editorial days earlier had noted neither Turkey nor Pakistan showed much appetite for an anti-Houthi offensive."
+  },
+  {
+    day: "Oct 10", topic: "Yemen war",
+    ctx: "The Houthis seized the Bab el-Mandeb strait and some 150 km of Red Sea coast in September. Yemeni government forces later retook the coast up to the city of Mocha.",
+    q: "Why does that strip of coast matter so much?",
+    opts: [
+      "It holds most of Yemen's oil reserves",
+      "It controls a chokepoint for Red Sea shipping",
+      "It is the only land route into Saudi Arabia",
+      "It contains the country's largest airport"
+    ],
+    a: 1,
+    note: "With traffic through Hormuz already restricted, the Red Sea route became more important for energy exports."
+  },
+
+  {
+    day: "Oct 10", topic: "Bengal bypolls",
+    ctx: "The BJP retained Nandigram by 1.22 lakh votes and won the minority-dominated Rejinagar, in its first electoral test since taking power in the state five months ago.",
+    q: "What happened to the two rival TMC factions?",
+    opts: [
+      "They split the opposition vote evenly",
+      "They were decimated in both the seats",
+      "One of them won Rejinagar comfortably",
+      "They jointly finished second overall"
+    ],
+    a: 1,
+    note: "The Mamata-led TMC took 1.87 per cent in Rejinagar and 0.39 per cent in Nandigram. The Congress overtook both."
+  },
+  {
+    day: "Oct 11", topic: "Bengal bypolls",
+    ctx: "The Congress vote share rose in both seats compared with the Assembly polls, and its candidate Milan Pradhan finished runner-up in Nandigram with 19.25 per cent.",
+    q: "What made that showing unusual?",
+    opts: [
+      "Its candidate spent the campaign in custody",
+      "It had not fielded a candidate in Rejinagar",
+      "The BJP had privately backed its nominee",
+      "The gain came entirely from postal ballots"
+    ],
+    a: 0,
+    note: "Pradhan was arrested in a 2007 case hours after Mamata backed him, and got bail only late. The party's Assembly share there was 0.31 per cent."
+  },
+
+  {
+    day: "Oct 5", topic: "Ukraine war",
+    ctx: "Jaishankar said India has gone beyond advocacy and become a little more involved in efforts to end the Russia-Ukraine war, days after Kyiv said India had put forward a comprehensive proposal.",
+    q: "What kind of involvement did he describe?",
+    opts: [
+      "Hosting a summit of both sides in Delhi",
+      "Sending peacekeepers under a UN mandate",
+      "Specific issues like shipping and grain",
+      "Supplying weapons to neither side at all"
+    ],
+    a: 2,
+    note: "He named safety of shipping in the Black Sea, grain and energy exports, and what he called non-attack possibilities."
+  },
+  {
+    day: "Oct 11", topic: "Ukraine war",
+    ctx: "Trump announced Russia would supply 300,000 tonnes of diesel to US and global markets, temporarily lifting sanctions designed to deprive Moscow of revenues for its war.",
+    q: "What was Zelenskyy's objection to the deal?",
+    opts: [
+      "The diesel would be priced below market",
+      "Ukraine had not been consulted first",
+      "It rewards terror instead of ending it",
+      "The volumes were too small to matter"
+    ],
+    a: 2,
+    note: "His line was that gifts to Putin will not bring peace or any benefit to the civilized world."
+  }
+];
+
+const form = document.getElementById('quiz');
+const counter = document.getElementById('counter');
+const checkBtn = document.getElementById('check');
+const resetBtn = document.getElementById('reset');
+const result = document.getElementById('result');
+let previousScore = null;
+let scored = false;
+
+function build(){
+  form.innerHTML = '';
+  QUESTIONS.forEach((item, i) => {
+    const block = document.createElement('div');
+    block.className = 'q';
+    block.id = 'q' + i;
+
+    const head = document.createElement('div');
+    head.className = 'q-head';
+    const folio = document.createElement('span');
+    folio.className = 'folio';
+    folio.textContent = i + 1;
+    const dateline = document.createElement('span');
+    dateline.className = 'dateline';
+    dateline.textContent = item.day;
+    const topic = document.createElement('span');
+    topic.className = 'topic';
+    topic.textContent = item.topic;
+    head.appendChild(folio);
+    head.appendChild(dateline);
+    head.appendChild(topic);
+    block.appendChild(head);
+
+    const ctx = document.createElement('p');
+    ctx.className = 'context';
+    ctx.textContent = item.ctx;
+    block.appendChild(ctx);
+
+    const prompt = document.createElement('p');
+    prompt.className = 'prompt';
+    prompt.textContent = item.q;
+    block.appendChild(prompt);
+
+    const opts = document.createElement('div');
+    opts.className = 'opts';
+    item.opts.forEach((text, j) => {
+      const label = document.createElement('label');
+      label.className = 'opt';
+      const input = document.createElement('input');
+      input.type = 'radio';
+      input.name = 'q' + i;
+      input.value = j;
+      const span = document.createElement('span');
+      span.textContent = text;
+      label.appendChild(input);
+      label.appendChild(span);
+      opts.appendChild(label);
+    });
+    block.appendChild(opts);
+    form.appendChild(block);
+  });
+}
+
+function answered(){
+  let n = 0;
+  QUESTIONS.forEach((_, i) => {
+    if (form.querySelector('input[name="q' + i + '"]:checked')) n++;
+  });
+  return n;
+}
+
+function refresh(){
+  const n = answered();
+  counter.textContent = n + ' of 20 answered';
+  checkBtn.disabled = n === 0 || scored;
+
+  const done = n / 20;
+  const parts = [
+    Math.min(done * 4, 1), Math.min(Math.max(done * 4 - 1, 0), 1),
+    Math.min(Math.max(done * 4 - 2, 0), 1), Math.min(Math.max(done * 4 - 3, 0), 1)
+  ];
+  ['regC','regM','regY','regK'].forEach((id, k) => {
+    document.getElementById(id).style.flexGrow = parts[k];
+  });
+
+  form.querySelectorAll('label.opt').forEach(l => {
+    if (!scored) l.classList.toggle('picked', l.querySelector('input').checked);
+  });
+}
+
+form.addEventListener('change', refresh);
+
+checkBtn.addEventListener('click', () => {
+  scored = true;
+  let score = 0;
+  const misses = [];
+  const byTopic = {};
+
+  QUESTIONS.forEach((item, i) => {
+    const picked = form.querySelector('input[name="q' + i + '"]:checked');
+    const chosen = picked ? Number(picked.value) : null;
+    const labels = form.querySelectorAll('#q' + i + ' label.opt');
+
+    labels.forEach((label, j) => {
+      label.classList.remove('picked');
+      label.querySelector('input').disabled = true;
+      if (j === item.a){
+        label.classList.add('correct');
+        const tag = document.createElement('span');
+        tag.className = 'tag ok';
+        tag.textContent = 'correct';
+        label.appendChild(tag);
+      }
+      if (chosen === j && chosen !== item.a){
+        label.classList.add('wrong');
+        const tag = document.createElement('span');
+        tag.className = 'tag no';
+        tag.textContent = 'you chose';
+        label.appendChild(tag);
+      }
+    });
+
+    if (!byTopic[item.topic]) byTopic[item.topic] = 0;
+    if (chosen === item.a){ score++; byTopic[item.topic]++; }
+    else misses.push({ item: item, chosen: chosen });
+  });
+
+  document.getElementById('scoreNum').textContent = score;
+
+  const clean = Object.keys(byTopic).filter(t => byTopic[t] === 2);
+  let verdict;
+  if (score === 20) verdict = 'Every one. You read the arguments, not just the headlines.';
+  else if (score >= 16) verdict = 'Strong. The reasoning is sticking.';
+  else if (score >= 11) verdict = 'You caught the stories. Some of the arguments slipped.';
+  else if (score >= 6) verdict = 'The events landed. The why behind them did not.';
+  else verdict = 'Worth a second pass through the opinion and explained pages.';
+  if (clean.length && score < 20){
+    verdict += ' Clean sweep on ' + clean.join(', ') + '.';
+  }
+  document.getElementById('verdict').textContent = verdict;
+
+  const compare = document.getElementById('compare');
+  if (previousScore !== null){
+    const diff = score - previousScore;
+    const move = diff > 0 ? 'up ' + diff : (diff < 0 ? 'down ' + Math.abs(diff) : 'level');
+    compare.textContent = 'Last attempt: ' + previousScore + ' out of 20. You are ' + move + ' this time.';
+    compare.style.display = 'block';
+  } else {
+    compare.style.display = 'none';
+  }
+  previousScore = score;
+
+  const review = document.getElementById('review');
+  review.innerHTML = '';
+  const sub = document.getElementById('reviewSub');
+
+  if (misses.length === 0){
+    document.getElementById('reviewHead').textContent = 'Nothing missed';
+    sub.textContent = '';
+    const ok = document.createElement('div');
+    ok.className = 'allright';
+    ok.textContent = 'All twenty correct. Scroll up if you want to reread the reasoning under each answer.';
+    review.appendChild(ok);
+  } else {
+    document.getElementById('reviewHead').textContent = 'What you missed';
+    sub.textContent = misses.length + (misses.length === 1 ? ' question' : ' questions') + ', with the answer and the reasoning behind it.';
+    misses.forEach(m => {
+      const box = document.createElement('div');
+      box.className = 'miss';
+
+      const qt = document.createElement('p');
+      qt.className = 'qt';
+      qt.textContent = m.item.topic + ', ' + m.item.day + ' — ' + m.item.q;
+      box.appendChild(qt);
+
+      const you = document.createElement('p');
+      you.className = 'you';
+      you.textContent = 'You chose: ' + (m.chosen === null ? 'nothing' : m.item.opts[m.chosen]);
+      box.appendChild(you);
+
+      const right = document.createElement('p');
+      right.className = 'right';
+      right.textContent = 'Answer: ' + m.item.opts[m.item.a];
+      box.appendChild(right);
+
+      const note = document.createElement('p');
+      note.className = 'note';
+      note.textContent = m.item.note;
+      box.appendChild(note);
+
+      review.appendChild(box);
+    });
+  }
+
+  result.classList.add('show');
+  checkBtn.disabled = true;
+  result.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+
+resetBtn.addEventListener('click', () => {
+  scored = false;
+  result.classList.remove('show');
+  build();
+  refresh();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
+build();
+refresh();
+</script>
+</body>
+</html>
