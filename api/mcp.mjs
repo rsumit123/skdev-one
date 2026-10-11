@@ -225,7 +225,22 @@ async function publishQuiz({ slug, html }) {
   await writeFile(MANIFEST, `${JSON.stringify(weeks, null, 2)}\n`, `Current affairs: record ${slug} in the manifest`);
   const sha = await writeFile(INDEX, renderIndex(weeks), `Current affairs: rebuild the index for ${slug}`);
 
-  return `Committed ${sha.slice(0, 7)}. Vercel is deploying now — live in about 30 seconds at ${SITE}/${DIR}/${slug}, and listed on ${SITE}/${DIR}.`;
+  // Report what was parsed out of the page, so the caller can see whether the
+  // date and topics were read the way it intended without a second round trip.
+  return [
+    `Committed ${sha.slice(0, 7)}. Vercel is deploying now — live in about 30 seconds at ${SITE}/${DIR}/${slug}, and listed on ${SITE}/${DIR}.`,
+    `Read off the page: dated "${range}" (sorts as ${end}), ${topics.length} topics — ${topics.join(', ')}.`,
+    'If the date or topics are wrong, fix the page and call publish_quiz again with the same slug; it updates in place.',
+  ].join('\n\n');
+}
+
+async function listWeeks() {
+  const { text } = await readFile(MANIFEST);
+  const weeks = text ? JSON.parse(text) : [];
+  if (!weeks.length) return 'Nothing published yet.';
+
+  const lines = weeks.map((w) => `- ${w.slug} — "${w.range}" — ${SITE}/${DIR}/${w.slug}\n  ${w.topics.join(', ')}`);
+  return `${weeks.length} week(s) published, newest first:\n\n${lines.join('\n')}`;
 }
 
 const TOOLS = [{
@@ -249,7 +264,16 @@ const TOOLS = [{
     },
     required: ['slug', 'html'],
   },
+}, {
+  name: 'list_weeks',
+  description:
+    'List the quiz weeks currently published on skdev.one, newest first, with each one\'s slug, '
+    + 'date range, URL and topics. Use it to check what is already live before publishing — '
+    + 'and afterwards to confirm a week landed with the date and topics you intended.',
+  inputSchema: { type: 'object', properties: {} },
 }];
+
+const HANDLERS = { publish_quiz: publishQuiz, list_weeks: listWeeks };
 
 // -------------------------------------------------------------- HTTP transport
 
@@ -269,14 +293,15 @@ async function dispatch(msg) {
   if (method === 'ping') return rpc(id, {});
 
   if (method === 'tools/call') {
-    if (params?.name !== 'publish_quiz') {
+    const run = HANDLERS[params?.name];
+    if (!run) {
       return { jsonrpc: '2.0', id, error: { code: -32602, message: `unknown tool ${params?.name}` } };
     }
     try {
-      const text = await publishQuiz(params.arguments || {});
-      return rpc(id, { content: [{ type: 'text', text }] });
+      return rpc(id, { content: [{ type: 'text', text: await run(params.arguments || {}) }] });
     } catch (err) {
-      return rpc(id, { content: [{ type: 'text', text: `Not published: ${err.message}` }], isError: true });
+      const what = params.name === 'publish_quiz' ? 'Not published' : 'Failed';
+      return rpc(id, { content: [{ type: 'text', text: `${what}: ${err.message}` }], isError: true });
     }
   }
 

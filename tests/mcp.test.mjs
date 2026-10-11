@@ -109,12 +109,32 @@ test('handler refuses everything when QUIZ_TOKEN is unset', async () => {
   assert.equal(res.code, 401);
 });
 
-test('handler lists the one tool once authorized', async () => {
+test('handler lists both tools once authorized', async () => {
   process.env.QUIZ_TOKEN = 'secret';
   const res = fakeRes();
   await handler({ method: 'POST', headers: { authorization: 'Bearer secret' }, body: { jsonrpc: '2.0', id: 1, method: 'tools/list' } }, res);
   assert.equal(res.code, 200);
-  assert.deepEqual(res.body.result.tools.map((t) => t.name), ['publish_quiz']);
+  assert.deepEqual(res.body.result.tools.map((t) => t.name), ['publish_quiz', 'list_weeks']);
+});
+
+test('list_weeks takes no required arguments', async () => {
+  process.env.QUIZ_TOKEN = 'secret';
+  const res = fakeRes();
+  await handler({ method: 'POST', headers: { authorization: 'Bearer secret' }, body: { jsonrpc: '2.0', id: 1, method: 'tools/list' } }, res);
+  const listed = res.body.result.tools.find((t) => t.name === 'list_weeks');
+  assert.deepEqual(listed.inputSchema.required, undefined);
+});
+
+test('an unknown tool name is a protocol error, not a silent success', async () => {
+  process.env.QUIZ_TOKEN = 'secret';
+  const res = fakeRes();
+  await handler({
+    method: 'POST',
+    headers: { authorization: 'Bearer secret' },
+    body: { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'delete_everything', arguments: {} } },
+  }, res);
+  assert.equal(res.body.error.code, -32602);
+  assert.match(res.body.error.message, /unknown tool delete_everything/);
 });
 
 test('handler answers initialize with the protocol the client asked for', async () => {
@@ -155,7 +175,7 @@ test('handler reads the body off the stream when the runtime did not parse it', 
   await handler(streamReq('{"jsonrpc":"2.0","id":7,"method":"tools/list"}'), res);
   assert.equal(res.code, 200);
   assert.equal(res.body.id, 7);
-  assert.deepEqual(res.body.result.tools.map((t) => t.name), ['publish_quiz']);
+  assert.deepEqual(res.body.result.tools.map((t) => t.name), ['publish_quiz', 'list_weeks']);
 });
 
 test('handler accepts a body handed over as a string', async () => {
