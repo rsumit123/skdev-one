@@ -283,6 +283,12 @@ async function dispatch(msg) {
   return { jsonrpc: '2.0', id, error: { code: -32601, message: `unknown method ${method}` } };
 }
 
+async function readBody(req) {
+  const chunks = [];
+  for await (const chunk of req) chunks.push(chunk);
+  return Buffer.concat(chunks).toString('utf8');
+}
+
 export default async function handler(req, res) {
   if (req.method === 'GET' || req.method === 'DELETE') {
     // Stateless: no server-initiated streams, no sessions to tear down.
@@ -295,11 +301,28 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: 'unauthorized' });
   }
 
+  // Don't rely on the runtime having parsed the body for us: read the stream
+  // ourselves when it hasn't. Getting this wrong is invisible - an unparsed
+  // body looks like a notification, and the handshake 202s into silence.
   let msg = req.body;
-  if (typeof msg === 'string') msg = JSON.parse(msg || '{}');
-  if (!msg) msg = {};
+  if (msg === undefined || msg === null) msg = await readBody(req);
+  if (typeof msg === 'string') {
+    try {
+      msg = JSON.parse(msg || '{}');
+    } catch {
+      return res.status(400).json({
+        jsonrpc: '2.0', id: null, error: { code: -32700, message: 'parse error' },
+      });
+    }
+  }
 
-  // Notifications carry no id and expect no body.
+  if (typeof msg !== 'object' || !msg.method) {
+    return res.status(400).json({
+      jsonrpc: '2.0', id: null, error: { code: -32600, message: 'invalid request' },
+    });
+  }
+
+  // Notifications carry a method but no id, and expect no body back.
   if (msg.id === undefined) return res.status(202).end();
 
   try {

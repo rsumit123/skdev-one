@@ -137,6 +137,51 @@ test('handler acks notifications with 202 and no body', async () => {
   assert.equal(res.body, null);
 });
 
+// The runtime may hand us a parsed object, a string, or nothing at all. The
+// last case is the dangerous one: an unread body looks exactly like a
+// notification, so the handshake would 202 into silence.
+function streamReq(raw, headers = { authorization: 'Bearer secret' }) {
+  return {
+    method: 'POST',
+    headers,
+    body: undefined,
+    async* [Symbol.asyncIterator]() { yield Buffer.from(raw, 'utf8'); },
+  };
+}
+
+test('handler reads the body off the stream when the runtime did not parse it', async () => {
+  process.env.QUIZ_TOKEN = 'secret';
+  const res = fakeRes();
+  await handler(streamReq('{"jsonrpc":"2.0","id":7,"method":"tools/list"}'), res);
+  assert.equal(res.code, 200);
+  assert.equal(res.body.id, 7);
+  assert.deepEqual(res.body.result.tools.map((t) => t.name), ['publish_quiz']);
+});
+
+test('handler accepts a body handed over as a string', async () => {
+  process.env.QUIZ_TOKEN = 'secret';
+  const res = fakeRes();
+  await handler({ method: 'POST', headers: { authorization: 'Bearer secret' }, body: '{"jsonrpc":"2.0","id":2,"method":"ping"}' }, res);
+  assert.equal(res.code, 200);
+  assert.deepEqual(res.body.result, {});
+});
+
+test('handler reports malformed JSON rather than mistaking it for a notification', async () => {
+  process.env.QUIZ_TOKEN = 'secret';
+  const res = fakeRes();
+  await handler(streamReq('{not json'), res);
+  assert.equal(res.code, 400);
+  assert.equal(res.body.error.code, -32700);
+});
+
+test('handler rejects an empty body rather than 202-ing into silence', async () => {
+  process.env.QUIZ_TOKEN = 'secret';
+  const res = fakeRes();
+  await handler(streamReq(''), res);
+  assert.equal(res.code, 400);
+  assert.equal(res.body.error.code, -32600);
+});
+
 test('a bad slug is reported as a tool error, not a crash, and never reaches GitHub', async () => {
   process.env.QUIZ_TOKEN = 'secret';
   process.env.GITHUB_TOKEN = 'must-not-be-used';
