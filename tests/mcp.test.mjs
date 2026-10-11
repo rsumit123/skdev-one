@@ -6,7 +6,53 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import handler from '../api/mcp.mjs';
-import { slugOk, parseTitle, extractTopics, upsert, renderIndex } from '../api/mcp.mjs';
+import { slugOk, parseTitle, extractTopics, upsert, renderIndex, injectAttempts, ATTEMPTS_TAG } from '../api/mcp.mjs';
+
+const PAPER = [
+  '<!DOCTYPE html><html><head><title>Current affairs quiz — 4 to 11 October 2026</title></head>',
+  '<body><div class="wrap"></div>',
+  '<script>',
+  'const QUESTIONS = [{ topic: "GST reform", a: 0 }];',
+  '</script>',
+  '</body></html>',
+].join('\n');
+
+test('injectAttempts puts the tag after the paper\'s own script, so QUESTIONS exists', () => {
+  const out = injectAttempts(PAPER);
+  assert.ok(out.includes(ATTEMPTS_TAG));
+  assert.ok(out.indexOf(ATTEMPTS_TAG) > out.lastIndexOf('const QUESTIONS'),
+    'the tag must come after the inline script that defines QUESTIONS');
+  assert.ok(out.indexOf(ATTEMPTS_TAG) < out.indexOf('</body>'));
+});
+
+test('injectAttempts leaves the rest of the paper byte-for-byte alone', () => {
+  const out = injectAttempts(PAPER);
+  assert.equal(out.replace(`\n${ATTEMPTS_TAG}`, ''), PAPER);
+});
+
+test('injectAttempts is idempotent, so republishing does not double up', () => {
+  const once = injectAttempts(PAPER);
+  assert.equal(injectAttempts(once), once);
+  assert.equal(once.split('attempts.js').length - 1, 1);
+});
+
+test('injectAttempts copes with a paper that has no inline script', () => {
+  const bare = '<html><body><p>hi</p></body></html>';
+  const out = injectAttempts(bare);
+  assert.ok(out.includes(ATTEMPTS_TAG));
+  assert.ok(out.indexOf(ATTEMPTS_TAG) < out.indexOf('</body>'));
+});
+
+test('injectAttempts still adds the tag to a fragment with no body', () => {
+  assert.ok(injectAttempts('<p>hi</p>').includes(ATTEMPTS_TAG));
+});
+
+test('renderIndex carries the slug and a placeholder for scores', () => {
+  const html = renderIndex([{ slug: 'oct-4-11', range: '4 to 11 October', end: '2026-10-11', topics: ['GST reform'] }]);
+  assert.match(html, /<li data-slug="oct-4-11">/);
+  assert.match(html, /<p class="scores" hidden><\/p>/);
+  assert.match(html, /attempts-summary\.js/);
+});
 
 test('slugOk accepts the shape we publish under', () => {
   for (const s of ['oct-4-11', 'sep-9-13', 'sep-14-20', 'jan-1-7']) {

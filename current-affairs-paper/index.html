@@ -53,6 +53,9 @@
   }
   .range .arrow{font-family:inherit;color:#5A6472;font-size:18px}
   .topics{font-size:13px;color:#5A6472;margin:0;max-width:60ch}
+  .scores{font-size:12px;color:#5A6472;margin:10px 0 0}
+  .scores[hidden]{display:none}
+  .scores b{font-weight:400;color:#1C222C}
 
   @media (max-width:420px){
     header{padding:36px 0 26px}
@@ -80,30 +83,35 @@
 
 <ul class="weeks">
 
-  <li>
+  <li data-slug="oct-4-11">
     <a href="/current-affairs-paper/oct-4-11">
       <p class="range">4 to 11 October <span class="arrow">&rarr;</span></p>
       <p class="topics">AI governance · Bengal bypolls · Election Commission · GST reform · Monetary policy · Nobel prizes · Tata Sons · Ukraine war · US work visas · Yemen war</p>
+      <p class="scores" hidden></p>
     </a>
   </li>
 
-  <li>
+  <li data-slug="sep-14-20">
     <a href="/current-affairs-paper/sep-14-20">
       <p class="range">14 to 20 September <span class="arrow">&rarr;</span></p>
       <p class="topics">AI risk · Asian Games · Electoral rolls · India and China · Karnataka jobs scam · Russia sanctions · Tata Sons · Uniform Civil Code · UPI charges · US rates</p>
+      <p class="scores" hidden></p>
     </a>
   </li>
 
-  <li>
+  <li data-slug="sep-9-13">
     <a href="/current-affairs-paper/sep-9-13">
       <p class="range">9 to 13 September <span class="arrow">&rarr;</span></p>
       <p class="topics">9/11 at 25 · Artificial intelligence · Bihar floods · BRICS · Courts and liberties · Electoral rolls · Green cards · India and China · Map projections · Marital rape</p>
+      <p class="scores" hidden></p>
     </a>
   </li>
 
 </ul>
 
 </div>
+
+<script src="/current-affairs-paper/attempts-summary.js"></script>
 
 </body>
 </html>

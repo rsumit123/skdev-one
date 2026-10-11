@@ -65,12 +65,34 @@ export function upsert(weeks, entry) {
 
 const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+export const ATTEMPTS_TAG = `<script src="/${DIR}/attempts.js"></script>`;
+
+// Papers arrive verbatim from whoever generated them, so the attempt history
+// cannot live inside them - next week's file would not have it. Add one tag
+// pointing at the shared script instead, after the paper's own inline script
+// so that QUESTIONS is already defined by the time it runs.
+export function injectAttempts(html) {
+  if (html.includes(`/${DIR}/attempts.js`)) return html;
+
+  const lastScript = html.lastIndexOf('</script>');
+  if (lastScript !== -1) {
+    const at = lastScript + '</script>'.length;
+    return `${html.slice(0, at)}\n${ATTEMPTS_TAG}${html.slice(at)}`;
+  }
+
+  const body = html.lastIndexOf('</body>');
+  if (body !== -1) return `${html.slice(0, body)}${ATTEMPTS_TAG}\n${html.slice(body)}`;
+
+  return `${html}\n${ATTEMPTS_TAG}\n`;
+}
+
 export function renderIndex(weeks) {
   const items = weeks.map((w) => `
-  <li>
+  <li data-slug="${esc(w.slug)}">
     <a href="/${DIR}/${w.slug}">
       <p class="range">${esc(w.range)} <span class="arrow">&rarr;</span></p>
       <p class="topics">${w.topics.map(esc).join(' · ')}</p>
+      <p class="scores" hidden></p>
     </a>
   </li>
 `).join('');
@@ -130,6 +152,9 @@ export function renderIndex(weeks) {
   }
   .range .arrow{font-family:inherit;color:#5A6472;font-size:18px}
   .topics{font-size:13px;color:#5A6472;margin:0;max-width:60ch}
+  .scores{font-size:12px;color:#5A6472;margin:10px 0 0}
+  .scores[hidden]{display:none}
+  .scores b{font-weight:400;color:#1C222C}
 
   @media (max-width:420px){
     header{padding:36px 0 26px}
@@ -160,6 +185,8 @@ ${items}
 </ul>
 
 </div>
+
+<script src="/${DIR}/attempts-summary.js"></script>
 
 </body>
 </html>
@@ -217,7 +244,7 @@ async function publishQuiz({ slug, html }) {
 
   // Paper first, then the manifest, then the index: no intermediate state has
   // the index pointing at a paper that is not there yet.
-  await writeFile(`${DIR}/${slug}/index.html`, html, `Current affairs: publish the ${range} quiz`);
+  await writeFile(`${DIR}/${slug}/index.html`, injectAttempts(html), `Current affairs: publish the ${range} quiz`);
 
   const { text } = await readFile(MANIFEST);
   const weeks = upsert(text ? JSON.parse(text) : [], { slug, range, end, topics });
