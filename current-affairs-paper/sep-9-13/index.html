@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Current affairs quiz — 9 to 13 September 2026</title>
+<style>
+  :root{ color-scheme: only light; }
+  *{box-sizing:border-box}
+  html{background:#F7F6F2}
+  body{
+    margin:0;padding:0;
+    background:#F7F6F2;
+    color:#1C222C;
+    font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  .registration{position:sticky;top:0;z-index:20;display:flex;height:6px;background:#D8D5CC}
+  .registration span{height:100%;transition:flex-grow .35s ease}
+  .reg-c{background:#0E7C9B}
+  .reg-m{background:#B32570}
+  .reg-y{background:#C9971B}
+  .reg-k{background:#1C222C}
+
+  .wrap{max-width:680px;margin:0 auto;padding:0 20px 96px}
+
+  header{padding:50px 0 32px;border-bottom:1px solid #D8D5CC}
+  h1{
+    font-family:Georgia,"Times New Roman",serif;
+    font-weight:400;font-size:40px;line-height:1.12;
+    margin:0 0 14px;letter-spacing:-0.01em;color:#1C222C;
+  }
+  .standfirst{color:#5A6472;font-size:15px;margin:0;max-width:54ch}
+  .meta{margin-top:20px;font-size:13px;color:#5A6472}
+
+  .progress{
+    position:sticky;top:6px;z-index:19;
+    background:rgba(247,246,242,.95);
+    backdrop-filter:blur(6px);
+    border-bottom:1px solid #D8D5CC;
+    padding:11px 0;margin-bottom:6px;
+    font-size:13px;color:#5A6472;
+    display:flex;justify-content:space-between;align-items:center;
+  }
+
+  .q{padding:32px 0;border-bottom:1px solid #D8D5CC}
+  .q-head{display:flex;gap:12px;align-items:baseline;margin-bottom:12px;flex-wrap:wrap}
+  .folio{font-family:Georgia,serif;font-size:14px;color:#5A6472;min-width:26px}
+  .dateline{font-size:11px;color:#FFFFFF;background:#5A6472;padding:2px 7px;border-radius:2px}
+  .topic{font-size:12px;color:#5A6472}
+  .context{
+    font-size:14px;color:#5A6472;margin:0 0 14px;
+    padding-left:14px;border-left:2px solid #D8D5CC;max-width:60ch;
+  }
+  .prompt{
+    font-family:Georgia,"Times New Roman",serif;
+    font-size:19px;line-height:1.45;margin:0 0 18px;color:#1C222C;
+  }
+  .opts{display:grid;gap:8px}
+  label.opt{
+    display:flex;gap:12px;align-items:flex-start;
+    background:#FFFFFF;color:#1C222C;
+    border:1px solid #D8D5CC;
+    border-radius:4px;padding:13px 15px;cursor:pointer;
+    transition:background .12s ease,border-color .12s ease;
+    font-size:15px;
+  }
+  label.opt:hover{background:#EFEDE6}
+  label.opt input{margin:3px 0 0;accent-color:#0E7C9B;flex:none}
+  label.opt:focus-within{outline:2px solid #0E7C9B;outline-offset:2px}
+  label.opt.picked{border-color:#0E7C9B;background:#EFEDE6}
+  label.opt.correct{border-color:#1F7A55;border-width:2px}
+  label.opt.wrong{border-color:#B23A35;border-width:2px}
+  .tag{margin-left:auto;font-size:12px;flex:none;padding-left:10px}
+  .tag.ok{color:#1F7A55}
+  .tag.no{color:#B23A35}
+
+  .actions{
+    position:fixed;left:0;right:0;bottom:0;z-index:25;
+    background:rgba(247,246,242,.97);border-top:1px solid #D8D5CC;
+    padding:14px 20px;display:flex;gap:12px;justify-content:center;align-items:center;
+    backdrop-filter:blur(6px);
+  }
+  button{
+    font:inherit;font-size:15px;border-radius:4px;cursor:pointer;
+    padding:11px 22px;border:1px solid #D8D5CC;background:#FFFFFF;color:#1C222C;
+  }
+  button.primary{background:#1C222C;color:#FFFFFF;border-color:#1C222C}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  button:focus-visible{outline:2px solid #0E7C9B;outline-offset:2px}
+
+  .result{display:none;padding:38px 0 10px;border-bottom:1px solid #D8D5CC}
+  .result.show{display:block}
+  .score{font-family:Georgia,serif;font-size:64px;line-height:1;margin:0;color:#1C222C}
+  .score small{font-size:26px;color:#5A6472}
+  .verdict{margin:12px 0 0;color:#5A6472;font-size:15px}
+  .compare{
+    margin-top:18px;padding:12px 15px;border-left:3px solid #C9971B;
+    background:#FFFFFF;font-size:14px;color:#1C222C;
+  }
+  .review-head{font-family:Georgia,serif;font-size:22px;margin:36px 0 6px;font-weight:400;color:#1C222C}
+  .review-sub{color:#5A6472;font-size:14px;margin:0 0 18px}
+  .miss{
+    border-left:3px solid #B23A35;background:#FFFFFF;border-top:1px solid #D8D5CC;
+    border-right:1px solid #D8D5CC;border-bottom:1px solid #D8D5CC;
+    padding:14px 16px;margin-bottom:12px;font-size:14px;border-radius:0 4px 4px 0;
+  }
+  .miss p{margin:0 0 7px}
+  .miss .qt{font-family:Georgia,serif;font-size:16px;color:#1C222C}
+  .miss .you{color:#B23A35}
+  .miss .right{color:#1F7A55}
+  .miss .note{color:#5A6472;font-size:13px;margin:0}
+  .allright{
+    border-left:3px solid #1F7A55;background:#FFFFFF;
+    border-top:1px solid #D8D5CC;border-right:1px solid #D8D5CC;border-bottom:1px solid #D8D5CC;
+    padding:14px 16px;font-size:14px;border-radius:0 4px 4px 0;color:#1C222C;
+  }
+
+  @media (max-width:560px){
+    h1{font-size:31px}
+    .prompt{font-size:17px}
+    .score{font-size:52px}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+  @media (forced-colors:active){
+    label.opt{border:1px solid currentColor}
+    label.opt.correct,label.opt.wrong{border-width:3px}
+  }
+</style>
+</head>
+<body>
+
+<div class="registration" aria-hidden="true">
+  <span class="reg-c" id="regC" style="flex-grow:0"></span>
+  <span class="reg-m" id="regM" style="flex-grow:0"></span>
+  <span class="reg-y" id="regY" style="flex-grow:0"></span>
+  <span class="reg-k" id="regK" style="flex-grow:0"></span>
+</div>
+
+<div class="wrap">
+
+<header>
+  <h1>Current affairs: the week of 9 to 13 September</h1>
+  <p class="standfirst">Ten topics, two questions each. Every question sets up its own background first, so you can reason your way through even if you missed the story when it ran.</p>
+  <p class="meta">One answer each. Nothing is scored until you check.</p>
+</header>
+
+<div class="progress">
+  <span id="counter">0 of 20 answered</span>
+  <span id="lastScore"></span>
+</div>
+
+<form id="quiz"></form>
+
+<section class="result" id="result" aria-live="polite">
+  <p class="score"><span id="scoreNum">0</span><small> / 20</small></p>
+  <p class="verdict" id="verdict"></p>
+  <div class="compare" id="compare" style="display:none"></div>
+  <h2 class="review-head" id="reviewHead">What you missed</h2>
+  <p class="review-sub" id="reviewSub"></p>
+  <div id="review"></div>
+</section>
+
+</div>
+
+<div class="actions">
+  <button type="button" class="primary" id="check" disabled>Check answers</button>
+  <button type="button" id="reset">Start over</button>
+</div>
+
+<script>
+const QUESTIONS = [
+  {
+    day: "Sep 9", topic: "Map projections",
+    ctx: "The UN has voted to move away from the Mercator projection of 1569, which keeps angles true so that a constant compass bearing appears as a straight line. Its replacement, Equal Earth, preserves relative area instead.",
+    q: "By what mechanism does Mercator end up inflating land far from the equator?",
+    opts: [
+      "The globe is viewed from a tilted vantage point",
+      "Ocean areas are compressed to fit the frame edges",
+      "Latitude spacing grows to match the sideways stretch",
+      "The poles are drawn as a line rather than a point"
+    ],
+    a: 2,
+    note: "To hold shapes true, north-south spacing must expand at the same rate as the east-west stretch. Area is what gets sacrificed."
+  },
+  {
+    day: "Sep 9", topic: "Map projections",
+    ctx: "Supporters of the switch say Mercator visually shrinks the global South. Not every cartographer thought the change was meaningful, including Bimal Kumar Kar of the Indian National Geographical Association.",
+    q: "What was Kar's objection to the way the switch was being argued?",
+    opts: [
+      "The new projection has not been peer reviewed",
+      "It sets against each other maps built for different jobs",
+      "Equal Earth distorts area more than Mercator does",
+      "Classrooms will find the new outlines hard to teach"
+    ],
+    a: 1,
+    note: "Mercator was designed for navigation. Judging it against a thematic map is comparing tools made for different tasks."
+  },
+
+  {
+    day: "Sep 11", topic: "Green cards",
+    ctx: "PERM is the labour certification an employer must obtain before sponsoring someone for an employment-based green card. It runs alongside the H-1B, which is a temporary work visa. The US Labor Department has suspended Cognizant's PERM filings.",
+    q: "What happens to an employee whose case had not yet reached the filing stage?",
+    opts: [
+      "Their approved green card petition is withdrawn",
+      "Their existing H-1B status is cancelled at once",
+      "They must leave the country within sixty days",
+      "They cannot get a priority date and so they wait"
+    ],
+    a: 3,
+    note: "The suspension stalls the pipeline. It does not disturb status a worker already holds."
+  },
+  {
+    day: "Sep 11", topic: "Green cards",
+    ctx: "An H-1B normally runs for a maximum of six years. Extensions beyond that are available only in defined circumstances tied to the green card process.",
+    q: "Why does a blocked PERM matter most to someone near that six-year mark?",
+    opts: [
+      "A pending PERM case pauses the six-year clock",
+      "Extensions past six years need an early filing",
+      "Only those past six years may file a PERM case",
+      "The limit lapses once any petition is approved"
+    ],
+    a: 1,
+    note: "The route past six years depends on a labour certification filed early enough. No filing, no route."
+  },
+
+  {
+    day: "Sep 10", topic: "Marital rape",
+    ctx: "Exception 2 to Section 375 says that sexual acts by a man with his own wife, she not being a minor, are not rape. Hearing challenges to it, the Supreme Court accepted that marriage does not extinguish a woman's autonomy.",
+    q: "So what did the bench say still stood in the way of allowing prosecutions now?",
+    opts: [
+      "The petitions had been filed in the wrong forum",
+      "A penal charge cannot precede the verdict",
+      "The Centre had not yet been heard on merits",
+      "Two High Courts had already ruled on it"
+    ],
+    a: 1,
+    note: "This is criminal law. A prosecution cannot run ahead of a ruling that the exception is unconstitutional."
+  },
+  {
+    day: "Sep 10", topic: "Marital rape",
+    ctx: "The Centre's position is that treating non-consensual sex within marriage as rape would amount to creating a harsh new crime, and that this is a matter for Parliament.",
+    q: "How did Senior Advocate Karuna Nundy answer that?",
+    opts: [
+      "Removing an exemption creates no new offence",
+      "Consent is already defined elsewhere in the code",
+      "Parliament has agreed in principle to amend it",
+      "Two High Courts have struck the clause down"
+    ],
+    a: 0,
+    note: "The offence already exists. What changes is which class of men is exempt from it."
+  },
+
+  {
+    day: "Sep 11", topic: "Bihar floods",
+    ctx: "Between June and early September, Bihar's rainfall ran roughly a quarter below normal. Fourteen districts flooded anyway.",
+    q: "What best explains those two facts sitting together?",
+    opts: [
+      "Reservoirs were emptied ahead of the monsoon",
+      "The rain fell in Nepal's catchments, not on Bihar",
+      "Snowmelt from the Himalaya arrived unusually late",
+      "The state recorded its wettest August on record"
+    ],
+    a: 1,
+    note: "The rivers cross the border already full. What falls over Bihar itself is only part of the story."
+  },
+  {
+    day: "Sep 11", topic: "Bihar floods",
+    ctx: "Bihar has built over 3,700 km of embankments to confine rivers that carry very heavy loads of sediment down from the mountains.",
+    q: "Why is the result described as a problem that deepens with every year?",
+    opts: [
+      "They hold water back through the dry season",
+      "They divert sediment safely into the Ganga",
+      "They lower the bed by speeding up the current",
+      "They trap silt and raise the riverbed steadily"
+    ],
+    a: 3,
+    note: "Silt settles inside the narrowed channel, so the bed climbs relative to the land on either side."
+  },
+
+  {
+    day: "Sep 13", topic: "BRICS",
+    ctx: "The eleven members disagree sharply on Ukraine, West Asia and tariffs, and some of them want the grouping used as a counterweight to Washington. A joint declaration was nonetheless adopted by consensus.",
+    q: "What did C Raja Mohan identify as Delhi's real achievement in that text?",
+    opts: [
+      "Keeping the group plural rather than anti-West",
+      "Building a bloc able to balance Washington",
+      "Replacing the dollar in intra-group trade",
+      "Admitting new members from Latin America"
+    ],
+    a: 0,
+    note: "He argued the success lies in keeping BRICS boring, and refusing to let it harden into one ideological front."
+  },
+  {
+    day: "Sep 12", topic: "BRICS",
+    ctx: "China's economy dwarfs the rest of the grouping in total size. Measured by income per person, the ranking of the same members inverts almost completely.",
+    q: "What question did Udit Misra argue that contrast raises?",
+    opts: [
+      "Whether a group this lopsided can decide as equals",
+      "Whether India ought to leave the grouping entirely",
+      "Whether the bloc needs a single common currency",
+      "Whether membership should be capped where it is"
+    ],
+    a: 0,
+    note: "Biggest is not richest. Misra's point is about who actually sets the agenda inside such a group."
+  },
+
+  {
+    day: "Sep 13", topic: "India and China",
+    ctx: "Modi and Xi met on the summit sidelines, two years after Kazan and five years after the Ladakh standoff. The MEA said the meeting was guided by mutual respect, mutual sensitivity and mutual interest.",
+    q: "What formula did the two sides settle on for the boundary question?",
+    opts: [
+      "Disputes will go to third-party arbitration",
+      "Differences must be settled before more trade",
+      "Differences should not become open disputes",
+      "The boundary will be frozen for a decade"
+    ],
+    a: 2,
+    note: "They committed to a fair, reasonable and mutually acceptable resolution, and to keeping differences from hardening."
+  },
+  {
+    day: "Sep 12", topic: "India and China",
+    ctx: "India imports vastly more from China than it exports there, and the gap has widened. Indian small firms and Indian manufacturers responded to that imbalance in opposite ways.",
+    q: "What was the split between the two groups?",
+    opts: [
+      "Both wanted tariffs raised on Chinese components",
+      "Small firms want easier access, makers want less reliance",
+      "Makers want easier access, small firms want tariffs",
+      "Both asked for a complete ban on such imports"
+    ],
+    a: 1,
+    note: "MSMEs depend on cheap Chinese inputs to stay viable. Larger manufacturers see the same dependence as a risk."
+  },
+
+  {
+    day: "Sep 13", topic: "Artificial intelligence",
+    ctx: "Anthropic's chief executive spoke about the distance between what frontier models can already do and the safeguards that exist around them.",
+    q: "What did Dario Amodei ask the rest of the industry to do?",
+    opts: [
+      "Open source frontier models for outside inspection",
+      "Slow the rate at which capability is advanced",
+      "Pause all training runs for a full two years",
+      "Hand frontier labs over to government control"
+    ],
+    a: 1,
+    note: "He argued capability is outrunning the ability to check it, and that the field is not yet immune to those concerns."
+  },
+  {
+    day: "Sep 11", topic: "Artificial intelligence",
+    ctx: "A study looked at what happens when a language model is tuned to sound warmer and more empathetic, then tested how it responded to claims users made.",
+    q: "What did that research find?",
+    opts: [
+      "Warmth training makes models agree too readily",
+      "Users prefer bots that disagree with them often",
+      "Models refuse emotionally loaded questions",
+      "Longer answers make replies seem truthful"
+    ],
+    a: 0,
+    note: "Tuning for warmth also tunes for flattery. A useful interlocutor knows when disagreement is the right answer."
+  },
+
+  {
+    day: "Sep 11", topic: "9/11 at 25",
+    ctx: "Jonah Blank was working on Capitol Hill on the morning of the attacks. Twenty-five years on, he assessed what the United States did next.",
+    q: "What was his conclusion about the American response?",
+    opts: [
+      "It succeeded in spite of its enormous expense",
+      "It leaned too heavily on European partners",
+      "It did more lasting damage than the attacks",
+      "It was too narrow to deter further plotting"
+    ],
+    a: 2,
+    note: "He called it the biggest self-inflicted hurt, pointing to Iraq, Guantanamo and the erosion of civil liberties."
+  },
+  {
+    day: "Sep 11", topic: "9/11 at 25",
+    ctx: "Sayu Bhojwani wrote about South Asians in New York in the years following 2001, when suspicion and harassment of the community were at their height.",
+    q: "What did she describe as the lasting effect of that period?",
+    opts: [
+      "A steady migration back to the subcontinent",
+      "A generation pushed into civic and electoral work",
+      "A collapse of community organisations in the city",
+      "A withdrawal from public life for two decades"
+    ],
+    a: 1,
+    note: "The backlash produced organising, voter registration and eventually elected representation."
+  },
+
+  {
+    day: "Sep 11", topic: "Courts and liberties",
+    ctx: "A Kashmiri scholar was detained under the National Security Act. Among the material cited in support of the detention were books found in his possession.",
+    q: "On what basis did the High Court quash the detention?",
+    opts: [
+      "Possession of books is not by itself an offence",
+      "The detention exceeded the statutory time limit",
+      "The state failed to serve the grounds in time",
+      "The scholar had no prior criminal record"
+    ],
+    a: 0,
+    note: "The court held that nothing in the material tied him to any specific unlawful activity."
+  },
+  {
+    day: "Sep 13", topic: "Courts and liberties",
+    ctx: "The Allahabad High Court set aside a District Magistrate's order externing a man from his home district under the Goonda Act, a preventive law meant for habitual offenders.",
+    q: "What was the court's criticism of the state in doing so?",
+    opts: [
+      "It had failed to notify the local police first",
+      "It had applied a law repealed years earlier",
+      "It was using the law as a tool of oppression",
+      "It had ignored the man's right of appeal"
+    ],
+    a: 2,
+    note: "The court said the state was persistent in its abuse of preventive powers rather than using them sparingly."
+  },
+
+  {
+    day: "Sep 10", topic: "Electoral rolls",
+    ctx: "Form 7 is the application through which a name is sought to be removed from the electoral roll. In Uttarakhand, four plains districts accounted for 85 per cent of all such applications.",
+    q: "Why did that concentration draw scrutiny?",
+    opts: [
+      "It suggests the filings were organised, not individual",
+      "It shows those districts have the oldest voters",
+      "It means the rolls there were revised last year",
+      "It indicates those districts are the most populous"
+    ],
+    a: 0,
+    note: "Deletion requests are meant to come from individuals. A pattern that tight points at something coordinated."
+  },
+  {
+    day: "Sep 12", topic: "Electoral rolls",
+    ctx: "Dushyant Dave wrote against the Special Intensive Revision of electoral rolls, calling it exclusion by another name.",
+    q: "What was his central constitutional objection to the exercise?",
+    opts: [
+      "It gives the Election Commission no timeline at all",
+      "It requires Parliament to pass a fresh statute first",
+      "It lets parties raise objections to any single entry",
+      "It shifts the burden of proving citizenship to the voter"
+    ],
+    a: 3,
+    note: "Deletion also costs a person passports, ration cards and other entitlements, not only the vote."
+  }
+];
+
+const form = document.getElementById('quiz');
+const counter = document.getElementById('counter');
+const checkBtn = document.getElementById('check');
+const resetBtn = document.getElementById('reset');
+const result = document.getElementById('result');
+let previousScore = null;
+let scored = false;
+
+function build(){
+  form.innerHTML = '';
+  QUESTIONS.forEach((item, i) => {
+    const block = document.createElement('div');
+    block.className = 'q';
+    block.id = 'q' + i;
+
+    const head = document.createElement('div');
+    head.className = 'q-head';
+    const folio = document.createElement('span');
+    folio.className = 'folio';
+    folio.textContent = i + 1;
+    const dateline = document.createElement('span');
+    dateline.className = 'dateline';
+    dateline.textContent = item.day;
+    const topic = document.createElement('span');
+    topic.className = 'topic';
+    topic.textContent = item.topic;
+    head.appendChild(folio);
+    head.appendChild(dateline);
+    head.appendChild(topic);
+    block.appendChild(head);
+
+    const ctx = document.createElement('p');
+    ctx.className = 'context';
+    ctx.textContent = item.ctx;
+    block.appendChild(ctx);
+
+    const prompt = document.createElement('p');
+    prompt.className = 'prompt';
+    prompt.textContent = item.q;
+    block.appendChild(prompt);
+
+    const opts = document.createElement('div');
+    opts.className = 'opts';
+    item.opts.forEach((text, j) => {
+      const label = document.createElement('label');
+      label.className = 'opt';
+      const input = document.createElement('input');
+      input.type = 'radio';
+      input.name = 'q' + i;
+      input.value = j;
+      const span = document.createElement('span');
+      span.textContent = text;
+      label.appendChild(input);
+      label.appendChild(span);
+      opts.appendChild(label);
+    });
+    block.appendChild(opts);
+    form.appendChild(block);
+  });
+}
+
+function answered(){
+  let n = 0;
+  QUESTIONS.forEach((_, i) => {
+    if (form.querySelector('input[name="q' + i + '"]:checked')) n++;
+  });
+  return n;
+}
+
+function refresh(){
+  const n = answered();
+  counter.textContent = n + ' of 20 answered';
+  checkBtn.disabled = n === 0 || scored;
+
+  const done = n / 20;
+  const parts = [
+    Math.min(done * 4, 1), Math.min(Math.max(done * 4 - 1, 0), 1),
+    Math.min(Math.max(done * 4 - 2, 0), 1), Math.min(Math.max(done * 4 - 3, 0), 1)
+  ];
+  ['regC','regM','regY','regK'].forEach((id, k) => {
+    document.getElementById(id).style.flexGrow = parts[k];
+  });
+
+  form.querySelectorAll('label.opt').forEach(l => {
+    if (!scored) l.classList.toggle('picked', l.querySelector('input').checked);
+  });
+}
+
+form.addEventListener('change', refresh);
+
+checkBtn.addEventListener('click', () => {
+  scored = true;
+  let score = 0;
+  const misses = [];
+  const byTopic = {};
+
+  QUESTIONS.forEach((item, i) => {
+    const picked = form.querySelector('input[name="q' + i + '"]:checked');
+    const chosen = picked ? Number(picked.value) : null;
+    const labels = form.querySelectorAll('#q' + i + ' label.opt');
+
+    labels.forEach((label, j) => {
+      label.classList.remove('picked');
+      label.querySelector('input').disabled = true;
+      if (j === item.a){
+        label.classList.add('correct');
+        const tag = document.createElement('span');
+        tag.className = 'tag ok';
+        tag.textContent = 'correct';
+        label.appendChild(tag);
+      }
+      if (chosen === j && chosen !== item.a){
+        label.classList.add('wrong');
+        const tag = document.createElement('span');
+        tag.className = 'tag no';
+        tag.textContent = 'you chose';
+        label.appendChild(tag);
+      }
+    });
+
+    if (!byTopic[item.topic]) byTopic[item.topic] = 0;
+    if (chosen === item.a){ score++; byTopic[item.topic]++; }
+    else misses.push({ item: item, chosen: chosen });
+  });
+
+  document.getElementById('scoreNum').textContent = score;
+
+  const clean = Object.keys(byTopic).filter(t => byTopic[t] === 2);
+  let verdict;
+  if (score === 20) verdict = 'Every one. You read the arguments, not just the headlines.';
+  else if (score >= 16) verdict = 'Strong. The reasoning is sticking.';
+  else if (score >= 11) verdict = 'You caught the stories. Some of the arguments slipped.';
+  else if (score >= 6) verdict = 'The events landed. The why behind them did not.';
+  else verdict = 'Worth a second pass through the opinion and explained pages.';
+  if (clean.length && score < 20){
+    verdict += ' Clean sweep on ' + clean.join(', ') + '.';
+  }
+  document.getElementById('verdict').textContent = verdict;
+
+  const compare = document.getElementById('compare');
+  if (previousScore !== null){
+    const diff = score - previousScore;
+    const move = diff > 0 ? 'up ' + diff : (diff < 0 ? 'down ' + Math.abs(diff) : 'level');
+    compare.textContent = 'Last attempt: ' + previousScore + ' out of 20. You are ' + move + ' this time.';
+    compare.style.display = 'block';
+  } else {
+    compare.style.display = 'none';
+  }
+  previousScore = score;
+
+  const review = document.getElementById('review');
+  review.innerHTML = '';
+  const sub = document.getElementById('reviewSub');
+
+  if (misses.length === 0){
+    document.getElementById('reviewHead').textContent = 'Nothing missed';
+    sub.textContent = '';
+    const ok = document.createElement('div');
+    ok.className = 'allright';
+    ok.textContent = 'All twenty correct. Scroll up if you want to reread the reasoning under each answer.';
+    review.appendChild(ok);
+  } else {
+    document.getElementById('reviewHead').textContent = 'What you missed';
+    sub.textContent = misses.length + (misses.length === 1 ? ' question' : ' questions') + ', with the answer and the reasoning behind it.';
+    misses.forEach(m => {
+      const box = document.createElement('div');
+      box.className = 'miss';
+
+      const qt = document.createElement('p');
+      qt.className = 'qt';
+      qt.textContent = m.item.topic + ', ' + m.item.day + ' — ' + m.item.q;
+      box.appendChild(qt);
+
+      const you = document.createElement('p');
+      you.className = 'you';
+      you.textContent = 'You chose: ' + (m.chosen === null ? 'nothing' : m.item.opts[m.chosen]);
+      box.appendChild(you);
+
+      const right = document.createElement('p');
+      right.className = 'right';
+      right.textContent = 'Answer: ' + m.item.opts[m.item.a];
+      box.appendChild(right);
+
+      const note = document.createElement('p');
+      note.className = 'note';
+      note.textContent = m.item.note;
+      box.appendChild(note);
+
+      review.appendChild(box);
+    });
+  }
+
+  result.classList.add('show');
+  checkBtn.disabled = true;
+  result.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+
+resetBtn.addEventListener('click', () => {
+  scored = false;
+  result.classList.remove('show');
+  build();
+  refresh();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
+build();
+refresh();
+</script>
+</body>
+</html>
