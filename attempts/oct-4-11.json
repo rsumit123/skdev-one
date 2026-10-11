@@ -1,17 +1,4 @@
 {
   "week": "oct-4-11",
-  "attempts": [
-    {
-      "name": "Flow check",
-      "score": 16,
-      "total": 20,
-      "wrong": [
-        1,
-        5,
-        9,
-        13
-      ],
-      "at": 1791734434879
-    }
-  ]
+  "attempts": []
 }
