@@ -1,0 +1,642 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="robots" content="noindex, nofollow" />
+<title>nanochat-d20 Explained</title>
+<meta name="description" content="How nanochat-d20 was built, trained, evaluated and served, with interactive visuals and an interview Q&A." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300..700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #fafaf9; --card: #ffffff; --soft: #f4f4f5; --fg: #18181b; --muted: #6b6b73; --faint: #a1a1aa;
+    --border: rgba(0,0,0,0.09); --shadow: 0 1px 2px rgba(0,0,0,.04), 0 8px 24px -10px rgba(0,0,0,.10);
+    --a: #2563eb; --a-soft: rgba(37,99,235,.10); --b: #d97706; --b-soft: rgba(217,119,6,.12);
+    --c: #059669; --c-soft: rgba(5,150,105,.12); --d: #9333ea; --d-soft: rgba(147,51,234,.10); --red: #dc2626;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0b0b0c; --card: #141416; --soft: #1d1d20; --fg: #f4f4f5; --muted: #a1a1aa; --faint: #71717a;
+      --border: rgba(255,255,255,0.09); --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px -10px rgba(0,0,0,.6);
+      --a: #60a5fa; --a-soft: rgba(96,165,250,.14); --b: #fbbf24; --b-soft: rgba(251,191,36,.14);
+      --c: #34d399; --c-soft: rgba(52,211,153,.14); --d: #c084fc; --d-soft: rgba(192,132,252,.14); --red: #f87171;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 'Inter', -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
+  main { max-width: 900px; margin: 0 auto; padding: 40px 16px 80px; }
+  h1 { font: 500 44px/1.08 'Fraunces', serif; letter-spacing: -0.02em; margin: 0 0 10px; }
+  h2 { font: 500 28px/1.2 'Fraunces', serif; margin: 56px 0 6px; scroll-margin-top: 70px; }
+  h3 { font: 600 17px/1.3 'Inter', sans-serif; margin: 22px 0 6px; }
+  p { margin: 8px 0; }
+  .lead { color: var(--muted); font-size: 18px; margin: 0 0 18px; }
+  .kicker { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+  .muted { color: var(--muted); }
+  .small { font-size: 14px; }
+  code, .mono { font-family: 'JetBrains Mono', monospace; font-size: .88em; }
+  code, .mono, .tokens, .tip, .pill, .stat .k { font-variant-ligatures: none; font-feature-settings: 'liga' 0, 'calt' 0; }
+  code { background: var(--soft); padding: 1px 5px; border-radius: 5px; }
+  a { color: var(--a); }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow); padding: 18px 20px; margin: 14px 0; }
+  .grid { display: grid; gap: 12px; }
+  .g2 { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+  .g4 { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+  .stat { background: var(--soft); border-radius: 12px; padding: 12px 14px; }
+  .stat .v { font: 600 22px 'Inter', sans-serif; }
+  .stat .k { font-size: 12px; color: var(--muted); }
+  .pill { display: inline-block; font: 500 12px 'JetBrains Mono', monospace; padding: 2px 8px; border-radius: 999px; background: var(--soft); margin: 2px 2px 2px 0; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+  button.tab { font: 600 14px 'Inter', sans-serif; padding: 8px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); color: var(--fg); cursor: pointer; }
+  button.tab[aria-pressed="true"] { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+  .tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+  details { border-top: 1px solid var(--border); padding: 10px 0; }
+  details:last-child { border-bottom: 1px solid var(--border); }
+  summary { cursor: pointer; font-weight: 600; }
+  details > div { margin-top: 8px; color: var(--fg); }
+  .callout { border-left: 3px solid var(--a); background: var(--a-soft); padding: 10px 14px; border-radius: 0 10px 10px 0; margin: 12px 0; font-size: 15px; }
+
+  /* sticky nav */
+  nav.toc { position: sticky; top: 0; z-index: 5; background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(8px);
+            border-bottom: 1px solid var(--border); margin: 0 -16px 0; padding: 10px 16px; display: flex; gap: 14px; overflow-x: auto; white-space: nowrap; font-size: 14px; }
+  nav.toc a { color: var(--muted); text-decoration: none; }
+  nav.toc a:hover { color: var(--fg); }
+  .top-actions { display: flex; gap: 10px; flex-wrap: wrap; margin: 14px 0 6px; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border-radius: 10px; border: 1px solid var(--border); background: var(--card);
+         color: var(--fg); text-decoration: none; font-weight: 600; font-size: 14px; }
+
+  /* pipeline */
+  .pipe { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+  .pipe button { border: 1px solid var(--border); background: var(--card); border-radius: 12px; padding: 10px 8px; cursor: pointer; color: var(--fg); text-align: left; }
+  .pipe button .t { font-weight: 600; font-size: 14px; display: block; }
+  .pipe button .d { font: 12px 'JetBrains Mono', monospace; color: var(--muted); }
+  .pipe button[aria-pressed="true"] { border-color: var(--a); box-shadow: 0 0 0 2px var(--a-soft); }
+  .pipe-panel { margin-top: 12px; }
+
+  /* tokens */
+  .tokens { display: flex; flex-wrap: wrap; gap: 4px; margin: 10px 0; font: 15px 'JetBrains Mono', monospace; }
+  .tokens span { padding: 3px 6px; border-radius: 6px; white-space: pre; position: relative; }
+  .tokens span small { display: block; font-size: 10px; color: var(--muted); text-align: center; }
+
+  /* layer map */
+  .layers { display: grid; grid-template-columns: repeat(20, 1fr); gap: 4px; margin: 12px 0 4px; }
+  .layer { height: 64px; border-radius: 7px; cursor: pointer; border: 2px solid transparent; position: relative; display: flex; align-items: flex-end; justify-content: center;
+           font: 10px 'JetBrains Mono', monospace; color: #fff; padding-bottom: 3px; }
+  .layer.S { background: var(--a); } .layer.L { background: var(--b); }
+  .layer.ve::before { content: ""; position: absolute; top: 5px; left: 50%; transform: translateX(-50%); width: 9px; height: 9px; border-radius: 50%; background: #fff; }
+  .layer.sel { border-color: var(--fg); }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--muted); }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 5px; }
+
+  /* block anatomy */
+  .flow { display: grid; gap: 6px; font-size: 14px; }
+  .flow .box { border-radius: 10px; padding: 8px 12px; border: 1px solid var(--border); background: var(--soft); }
+  .flow .box b { font-weight: 600; }
+  .flow .arrow { text-align: center; color: var(--faint); line-height: 1; }
+  .flow .res { border-style: dashed; background: transparent; color: var(--muted); font-size: 13px; }
+
+  /* charts */
+  .chart { width: 100%; height: auto; display: block; }
+  .chart text { fill: var(--muted); font: 11px 'Inter', sans-serif; }
+  .chart .axis { stroke: var(--border); }
+  .tip { font: 12px 'JetBrains Mono', monospace; color: var(--muted); min-height: 1.4em; }
+  .bars .row { display: grid; grid-template-columns: 170px 1fr 56px; align-items: center; gap: 10px; margin: 6px 0; font-size: 14px; }
+  .bars .track { background: var(--soft); border-radius: 6px; height: 18px; overflow: hidden; }
+  .bars .fill { height: 100%; border-radius: 6px; }
+  .bars .val { font: 13px 'JetBrains Mono', monospace; text-align: right; }
+
+  /* kv demo */
+  input[type=range] { width: 100%; }
+  .kv { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .kv .meter { height: 14px; border-radius: 6px; background: var(--soft); overflow: hidden; margin-top: 6px; }
+  .kv .meter div { height: 100%; }
+
+  /* glossary */
+  #gq { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--card); color: var(--fg); font: 15px 'Inter', sans-serif; }
+  .gl { display: grid; grid-template-columns: 190px 1fr; gap: 6px 16px; margin-top: 12px; font-size: 15px; }
+  .gl dt { font-weight: 600; } .gl dd { margin: 0 0 8px; color: var(--fg); }
+
+  @media (max-width: 680px) {
+    h1 { font-size: 34px; } h2 { font-size: 24px; }
+    .pipe { grid-template-columns: repeat(3, 1fr); }
+    .layers { grid-template-columns: repeat(10, 1fr); }
+    .bars .row { grid-template-columns: 110px 1fr 48px; font-size: 13px; }
+    .gl { grid-template-columns: 1fr; } .gl dd { margin-bottom: 12px; }
+    .kv { grid-template-columns: 1fr; }
+  }
+  @media print {
+    nav.toc, .top-actions, .no-print, .tabs, input[type=range], .tip { display: none !important; }
+    body { background: #fff; font-size: 11pt; } main { max-width: none; padding: 0; }
+    .card { box-shadow: none; break-inside: avoid; } h2 { break-after: avoid; margin-top: 28px; }
+    details { break-inside: avoid; } .print-only { display: block !important; }
+    a { color: inherit; text-decoration: none; }
+  }
+  .print-only { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <div class="kicker">Explainer · interview prep</div>
+  <h1>nanochat-d20, explained</h1>
+  <p class="lead">A 20-layer chat model trained from scratch on one H100. This page explains every stage and every term in the
+    README, with the actual numbers from the run.</p>
+  <div class="top-actions">
+    <a class="btn" href="nanochat-d20-explainer.pdf" download>Download PDF</a>
+    <a class="btn" href="https://github.com/rsumit123/private-llm" target="_blank" rel="noopener">GitHub repo ↗</a>
+    <a class="btn" href="https://huggingface.co/spaces/sumitkClasses/scratchq-110" target="_blank" rel="noopener">Live demo ↗</a>
+    <a class="btn" href="../">Back to control page</a>
+  </div>
+
+  <nav class="toc" aria-label="Sections">
+    <a href="#overview">Overview</a><a href="#tokenizer">Tokenizer</a><a href="#arch">Architecture</a><a href="#pretrain">Pretraining</a>
+    <a href="#sft">Chat tuning</a><a href="#rl">RL</a><a href="#eval">Benchmarks</a><a href="#serve">Inference</a><a href="#glossary">Glossary</a><a href="#qa">Interview Q&amp;A</a>
+  </nav>
+
+  <!-- ================================================================ OVERVIEW -->
+  <h2 id="overview">The 30-second version</h2>
+  <div class="grid g4">
+    <div class="stat"><div class="v">897M</div><div class="k">parameters (393M in the transformer)</div></div>
+    <div class="stat"><div class="v">3.48B</div><div class="k">pretraining tokens</div></div>
+    <div class="stat"><div class="v">~6 h</div><div class="k">end-to-end on 1× H100</div></div>
+    <div class="stat"><div class="v">0.236</div><div class="k">CORE (GPT-2 355M: 0.192)</div></div>
+  </div>
+  <p>Everything was learned from random initialization: the tokenizer, the language model and the chat behaviour. The code is
+    <a href="https://github.com/karpathy/nanochat">nanochat</a> (Andrej Karpathy's minimal LLM training stack); the work here is
+    choosing the configuration, running it reliably on rented hardware, evaluating it fairly and shipping it.</p>
+
+  <h3>The pipeline (click a stage)</h3>
+  <div class="pipe" id="pipe"></div>
+  <div class="card pipe-panel" id="pipePanel"></div>
+  <div class="print-only" id="pipePrint"></div>
+
+  <!-- ================================================================ TOKENIZER -->
+  <h2 id="tokenizer">1 · Tokenizer</h2>
+  <p>A model reads integers, not text. The tokenizer maps text to a sequence of <b>token ids</b> drawn from a fixed vocabulary.
+    We trained our own <b>BPE</b> (byte-pair encoding) tokenizer with a vocabulary of <b>32,768</b> on ~2B characters of the
+    pretraining data.</p>
+  <div class="callout"><b>How BPE works.</b> Start from raw bytes. Repeatedly find the most frequent adjacent pair and merge it
+    into a new token. Common words end up as one token (<code>&nbsp;sunlight</code>); rare words are split into pieces
+    (<code>K|erala</code>). Leading spaces are part of tokens, which is why most tokens below start with a space.</div>
+  <div class="card">
+    <div class="tabs no-print" id="tokTabs"></div>
+    <div class="tokens" id="tokOut"></div>
+    <div class="muted small" id="tokStats"></div>
+    <div class="print-only" id="tokPrint"></div>
+  </div>
+  <p class="small muted">These splits come from the actual trained tokenizer. A typical English token is about 4–5 characters,
+    which is why "bits per byte" (below) is used to compare models with different tokenizers.</p>
+
+  <!-- ================================================================ ARCHITECTURE -->
+  <h2 id="arch">2 · Architecture</h2>
+  <p>A decoder-only Transformer, the same family as GPT-2/Llama, with modern refinements. The single knob is <b>depth = 20</b>;
+    nanochat derives everything else from it: width = 20 × 64 = <b>1280</b>, 10 attention heads of 128 dimensions, context of
+    <b>2,048</b> tokens.</p>
+
+  <h3>The 20 layers (click one)</h3>
+  <div class="legend">
+    <span><i style="background:var(--a)"></i>S: sliding window, sees the last 768 tokens</span>
+    <span><i style="background:var(--b)"></i>L: full attention, sees all 2,048</span>
+    <span><i style="background:var(--fg);border-radius:50%"></i>has a value embedding</span>
+  </div>
+  <div class="layers" id="layers"></div>
+  <div class="card" id="layerInfo"></div>
+
+  <h3>Inside one block</h3>
+  <div class="grid g2">
+    <div class="flow">
+      <div class="box">input from the previous layer <span class="muted">(1280 numbers per token)</span></div>
+      <div class="arrow">↓</div>
+      <div class="box"><b>RMSNorm</b> (no learned scale)</div>
+      <div class="arrow">↓</div>
+      <div class="box"><b>Self-attention</b>: Q, K, V projections → <b>RoPE</b> positions → <b>QK-norm</b> → FlashAttention-3 with
+        this layer's window → output projection</div>
+      <div class="box res">+ residual: add the input back</div>
+      <div class="arrow">↓</div>
+      <div class="box"><b>RMSNorm</b></div>
+      <div class="arrow">↓</div>
+      <div class="box"><b>MLP</b>: 1280 → 5120, <b>relu²</b>, 5120 → 1280</div>
+      <div class="box res">+ residual</div>
+    </div>
+    <div>
+      <p class="small"><b>Attention</b> lets each token look back at earlier tokens and pull in information. <b>The MLP</b> then
+        processes each token on its own; it holds much of the model's "knowledge".</p>
+      <p class="small"><b>Residual connections</b> mean each block adds a correction instead of replacing its input, so very deep
+        stacks still train stably.</p>
+      <p class="small"><b>Model-level extras</b> nanochat adds around the stack:</p>
+      <ul class="small">
+        <li><b>Smear</b>: mixes a gated bit of the previous token's embedding into each token (cheap bigram signal).</li>
+        <li><b>x0 / residual lambdas</b>: learned per-layer scalars that blend the original embedding back in.</li>
+        <li><b>Backout</b>: subtracts a fraction of the layer-10 activations before the output, removing low-level features.</li>
+        <li><b>Logit soft-cap</b>: output scores pass through 15·tanh(x/15), which prevents extreme values and stabilizes training.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3>Where the 897M parameters live</h3>
+  <div class="grid g2" style="align-items:center">
+    <svg class="chart" id="donut" viewBox="0 0 220 220" role="img" aria-label="Parameter breakdown"></svg>
+    <div id="donutLegend" class="small"></div>
+  </div>
+  <div class="callout">Why two numbers (897M vs 393M)? <b>Embedding tables</b> are lookups: a token id selects one row, so they
+    cost memory but almost no compute. The <b>393M transformer weights</b> do the multiplications on every token, which is the
+    fairer number when comparing compute and capability (GPT-2's counts include its much smaller embeddings).</div>
+
+  <h3>Sliding-window vs full attention</h3>
+  <p class="small">Each square is "token <i>row</i> may look at token <i>column</i>". Causal models only look backwards (lower
+    triangle). A sliding window limits how far back. Here 32 squares stand for 2,048 tokens; the window is a quarter.</p>
+  <div class="tabs no-print">
+    <button class="tab" data-win="full" aria-pressed="true">Full (L layers)</button>
+    <button class="tab" data-win="slide" aria-pressed="false">Sliding 768 (S layers)</button>
+  </div>
+  <div class="grid g2" style="align-items:center">
+    <svg class="chart" id="mask" viewBox="0 0 320 320" role="img" aria-label="Attention mask"></svg>
+    <p class="small">Why mix them? Sliding windows make 15 of 20 layers cheaper (attention cost grows with the square of what each
+      token sees), while the 5 full layers still carry long-range information across the whole 2,048-token context.</p>
+  </div>
+
+  <!-- ================================================================ PRETRAINING -->
+  <h2 id="pretrain">3 · Pretraining</h2>
+  <p>The model reads web text and learns one thing: <b>predict the next token</b>. Doing this well across billions of tokens
+    forces it to learn grammar, facts and some reasoning.</p>
+  <div class="grid g4">
+    <div class="stat"><div class="v">3,320</div><div class="k">optimizer steps</div></div>
+    <div class="stat"><div class="v">1M</div><div class="k">tokens per step</div></div>
+    <div class="stat"><div class="v">~197k</div><div class="k">tokens/second</div></div>
+    <div class="stat"><div class="v">~5.2 h</div><div class="k">wall-clock</div></div>
+  </div>
+  <div class="card">
+    <div class="tabs no-print" id="curveTabs">
+      <button class="tab" data-c="train" aria-pressed="true">Training loss</button>
+      <button class="tab" data-c="val" aria-pressed="false">Validation bits/byte</button>
+      <button class="tab" data-c="lr" aria-pressed="false">Learning-rate schedule</button>
+    </div>
+    <svg class="chart" id="curve" viewBox="0 0 640 260" role="img" aria-label="Training curve"></svg>
+    <div class="tip" id="curveTip">Hover the chart to read values.</div>
+    <p class="small" id="curveNote"></p>
+  </div>
+  <div class="grid g2">
+    <div class="card"><h3 style="margin-top:0">Data: 3.48B tokens of ClimbMix</h3>
+      <p class="small">NVIDIA's ClimbMix is web text clustered by topic and re-weighted toward higher-quality clusters. Using it
+        instead of plain FineWeb was one of the biggest wins in nanochat's speedrun history.</p>
+      <p class="small"><b>Data:param ratio 8</b> means ~8 training tokens per parameter of the scaling count.
+        Chinchilla-style "compute-optimal" training uses ~10–20; 8 trades a little quality for a shorter run.</p></div>
+    <div class="card"><h3 style="margin-top:0">Optimizer: Muon + AdamW</h3>
+      <p class="small"><b>Muon</b> updates the big weight matrices. It orthogonalizes each update so every direction of the
+        matrix learns at a similar rate, which trains faster than AdamW at this scale.</p>
+      <p class="small"><b>AdamW</b> handles the embeddings, output layer and small scalars, where Muon does not apply.</p></div>
+    <div class="card"><h3 style="margin-top:0">FP8</h3>
+      <p class="small">Matrix multiplies in 121 of 132 linear layers ran in 8-bit floating point (H100 tensor cores do this at
+        about 2× the bf16 rate). Master weights stay in fp32, so precision loss in the optimizer is avoided.</p></div>
+    <div class="card"><h3 style="margin-top:0">Run engineering</h3>
+      <p class="small">One script ran every stage on a rented H100. Checkpoints (model + optimizer state) were uploaded to a
+        private Hugging Face repo every 500 steps so training could resume after a host failure, and the instance shuts itself
+        down at the end or at a hard time limit.</p></div>
+  </div>
+
+  <!-- ================================================================ SFT -->
+  <h2 id="sft">4 · Chat fine-tuning (SFT)</h2>
+  <p>A pretrained model only continues text. <b>Supervised fine-tuning</b> teaches it the shape of a conversation: whose turn it
+    is, when to stop, how an assistant answers.</p>
+  <div class="card">
+    <div class="kicker" style="margin-bottom:6px">What the model actually sees</div>
+    <div class="tokens" id="chatFmt"></div>
+    <p class="small muted">Special tokens mark turns. The loss is computed only on the <span style="color:var(--c);font-weight:600">assistant's tokens</span>
+      (green), so the model learns to answer, not to imitate the user.</p>
+  </div>
+  <div class="grid g2">
+    <div class="card"><h3 style="margin-top:0">Data mix (~790k conversations, one pass)</h3>
+      <table><tr><th>Source</th><th>Teaches</th></tr>
+        <tr><td>SmolTalk (460k)</td><td>General conversation</td></tr>
+        <tr><td>MMLU auxiliary train ×3</td><td>Answering multiple-choice questions</td></tr>
+        <tr><td>GSM8K train ×4</td><td>Step-by-step math and calculator tool use</td></tr></table></div>
+    <div class="card"><h3 style="margin-top:0">Result</h3>
+      <p class="small">467 steps in 47 minutes; validation loss 0.296 bits/byte. Run twice from the same checkpoint, both runs
+        reached exactly 0.2961, confirming the stage is deterministic and reproducible.</p>
+      <svg class="chart" id="sftCurve" viewBox="0 0 320 140" role="img" aria-label="SFT loss"></svg></div>
+  </div>
+
+  <!-- ================================================================ RL -->
+  <h2 id="rl">5 · Reinforcement learning on math</h2>
+  <p>SFT copies answers from examples. <b>Reinforcement learning</b> instead lets the model try, scores the result, and pushes
+    up whatever worked. Here the task is GSM8K grade-school math, where correctness is easy to check automatically.</p>
+  <div class="card">
+    <div class="flow">
+      <div class="box">Take 16 math problems</div><div class="arrow">↓</div>
+      <div class="box">Sample <b>16 answers</b> to each (temperature 1.0)</div><div class="arrow">↓</div>
+      <div class="box">Reward = <b>1 if the final number is correct</b>, else 0</div><div class="arrow">↓</div>
+      <div class="box">Advantage = reward − average reward for that problem<br><span class="muted small">(better-than-average answers get reinforced, worse ones suppressed)</span></div>
+      <div class="arrow">↓</div>
+      <div class="box">Gradient step on the log-probabilities of the sampled tokens, weighted by advantage</div>
+    </div>
+    <p class="small muted">nanochat calls this "GRPO", but it simplifies to REINFORCE with a group-mean baseline: no reference
+      model or KL penalty, no PPO clipping, token-level normalization.</p>
+  </div>
+  <div class="card" id="rlResult"></div>
+
+  <!-- ================================================================ EVAL -->
+  <h2 id="eval">6 · Benchmarks</h2>
+  <p>All scores below use nanochat's own evaluation code, so they are directly comparable with each other and with the
+    reference runs.</p>
+  <h3>CORE: the base model vs GPT-2 (same harness)</h3>
+  <div class="card bars" id="coreBars"></div>
+  <p class="small muted">CORE averages 22 tasks (HellaSwag, ARC, PIQA, LAMBADA, Winograd, SQuAD, BoolQ…), each rescaled so
+    random guessing = 0 and perfect = 1. 500 examples per task. GPT-2 1.5B is OpenAI's published value.</p>
+
+  <h3>Chat benchmarks</h3>
+  <div class="card"><table id="chatTable"></table></div>
+  <details class="no-print"><summary>All 22 CORE tasks (base model accuracy)</summary><div class="bars" id="coreTasks"></div></details>
+
+  <h3>What each benchmark asks</h3>
+  <div class="grid g2">
+    <div class="card small"><b>ARC-Easy / Challenge</b> · grade-school science, 4 options.<br><i>"Which form of energy does a
+      plant use to make food? (A) light (B) sound …"</i> Random = 25%.</div>
+    <div class="card small"><b>MMLU</b> · 57 subjects from high-school to professional level, 4 options. Random = 25%.</div>
+    <div class="card small"><b>GSM8K</b> · word problems needing several arithmetic steps; the final number must be exact.
+      Random = 0%.</div>
+    <div class="card small"><b>HumanEval</b> · write a Python function from its docstring; graded by running unit tests
+      (pass@1 = first attempt passes).</div>
+  </div>
+
+  <!-- ================================================================ SERVING -->
+  <h2 id="serve">7 · Inference &amp; serving</h2>
+  <p>Generating text is a loop: run the model, pick the next token, append it, repeat. The <b>KV cache</b> stores each token's
+    attention keys and values, so every new token only needs one new row of computation instead of re-reading the whole
+    sequence.</p>
+  <div class="card">
+    <label class="small" for="kvN">Generate <b id="kvNv">200</b> tokens after a 300-token prompt</label>
+    <input type="range" id="kvN" min="20" max="1500" value="200" />
+    <div class="kv">
+      <div><b>Without KV cache</b><div class="small muted" id="kvA"></div><div class="meter"><div id="kvAm" style="background:var(--red)"></div></div></div>
+      <div><b>With KV cache</b><div class="small muted" id="kvB"></div><div class="meter"><div id="kvBm" style="background:var(--c)"></div></div></div>
+    </div>
+    <p class="small muted">Token positions processed in total. Without a cache the work grows with the square of the length.</p>
+  </div>
+  <div class="card"><table>
+    <tr><th>Where it runs</th><th>Hardware</th><th class="n">Speed</th></tr>
+    <tr><td>Hugging Face Space (public demo)</td><td>free 2-vCPU CPU</td><td class="n">~7 tok/s</td></tr>
+    <tr><td>Apple Silicon Mac</td><td>CPU, 2 threads</td><td class="n">~16–24 tok/s</td></tr>
+    <tr><td>On-demand GPU</td><td>RTX A4000 class</td><td class="n">~53 tok/s</td></tr>
+  </table>
+  <p class="small">One <code>app.py</code> serves a Gradio chat UI and an <b>OpenAI-compatible API</b>
+    (<code>/v1/chat/completions</code> with streaming). A small control plane launches the GPU on demand, relays requests through
+    a fixed HTTPS address, and destroys the instance after 45 idle minutes.</p>
+  <p class="small"><b>Tried and rejected: int8 quantization.</b> On CPU it was slower (13.7 vs 16.2 tok/s) and lost ~6 points on
+    ARC-Easy (48.0% vs 54.2%), so the demo stays in fp32.</p></div>
+
+  <!-- ================================================================ GLOSSARY -->
+  <h2 id="glossary">8 · Glossary</h2>
+  <input id="gq" class="no-print" type="search" placeholder="Filter terms… (e.g. bpb, RoPE, Muon)" />
+  <dl class="gl" id="gl"></dl>
+
+  <!-- ================================================================ Q&A -->
+  <h2 id="qa">9 · Likely interview questions</h2>
+  <div id="qaList"></div>
+
+  <p class="muted small" style="margin-top:40px">Numbers on this page come from the run's logs and nanochat's evaluation code
+    (commit 92d63d4). Source: <a href="https://github.com/rsumit123/private-llm">github.com/rsumit123/private-llm</a>.</p>
+</main>
+
+<script>
+const D = {"train":[[9,9.845],[29,6.429],[49,5.572],[69,4.999],[89,4.546],[109,4.208],[129,3.914],[149,3.701],[169,3.56],[189,3.448],[209,3.402],[229,3.355],[249,3.298],[269,3.26],[289,3.219],[309,3.223],[329,3.18],[349,3.135],[369,3.114],[389,3.101],[409,3.103],[429,3.09],[449,3.058],[469,3.064],[489,3.037],[509,2.984],[529,2.993],[549,2.993],[569,2.993],[589,2.959],[609,2.96],[629,2.919],[649,2.927],[669,2.945],[689,2.933],[709,2.916],[729,2.886],[749,2.909],[769,2.908],[789,2.905],[809,2.893],[829,2.899],[849,2.855],[869,2.857],[889,2.865],[909,2.866],[929,2.868],[949,2.841],[969,2.851],[989,2.843],[1009,2.843],[1029,2.817],[1049,2.817],[1069,2.846],[1089,2.85],[1109,2.812],[1129,2.823],[1149,2.795],[1169,2.789],[1189,2.784],[1209,2.791],[1229,2.79],[1249,2.784],[1269,2.807],[1289,2.767],[1309,2.768],[1329,2.793],[1349,2.76],[1369,2.753],[1389,2.757],[1409,2.744],[1429,2.745],[1449,2.743],[1469,2.746],[1489,2.722],[1509,2.725],[1529,2.679],[1549,2.711],[1569,2.715],[1589,2.714],[1609,2.703],[1629,2.706],[1649,2.692],[1669,2.684],[1689,2.669],[1709,2.683],[1729,2.686],[1749,2.698],[1769,2.685],[1789,2.647],[1809,2.669],[1829,2.661],[1849,2.659],[1869,2.648],[1889,2.66],[1909,2.649],[1929,2.623],[1949,2.651],[1969,2.642],[1989,2.632],[2009,2.624],[2029,2.609],[2049,2.625],[2069,2.643],[2089,2.604],[2109,2.599],[2129,2.61],[2149,2.598],[2169,2.598],[2189,2.611],[2209,2.579],[2229,2.62],[2249,2.599],[2269,2.606],[2289,2.602],[2309,2.595],[2329,2.586],[2349,2.559],[2369,2.578],[2389,2.593],[2409,2.568],[2429,2.559],[2449,2.564],[2469,2.561],[2489,2.561],[2509,2.56],[2529,2.55],[2549,2.548],[2569,2.548],[2589,2.536],[2609,2.535],[2629,2.544],[2649,2.552],[2669,2.527],[2689,2.537],[2709,2.534],[2729,2.538],[2749,2.543],[2769,2.536],[2789,2.544],[2809,2.531],[2829,2.534],[2849,2.505],[2869,2.512],[2889,2.51],[2909,2.515],[2929,2.511],[2949,2.52],[2969,2.51],[2989,2.507],[3009,2.514],[3029,2.501],[3049,2.494],[3069,2.497],[3089,2.478],[3109,2.506],[3129,2.5],[3149,2.493],[3169,2.483],[3189,2.501],[3209,2.475],[3229,2.488],[3249,2.471],[3269,2.461],[3289,2.455],[3309,2.491]],"val":[[0,3.171529],[500,0.9172],[1000,0.863349],[1500,0.829891],[2000,0.802045],[2500,0.779853],[3000,0.762636],[3320,0.755374]],"sft":[[5,1.363],[10,1.393],[15,1.358],[20,1.333],[25,1.288],[30,1.258],[35,1.245],[40,1.233],[45,1.223],[50,1.223],[55,1.206],[60,1.176],[65,1.158],[70,1.163],[75,1.162],[80,1.157],[85,1.143],[90,1.132],[95,1.113],[100,1.115],[105,1.113],[110,1.106],[115,1.088],[120,1.081],[125,1.088],[130,1.08],[135,1.085],[140,1.075],[145,1.083],[150,1.088],[155,1.093],[160,1.071],[165,1.07],[170,1.066],[175,1.057],[180,1.046],[185,1.056],[190,1.053],[195,1.045],[200,1.045],[205,1.035],[210,1.03],[215,1.042],[220,1.035],[225,1.043],[230,1.056],[235,1.051],[240,1.064],[245,1.049],[250,1.062],[255,1.062],[260,1.073],[265,1.037],[270,1.03],[275,1.031],[280,1.039],[285,1.032],[290,1.028],[295,1.019],[300,0.996],[305,0.989],[310,1.0],[315,0.997],[320,0.997],[325,0.979],[330,0.976],[335,0.979],[340,0.975],[345,1.001],[350,0.994],[355,0.996],[360,0.981],[365,0.979],[370,0.975],[375,0.967],[380,0.963],[385,0.952],[390,0.954],[395,0.953],[400,0.951],[405,0.973],[410,0.962],[415,0.98],[420,0.976],[425,0.973],[430,0.96],[435,0.955],[440,0.953],[445,0.958],[450,0.955],[455,0.946],[460,0.94],[465,0.931]],"core_tasks":{"hellaswag_zeroshot":0.476,"jeopardy":0.064,"bigbench_qa_wikidata":0.44,"arc_easy":0.696,"arc_challenge":0.378,"copa":0.65,"commonsense_qa":0.364,"piqa":0.756,"openbook_qa":0.374,"lambada_openai":0.4,"hellaswag":0.464,"winograd":0.6374,"winogrande":0.548,"bigbench_dyck_languages":0.116,"agi_eval_lsat_ar":0.2391,"bigbench_cs_algorithms":0.446,"bigbench_operators":0.1762,"bigbench_repeat_copy_logic":0.0,"squad":0.37,"coqa":0.254,"boolq":0.54,"bigbench_language_identification":0.25},"tok":[{"text":"The monsoon arrives in Kerala in early June.","ids":[483,24356,17710,287,776,31330,287,1801,4839,46],"pieces":["The"," monsoon"," arrives"," in"," K","erala"," in"," early"," June","."]},{"text":"Photosynthesis converts sunlight into chemical energy.","ids":[23144,8116,14817,4670,609,2019,1063,46],"pieces":["Photos","ynthesis"," converts"," sunlight"," into"," chemical"," energy","."]},{"text":"def add(a, b):\n    return a + b","ids":[13210,729,14064,44,277,12383,6091,3291,257,3122,277],"pieces":["def"," add","(a",","," b","):\n","   "," return"," a"," +"," b"]},{"text":"Tokenization splits unbelievably long words into pieces.","ids":[2058,3594,1481,27051,30398,118,1621,818,2791,609,3464,46],"pieces":["To","ken","ization"," splits"," unbelie","v","ably"," long"," words"," into"," pieces","."]}],"rl":{"gsm_before":1.5,"gsm_after":10.0,"steps":75,"minutes":42,"reward":[[0,0.0352],[1,0.0215],[2,0.0365],[3,0.04],[4,0.0398],[5,0.0406],[6,0.0586],[7,0.0602],[8,0.0766],[9,0.1031],[10,0.1336],[11,0.1305],[12,0.1453],[13,0.1539],[14,0.1484],[15,0.1609],[16,0.1742],[17,0.1672],[18,0.1766],[19,0.1844],[20,0.1531],[21,0.1547],[22,0.175],[23,0.1453],[24,0.1617],[25,0.1898],[26,0.1695],[27,0.143],[28,0.1648],[29,0.15],[30,0.1234],[31,0.1469],[32,0.1602],[33,0.1758],[34,0.1641],[35,0.1633],[36,0.1453],[37,0.1516],[38,0.1242],[39,0.1437],[40,0.1711],[41,0.1977],[42,0.2062],[43,0.2367],[44,0.2164],[45,0.2086],[46,0.1906],[47,0.1727],[48,0.1477],[49,0.1625],[50,0.1938],[51,0.1914],[52,0.2383],[53,0.2445],[54,0.2305],[55,0.1992],[56,0.2141],[57,0.182],[58,0.1906],[59,0.1922],[60,0.1734],[61,0.1852],[62,0.1945],[63,0.1953],[64,0.2141],[65,0.2227],[66,0.2117],[67,0.2125],[68,0.2008],[69,0.1805],[70,0.2242],[71,0.2484],[72,0.2445],[73,0.2336],[74,0.2477]],"note":"Average reward per step (fraction of sampled answers that were correct, 5-step average) rose from 4% to 25%, while answers got shorter (260 \u2192 169 tokens on average). On held-out problems GSM8K went from 1.5% to 10.0%; ARC-Easy 55.2\u219255.4%, ARC-Challenge 42.9\u219243.9%, MMLU 35.2\u219235.2%, so nothing else regressed. The reference nanochat d20 reached 7.6% with RL."}};
+const $ = id => document.getElementById(id);
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* ---------------- pipeline ---------------- */
+const STAGES = [
+  ['Tokenizer', '~2 min', 'Train a 32,768-token BPE vocabulary on ~2B characters of the pretraining data. Turns text into integer ids.'],
+  ['Pretrain', '~5.2 h', 'Next-token prediction on 3.48B tokens: 3,320 steps of 1M tokens, Muon + AdamW, FP8. Validation loss falls from 3.17 to 0.755 bits/byte.'],
+  ['Chat SFT', '47 min', '467 steps on ~790k conversations (SmolTalk + MMLU + GSM8K). Learns turn-taking and answer formats. Loss only on assistant tokens.'],
+  ['RL', '42 min', '75 steps: sample 16 answers per GSM8K problem, reward correct final numbers, reinforce better-than-average answers. GSM8K 1.5% → 10.0%.'],
+  ['Evaluate', '~30 min', 'CORE (22 tasks) on the base model; ARC, MMLU, GSM8K and HumanEval on the chat model; GPT-2 scored with the same harness.'],
+  ['Serve', 'on demand', 'Gradio UI + OpenAI-compatible API. Free CPU Space for the public demo; small on-demand GPU behind a fixed HTTPS relay.'],
+];
+function renderPipe(i) {
+  $('pipe').innerHTML = STAGES.map((s, k) => `<button aria-pressed="${k === i}" data-i="${k}"><span class="t">${k + 1}. ${s[0]}</span><span class="d">${s[1]}</span></button>`).join('');
+  $('pipePanel').innerHTML = `<div class="kicker">${STAGES[i][0]} · ${STAGES[i][1]}</div><p style="margin:6px 0 0">${STAGES[i][2]}</p>`;
+}
+$('pipe').addEventListener('click', e => { const b = e.target.closest('button'); if (b) renderPipe(+b.dataset.i); });
+renderPipe(1);
+$('pipePrint').innerHTML = '<table>' + STAGES.map(s => `<tr><td><b>${s[0]}</b></td><td>${s[1]}</td><td>${s[2]}</td></tr>`).join('') + '</table>';
+
+/* ---------------- tokenizer ---------------- */
+const TOK_COLORS = ['--a-soft', '--b-soft', '--c-soft', '--d-soft'];
+function tokHTML(ex) {
+  return ex.pieces.map((p, i) => `<span style="background:var(${TOK_COLORS[i % 4]})">${esc(p.replace(/\n/g, '↵'))}<small>${ex.ids[i]}</small></span>`).join('');
+}
+function renderTok(i) {
+  const ex = D.tok[i];
+  $('tokTabs').innerHTML = D.tok.map((t, k) => `<button class="tab" aria-pressed="${k === i}" data-i="${k}">Example ${k + 1}</button>`).join('');
+  $('tokOut').innerHTML = tokHTML(ex);
+  $('tokStats').textContent = `${ex.text.length} characters → ${ex.ids.length} tokens (${(ex.text.length / ex.ids.length).toFixed(1)} chars/token)`;
+}
+$('tokTabs').addEventListener('click', e => { const b = e.target.closest('button'); if (b) renderTok(+b.dataset.i); });
+renderTok(0);
+$('tokPrint').innerHTML = D.tok.slice(1).map(t => `<div class="tokens">${tokHTML(t)}</div>`).join('');
+
+/* ---------------- layer map ---------------- */
+const N = 20, hasVE = i => i % 2 === (N - 1) % 2, win = i => (i === N - 1 || 'SSSL'[i % 4] === 'L') ? 'L' : 'S';
+function renderLayers(sel) {
+  $('layers').innerHTML = Array.from({ length: N }, (_, i) =>
+    `<div class="layer ${win(i)} ${hasVE(i) ? 've' : ''} ${i === sel ? 'sel' : ''}" data-i="${i}" title="layer ${i}">${i}</div>`).join('');
+  const w = win(sel);
+  $('layerInfo').innerHTML = `<b>Layer ${sel}</b> · ${w === 'L' ? 'full attention over all 2,048 tokens' : 'sliding-window attention over the last 768 tokens'}
+    ${hasVE(sel) ? '· <b>value embedding</b>: a per-token learned vector (looked up by token id) is added into the attention values through a learned gate, giving this layer direct access to token identity' : '· no value embedding'}.
+    <span class="muted">Each layer: attention (6.6M weights) + MLP (13.1M weights).</span>`;
+}
+$('layers').addEventListener('click', e => { const l = e.target.closest('.layer'); if (l) renderLayers(+l.dataset.i); });
+renderLayers(3);
+
+/* ---------------- donut ---------------- */
+const PARTS = [
+  ['MLP weights (20 × 13.1M)', 262.1, '--a'], ['Attention weights (20 × 6.6M)', 131.1, '--b'],
+  ['Value embeddings (10 layers × 32,768 × 1280)', 419.4, '--d'], ['Token embedding (32,768 × 1280)', 41.9, '--c'], ['Output layer (1280 × 32,768)', 41.9, '--red'],
+];
+(function donut() {
+  const tot = PARTS.reduce((s, p) => s + p[1], 0); let a = -Math.PI / 2, svg = '';
+  for (const [, v, c] of PARTS) {
+    const a2 = a + 2 * Math.PI * v / tot, large = a2 - a > Math.PI ? 1 : 0, r = 92, ri = 58, cx = 110, cy = 110;
+    const p = (ang, rad) => `${cx + rad * Math.cos(ang)},${cy + rad * Math.sin(ang)}`;
+    svg += `<path d="M${p(a, r)} A${r},${r} 0 ${large} 1 ${p(a2, r)} L${p(a2, ri)} A${ri},${ri} 0 ${large} 0 ${p(a, ri)} Z" fill="var(${c})"/>`;
+    a = a2;
+  }
+  svg += `<text x="110" y="106" text-anchor="middle" style="font:600 20px Inter;fill:var(--fg)">897M</text><text x="110" y="126" text-anchor="middle">total</text>`;
+  $('donut').innerHTML = svg;
+  $('donutLegend').innerHTML = PARTS.map(([l, v, c]) => `<div style="margin:6px 0"><i style="display:inline-block;width:12px;height:12px;border-radius:3px;background:var(${c});vertical-align:-2px;margin-right:6px"></i><b>${v.toFixed(0)}M</b> ${l}</div>`).join('')
+    + '<div class="muted" style="margin-top:8px">Transformer (compute) = 393M · lookup tables = 503M</div>';
+})();
+
+/* ---------------- attention mask ---------------- */
+function renderMask(mode) {
+  const n = 32, s = 10, w = 8; let r = '';
+  for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+    const ok = j <= i && (mode === 'full' || i - j < w);
+    r += `<rect x="${j * s}" y="${i * s}" width="${s - 1}" height="${s - 1}" rx="1.5" fill="${ok ? (mode === 'full' ? css('--b') : css('--a')) : css('--soft')}"/>`;
+  }
+  $('mask').innerHTML = r;
+  document.querySelectorAll('[data-win]').forEach(b => b.setAttribute('aria-pressed', b.dataset.win === mode));
+}
+document.querySelectorAll('[data-win]').forEach(b => b.addEventListener('click', () => renderMask(b.dataset.win)));
+renderMask('full');
+
+/* ---------------- line charts ---------------- */
+function lineChart(svg, series, opt) {
+  const W = +svg.viewBox.baseVal.width, H = +svg.viewBox.baseVal.height, L = 44, R = 12, T = 12, B = 28;
+  const xs = series.flatMap(s => s.pts.map(p => p[0])), ys = series.flatMap(s => s.pts.map(p => p[1]));
+  const x0 = opt.x0 ?? Math.min(...xs), x1 = opt.x1 ?? Math.max(...xs), y0 = opt.y0 ?? Math.min(...ys), y1 = opt.y1 ?? Math.max(...ys);
+  const X = x => L + (x - x0) / (x1 - x0) * (W - L - R), Y = y => T + (1 - (Math.min(Math.max(y, y0), y1) - y0) / (y1 - y0)) * (H - T - B);
+  let g = '';
+  for (let k = 0; k <= 4; k++) { const v = y0 + (y1 - y0) * k / 4; g += `<line class="axis" x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${L - 6}" y="${Y(v) + 4}" text-anchor="end">${opt.fy ? opt.fy(v) : v.toFixed(2)}</text>`; }
+  for (let k = 0; k <= 4; k++) { const v = x0 + (x1 - x0) * k / 4; g += `<text x="${X(v)}" y="${H - 8}" text-anchor="middle">${Math.round(v)}</text>`; }
+  for (const s of series) g += `<polyline fill="none" stroke="var(${s.c})" stroke-width="2" points="${s.pts.map(p => `${X(p[0])},${Y(p[1])}`).join(' ')}"/>`
+    + (s.dots ? s.pts.map(p => `<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="3.5" fill="var(${s.c})"/>`).join('') : '');
+  g += `<line id="${svg.id}-cur" class="axis" y1="${T}" y2="${H - B}" x1="-10" x2="-10" stroke-dasharray="3 3"/>`;
+  svg.innerHTML = g;
+  if (opt.tip) svg.onmousemove = e => {
+    const r = svg.getBoundingClientRect(), x = x0 + ((e.clientX - r.left) / r.width * W - L) / (W - L - R) * (x1 - x0);
+    const p = series[0].pts.reduce((a, b) => Math.abs(b[0] - x) < Math.abs(a[0] - x) ? b : a);
+    const c = $(`${svg.id}-cur`); c.setAttribute('x1', X(p[0])); c.setAttribute('x2', X(p[0]));
+    opt.tip.textContent = opt.label(p);
+  };
+}
+const lr = it => { const n = 3320, wu = 40, wd = Math.round(.65 * n); if (it < wu) return (it + 1) / wu; if (it <= n - wd) return 1; const pr = (n - it) / wd; return pr + (1 - pr) * .05; };
+const CURVES = {
+  train: [{ pts: D.train, c: '--a' }, { y0: 2.3, y1: 4.5, x0: 0, x1: 3320, label: p => `step ${p[0]} · loss ${p[1]}` },
+          'Cross-entropy on the training batches (10-step average). The early cliff is the model learning common words and grammar; the long tail is slower knowledge gain. The extra dip after ~1,160 steps is the warmdown: lowering the learning rate lets the model settle into a better minimum.'],
+  val: [{ pts: D.val, c: '--c', dots: true }, { y0: .7, y1: 1.0, x0: 0, x1: 3320, label: p => `step ${p[0]} · ${p[1].toFixed(3)} bits/byte` },
+        'Bits per byte on held-out text: how many bits the model needs per byte of text. Lower is better and, unlike loss per token, it does not depend on the tokenizer. Starts at 3.17 (step 0, off the chart), ends at 0.755.'],
+  lr: [{ pts: Array.from({ length: 167 }, (_, k) => [k * 20, lr(k * 20)]), c: '--b' }, { y0: 0, y1: 1.05, x0: 0, x1: 3320, fy: v => v.toFixed(1), label: p => `step ${p[0]} · ${(p[1] * 100).toFixed(0)}% of peak LR` },
+       'Warm up for 40 steps, hold at peak, then a linear "warmdown" over the last 65% of steps to 5% of peak. Most of the late improvement in the curves comes from this phase.'],
+};
+function renderCurve(k) {
+  const [s, o, note] = CURVES[k];
+  lineChart($('curve'), [s], { ...o, tip: $('curveTip') });
+  $('curveNote').textContent = note;
+  document.querySelectorAll('[data-c]').forEach(b => b.setAttribute('aria-pressed', b.dataset.c === k));
+}
+document.querySelectorAll('[data-c]').forEach(b => b.addEventListener('click', () => renderCurve(b.dataset.c)));
+renderCurve('train');
+lineChart($('sftCurve'), [{ pts: D.sft, c: '--c' }], { y0: .7, y1: 1.5, x0: 0, x1: 467 });
+
+/* ---------------- chat format ---------------- */
+$('chatFmt').innerHTML = [['<|bos|>', 0], ['<|user_start|>', 0], ['Why is the sky blue?', 0], ['<|user_end|>', 0], ['<|assistant_start|>', 0],
+  ['Sunlight scatters off air molecules, and blue light scatters most…', 1], ['<|assistant_end|>', 1]]
+  .map(([t, a]) => `<span style="background:var(${a ? '--c-soft' : t.startsWith('<|') ? '--d-soft' : '--soft'})">${esc(t)}</span>`).join('');
+
+/* ---------------- RL result ---------------- */
+(function () {
+  const r = D.rl;
+  if (!r) { $('rlResult').innerHTML = '<b>Result</b><p class="small muted">Run in progress; results will appear here.</p>'; return; }
+  $('rlResult').innerHTML = `<b>Result</b><div class="grid g4" style="margin-top:8px">
+      <div class="stat"><div class="v">${r.gsm_before}%</div><div class="k">GSM8K after SFT</div></div>
+      <div class="stat"><div class="v">${r.gsm_after}%</div><div class="k">GSM8K after RL</div></div>
+      <div class="stat"><div class="v">${r.steps}</div><div class="k">RL steps</div></div>
+      <div class="stat"><div class="v">${r.minutes} min</div><div class="k">on 1× H100</div></div></div>
+    <svg class="chart" id="rlCurve" viewBox="0 0 640 200" role="img" aria-label="RL reward"></svg>
+    <p class="small">${r.note}</p>`;
+  lineChart($('rlCurve'), [{ pts: r.reward, c: '--d' }], { y0: 0, x0: 0 });
+})();
+
+/* ---------------- benchmarks ---------------- */
+const CORE = [['GPT-2 small (124M)', .1234, '--faint'], ['GPT-2 medium (355M)', .1923, '--faint'], ['nanochat-d20 (this model)', .2357, '--a'],
+              ['nanochat d20 reference (~3× tokens)', .2219, '--b'], ['GPT-2 XL (1.5B, published)', .2565, '--faint']];
+$('coreBars').innerHTML = CORE.map(([n, v, c]) => `<div class="row"><span>${n}</span><div class="track"><div class="fill" style="width:${v / .3 * 100}%;background:var(${c})"></div></div><span class="val">${v.toFixed(3)}</span></div>`).join('');
+const CHAT = [['ARC-Easy', 55.2, 38.8, 25], ['ARC-Challenge', 42.9, null, 25], ['MMLU', 35.2, 31.5, 25], ['HumanEval (pass@1)', 11.0, 8.5, 0], ['GSM8K (first 400)', D.rl ? D.rl.gsm_before : 1.5, 4.6, 0]];
+$('chatTable').innerHTML = '<tr><th>Benchmark</th><th class="n">This model</th><th class="n">d20 reference</th><th class="n">Random</th></tr>' +
+  CHAT.map(([n, a, b, r]) => `<tr><td>${n}</td><td class="n"><b>${a}%</b></td><td class="n">${b == null ? '—' : b + '%'}</td><td class="n">${r}%</td></tr>`).join('') +
+  (D.rl ? `<tr><td>GSM8K after RL (first 400)</td><td class="n"><b>${D.rl.gsm_after}%</b></td><td class="n">7.6%</td><td class="n">0%</td></tr>` : '');
+$('coreTasks').innerHTML = Object.entries(D.core_tasks).map(([k, v]) => `<div class="row"><span>${k}</span><div class="track"><div class="fill" style="width:${v * 100}%;background:var(--a)"></div></div><span class="val">${(v * 100).toFixed(1)}%</span></div>`).join('');
+
+/* ---------------- KV cache ---------------- */
+function kv() {
+  const n = +$('kvN').value, p = 300; $('kvNv').textContent = n;
+  const no = Array.from({ length: n }, (_, i) => p + i + 1).reduce((a, b) => a + b, 0), yes = p + n;
+  $('kvA').textContent = `${no.toLocaleString()} positions`; $('kvB').textContent = `${yes.toLocaleString()} positions (${(no / yes).toFixed(0)}× less)`;
+  $('kvAm').style.width = '100%'; $('kvBm').style.width = Math.max(1, yes / no * 100) + '%';
+}
+$('kvN').addEventListener('input', kv); kv();
+
+/* ---------------- glossary ---------------- */
+const G = [
+  ['Token', 'A piece of text (word, sub-word or symbol) mapped to an integer id. Models read and write tokens.'],
+  ['BPE tokenizer', 'Byte-pair encoding: builds a vocabulary by repeatedly merging the most frequent adjacent byte pairs. Ours has 32,768 entries.'],
+  ['Parameters', 'The learned numbers in the model (weights). 897M total; 393M in the transformer matrices that do the compute.'],
+  ['Embedding', 'A learned vector per token id (a lookup table). Converts ids into the 1280-number vectors the transformer processes.'],
+  ['Value embedding', 'nanochat addition: a second per-token lookup table added into attention values on alternate layers, through a learned gate.'],
+  ['Transformer', 'Neural network architecture built from stacked attention + MLP blocks with residual connections. Basis of GPT, Llama, Claude.'],
+  ['Decoder-only', 'Transformer that only predicts the next token from previous ones (causal), as opposed to encoder-decoder models.'],
+  ['Self-attention', 'Mechanism that lets each token gather information from earlier tokens, weighted by learned relevance (queries vs keys).'],
+  ['Attention head', 'One independent attention computation. 10 heads × 128 dimensions = 1280.'],
+  ['GQA', 'Grouped-query attention: several query heads share key/value heads to shrink the KV cache. Supported, but here n_kv_head = n_head (10), so it is plain multi-head attention.'],
+  ['RoPE', 'Rotary position embeddings: encode token position by rotating query/key vectors, so attention depends on relative distance.'],
+  ['QK-norm', 'Normalizing queries and keys before attention. Keeps attention scores in a sane range and stabilizes training.'],
+  ['RMSNorm', 'Rescales each vector to unit root-mean-square. nanochat uses it without a learned scale.'],
+  ['relu²', 'Activation function max(0, x)². Simple and works well in recent speedruns.'],
+  ['MLP', 'The per-token feed-forward part of a block: 1280 → 5120 → 1280.'],
+  ['Residual connection', 'Adding a block\'s input back to its output, so layers learn corrections. Essential for deep networks.'],
+  ['Sliding-window attention', 'Each token only attends to the last N tokens (768 here) instead of all previous ones. Cheaper; used on 15 of 20 layers.'],
+  ['FlashAttention-3', 'Fast, memory-efficient attention kernel for H100 GPUs.'],
+  ['Logit soft-cap', 'Squashing output scores with 15·tanh(x/15) so no logit exceeds ±15. Prevents instability.'],
+  ['Context length', 'Maximum tokens the model sees at once: 2,048.'],
+  ['Pretraining', 'Training on raw text to predict the next token. Where knowledge and language ability come from.'],
+  ['Loss / cross-entropy', 'How surprised the model is by the true next token, averaged. Lower is better.'],
+  ['Bits per byte (bpb)', 'Loss converted to bits per byte of raw text. Tokenizer-independent, so models with different vocabularies can be compared.'],
+  ['Validation set', 'Held-out data never trained on, used to check the model generalizes.'],
+  ['Step / batch', 'One optimizer update. Each step here used a batch of ~1M tokens (2048-token sequences, gradient accumulation).'],
+  ['Gradient accumulation', 'Summing gradients over several small forward/backward passes to simulate a larger batch than fits in GPU memory.'],
+  ['Learning rate & warmdown', 'Step size of updates. Warmup ramps it up at the start; warmdown decays it linearly over the last 65% of training.'],
+  ['Muon', 'Optimizer for weight matrices that orthogonalizes updates (Newton–Schulz iterations). Faster convergence than AdamW at this scale.'],
+  ['AdamW', 'Standard adaptive optimizer with decoupled weight decay; used here for embeddings, the output layer and scalars.'],
+  ['FP8 / bf16 / fp32', 'Number formats of 8, 16 and 32 bits. Lower precision is faster; master weights are kept in fp32 for stable updates.'],
+  ['MFU', 'Model FLOPs utilization: fraction of the GPU\'s peak math throughput actually used.'],
+  ['Data:param ratio', 'Training tokens per parameter. Chinchilla scaling suggests ~20 is compute-optimal; this run used 8.'],
+  ['Chinchilla scaling', 'DeepMind\'s 2022 finding on how to split a compute budget between model size and data for the lowest loss.'],
+  ['ClimbMix', 'NVIDIA\'s curated pretraining corpus: web text clustered by topic and re-weighted toward high-quality clusters.'],
+  ['SFT', 'Supervised fine-tuning on example conversations; teaches chat format and answer style. Loss only on assistant tokens.'],
+  ['SmolTalk', 'Hugging Face\'s open dataset of synthetic assistant conversations, used for SFT.'],
+  ['RL / RLHF', 'Reinforcement learning: the model generates, a reward scores the output, and good outputs are reinforced. RLHF uses human-preference rewards; here the reward is answer correctness.'],
+  ['GRPO / REINFORCE', 'Policy-gradient methods. GRPO compares several samples for the same prompt; nanochat\'s version is REINFORCE with a group-mean baseline.'],
+  ['Advantage', 'How much better a sample did than the group average; the weight applied to its gradient in RL.'],
+  ['CORE', 'DCLM benchmark suite: 22 tasks averaged after rescaling so random = 0. Used to compare base (pretrained) models.'],
+  ['Centered accuracy', 'Accuracy rescaled so random guessing scores 0 and perfect scores 1.'],
+  ['ARC / MMLU / GSM8K / HumanEval', 'Science QA / 57-subject knowledge / grade-school math / Python coding benchmarks.'],
+  ['pass@1 / pass@k', 'Probability that the first answer (or any of k sampled answers) is correct.'],
+  ['Few-shot / zero-shot', 'Whether the prompt includes worked examples before the question (few-shot) or not (zero-shot).'],
+  ['Temperature', 'Sampling randomness. 0 = always pick the most likely token; higher = more varied.'],
+  ['KV cache', 'Stored attention keys/values of previous tokens, so generation does not recompute them for every new token.'],
+  ['Quantization (int8)', 'Storing weights in 8-bit integers to save memory/compute. Tested here and rejected: slower on CPU and less accurate.'],
+  ['Checkpoint', 'Saved model (and optimizer) state; lets training resume or the model be served.'],
+  ['OpenAI-compatible API', 'Server speaking the same /v1/chat/completions protocol as OpenAI, so standard clients work unchanged.'],
+  ['Hugging Face Space', 'Free hosting for ML demos on Hugging Face; ours runs the chat UI on a 2-vCPU CPU.'],
+];
+function renderGl(q) {
+  q = (q || '').toLowerCase();
+  $('gl').innerHTML = G.filter(([t, d]) => !q || t.toLowerCase().includes(q) || d.toLowerCase().includes(q)).map(([t, d]) => `<dt>${esc(t)}</dt><dd>${esc(d)}</dd>`).join('') || '<dd class="muted">No match.</dd>';
+}
+$('gq').addEventListener('input', e => renderGl(e.target.value)); renderGl();
+
+/* ---------------- Q&A ---------------- */
+const QA = [
+  ['Why train from scratch instead of fine-tuning an open model?', 'To own and understand every stage: tokenizer, pretraining, SFT, RL, evaluation and serving. Fine-tuning hides the hardest parts. The from-scratch constraint also makes the benchmark comparisons meaningful.'],
+  ['What did you build versus what nanochat provided?', 'nanochat provides the model, optimizer and training/eval scripts. I chose the configuration (depth 20, data:param 8, FP8), sized the run with a throughput probe, wrote the unattended training/checkpointing/teardown pipeline, ran the evaluations (including scoring GPT-2 with the same harness), fitted the RL run to a fixed compute budget by capping steps while keeping the learning-rate decay intact, ran the int8 experiment, and built the serving stack (Gradio + OpenAI API, CPU Space, on-demand GPU control plane).'],
+  ['Why is it 897M parameters but you compare it to 355M GPT-2?', '503M of the 897M are embedding lookup tables (including value embeddings), which cost memory but almost no compute. The 393M transformer weights are what do the work per token, so they are the fairer comparison point. On CORE it beats GPT-2 medium (0.236 vs 0.192) and approaches GPT-2 XL (0.257).'],
+  ['What is bits per byte and why report it?', 'Loss per byte of raw text instead of per token. Token-level loss depends on the tokenizer (bigger tokens make each prediction harder), so bpb lets models with different vocabularies be compared fairly.'],
+  ['How did you decide model size and training length?', 'A short probe on the target GPU measured real throughput (~197k tokens/s for d20). From that I picked depth 20 with a data:param ratio of 8, slightly below compute-optimal, which fit the time budget while staying near the efficient frontier.'],
+  ['Why was GSM8K so low, and what did RL change?', 'Multi-step arithmetic needs reliable reasoning, which small models lack: after SFT it solved 1.5%. 75 steps of RL (42 min on one H100) rewarded correct final answers and raised it to 10.0% on the same 400 problems, above the reference nanochat d20 (7.6%), with no regression on ARC or MMLU. Answers also got shorter, as the model stopped rambling.'],
+  ['Why did the benchmarks beat the original nanochat d20 with fewer tokens?', 'Same depth, newer nanochat code: better data (ClimbMix), architectural tweaks (value embeddings, smear/backout, sliding windows) and tuned optimization. Same harness, so the comparison is fair.'],
+  ['How did you make the training run reliable?', 'Checkpoints with optimizer state uploaded every 500 steps (resume after host failure), hard time caps with automatic teardown, secrets kept out of logs, and the throughput/stage probe before committing to the full run. The chat fine-tune was later re-run from the saved checkpoint and reproduced the same validation loss exactly.'],
+  ['What would you do with 10× more compute?', 'Train deeper (d26 reaches GPT-2 XL quality), use a compute-optimal data ratio, extend RL beyond GSM8K, and add a preference-tuning stage for chat quality.'],
+  ['How is it served?', 'One app serves a Gradio chat UI and an OpenAI-compatible streaming API. A free CPU Space hosts the public demo (~7 tok/s); for speed, a control plane launches a small GPU on demand behind a fixed HTTPS relay (~53 tok/s) and destroys it after 45 idle minutes.'],
+  ['What did not work?', 'int8 dynamic quantization for the CPU demo: slower (13.7 vs 16.2 tok/s) and ~6 points worse on ARC-Easy, so it was dropped. Also, a checkpoint uploader skipped files younger than 60 s and missed the final SFT checkpoint; it was fixed with explicit post-training upload verification.'],
+  ['What are the model\'s limitations?', 'It hallucinates facts confidently, is weak at arithmetic and long arguments (it confuses who said what), has a 2,048-token context, is English-only, and has no dedicated safety tuning.'],
+];
+$('qaList').innerHTML = QA.map(([q, a]) => `<details><summary>${esc(q)}</summary><div>${esc(a)}</div></details>`).join('');
+window.matchMedia('print').addEventListener('change', e => { if (e.matches) document.querySelectorAll('details').forEach(d => d.open = true); });
+if (location.hash === '#print') document.querySelectorAll('details').forEach(d => d.open = true);
+</script>
+</body>
+</html>
