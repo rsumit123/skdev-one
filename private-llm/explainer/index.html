@@ -153,7 +153,7 @@
 
   <nav class="toc" aria-label="Sections">
     <a href="#overview">Overview</a><a href="#tokenizer">Tokenizer</a><a href="#arch">Architecture</a><a href="#pretrain">Pretraining</a>
-    <a href="#sft">Chat tuning</a><a href="#rl">RL</a><a href="#eval">Benchmarks</a><a href="#serve">Inference</a><a href="#glossary">Glossary</a><a href="#qa">Interview Q&amp;A</a>
+    <a href="#sft">Chat tuning</a><a href="#rl">RL</a><a href="#eval">Benchmarks</a><a href="#ablation">Attention experiment</a><a href="#serve">Inference</a><a href="#glossary">Glossary</a><a href="#qa">Interview Q&amp;A</a>
   </nav>
 
   <!-- ================================================================ OVERVIEW -->
@@ -361,8 +361,37 @@
       (pass@1 = first attempt passes).</div>
   </div>
 
+  <!-- ================================================================ ABLATION -->
+  <h2 id="ablation">7 · Architecture experiment: MHA vs GQA vs MLA</h2>
+  <p>The biggest serving cost today is the <b>KV cache</b>: every token of every conversation stores keys and values in every
+    layer. It limits how many users fit on one GPU and how long contexts can be. I implemented <b>multi-head latent attention
+    (MLA)</b>, DeepSeek-V2's design, in nanochat (which does not ship it) and compared it with standard multi-head attention
+    (MHA) and grouped-query attention (GQA) under an identical recipe.</p>
+  <div class="card">
+    <div class="tabs no-print" id="kvTabs">
+      <button class="tab" data-v="mha" aria-pressed="true">MHA</button>
+      <button class="tab" data-v="gqa" aria-pressed="false">GQA</button>
+      <button class="tab" data-v="mla" aria-pressed="false">MLA</button>
+    </div>
+    <div id="kvViz"></div>
+    <div class="print-only" id="kvPrint"></div>
+  </div>
+  <div class="card"><table id="ablTable"></table>
+    <p class="small muted">Depth 12 (768 wide, 6 heads), 0.52B tokens each, same data, seed, optimizer and schedule; value
+      embeddings off in all three. KV sizes for one 2,048-token sequence in bf16. Decode on one H100 with a 1,024-token prompt.</p></div>
+  <div class="grid g2">
+    <div class="card small"><b>1 · A 3× smaller cache costs ~0.5–0.7% loss.</b> GQA and MLA both fit 426 sequences in a 10 GB
+      cache vs 142 for MHA, for a small quality hit. This is the trade-off production models make.</div>
+    <div class="card small"><b>2 · At equal memory, MLA did not beat GQA here.</b> The gap (0.002 bits/byte) is within
+      single-seed noise. DeepSeek reports MLA ahead at much larger scale; no MLA-specific hyperparameters were tuned.</div>
+    <div class="card small"><b>3 · MLA decoded ~2× slower.</b> nanochat normalizes full keys (QK-norm), which blocks MLA's
+      weight-absorption trick, so the cached latents are re-expanded into keys and values at every step.</div>
+    <div class="card small"><b>Limits.</b> One seed per variant, small model, short run. CORE at this size is noisy, so validation
+      bits/byte is the main metric.</div>
+  </div>
+
   <!-- ================================================================ SERVING -->
-  <h2 id="serve">7 · Inference &amp; serving</h2>
+  <h2 id="serve">8 · Inference &amp; serving</h2>
   <p>Generating text is a loop: run the model, pick the next token, append it, repeat. The <b>KV cache</b> stores each token's
     attention keys and values, so every new token only needs one new row of computation instead of re-reading the whole
     sequence.</p>
@@ -388,12 +417,12 @@
     ARC-Easy (48.0% vs 54.2%), so the demo stays in fp32.</p></div>
 
   <!-- ================================================================ GLOSSARY -->
-  <h2 id="glossary">8 · Glossary</h2>
+  <h2 id="glossary">9 · Glossary</h2>
   <input id="gq" class="no-print" type="search" placeholder="Filter terms… (e.g. bpb, RoPE, Muon)" />
   <dl class="gl" id="gl"></dl>
 
   <!-- ================================================================ Q&A -->
-  <h2 id="qa">9 · Likely interview questions</h2>
+  <h2 id="qa">10 · Likely interview questions</h2>
   <div id="qaList"></div>
 
   <p class="muted small" style="margin-top:40px">Numbers on this page come from the run's logs and nanochat's evaluation code
@@ -551,6 +580,32 @@ $('chatTable').innerHTML = '<tr><th>Benchmark</th><th class="n">This model</th><
   (D.rl ? `<tr><td>GSM8K after RL (first 400)</td><td class="n"><b>${D.rl.gsm_after}%</b></td><td class="n">7.6%</td><td class="n">0%</td></tr>` : '');
 $('coreTasks').innerHTML = Object.entries(D.core_tasks).map(([k, v]) => `<div class="row"><span>${k}</span><div class="track"><div class="fill" style="width:${v * 100}%;background:var(--a)"></div></div><span class="val">${(v * 100).toFixed(1)}%</span></div>`).join('');
 
+
+/* ---------------- attention ablation ---------------- */
+const KV = {
+  mha: { name: 'MHA · 6 key/value heads', per: 1536, desc: 'Every query head has its own keys and values. Each token stores 6 keys + 6 values of 128 numbers per layer.',
+         cells: [['K', 6, '--b'], ['V', 6, '--b']] },
+  gqa: { name: 'GQA · 2 key/value heads', per: 512, desc: 'Three query heads share each key/value head (used by Llama 3, Qwen, Mistral). Each token stores 2 keys + 2 values.',
+         cells: [['K', 2, '--a'], ['V', 2, '--a']] },
+  mla: { name: 'MLA · 480 latent + 32 RoPE', per: 512, desc: 'Each token stores one compressed latent (480 numbers) plus a 32-number position key shared by all heads. Keys and values for all 6 heads are reconstructed from the latent by learned up-projections.',
+         cells: [['latent 480', 3.75, '--d'], ['RoPE 32', .25, '--c']] },
+};
+function kvHTML(k) {
+  const v = KV[k], W = 12, unit = 100 / W;
+  const boxes = v.cells.map(([l, n, c]) => '<div style="flex:' + n + ';background:var(' + c + ');color:#fff;border-radius:6px;padding:6px 8px;font:12px JetBrains Mono,monospace;overflow:hidden;white-space:nowrap">' + l + (Number.isInteger(n) ? ' × ' + n : '') + '</div>').join('');
+  return '<div class="kicker">' + v.name + '</div><p class="small" style="margin:6px 0 10px">' + v.desc + '</p>' +
+    '<div class="small muted">Cached per token per layer: <b style="color:var(--fg)">' + v.per.toLocaleString() + ' numbers</b> (' + (1536 / v.per).toFixed(0) + '× smaller than MHA)</div>' +
+    '<div style="display:flex;gap:4px;margin-top:8px;width:' + (v.per / 1536 * 100) + '%">' + boxes + '</div>' +
+    '<div style="height:6px;margin-top:6px;border-radius:3px;background:var(--soft);position:relative"><div style="position:absolute;inset:0;width:' + (v.per / 1536 * 100) + '%;background:var(--fg);opacity:.25;border-radius:3px"></div></div>';
+}
+function renderKV(k) { $('kvViz').innerHTML = kvHTML(k); document.querySelectorAll('[data-v]').forEach(b => b.setAttribute('aria-pressed', b.dataset.v === k)); }
+document.querySelectorAll('[data-v]').forEach(b => b.addEventListener('click', () => renderKV(b.dataset.v)));
+renderKV('mha');
+$('kvPrint').innerHTML = ['gqa', 'mla'].map(k => '<div style="margin-top:14px">' + kvHTML(k) + '</div>').join('');
+const ABL = [['MHA', 72, 142, .9144, .128, 180, 5699], ['GQA (2 kv heads)', 24, 426, .9189, .106, 178, 5661], ['MLA (480 + 32)', 24, 426, .9209, .099, 89, 2603]];
+$('ablTable').innerHTML = '<tr><th>Variant</th><th class="n">KV / seq</th><th class="n">Seqs in 10 GB</th><th class="n">Val bits/byte ↓</th><th class="n">CORE</th><th class="n">Decode tok/s (b1 / b32)</th></tr>' +
+  ABL.map(r => '<tr><td>' + r[0] + '</td><td class="n">' + r[1] + ' MB</td><td class="n">' + r[2] + '</td><td class="n">' + r[3].toFixed(4) + '</td><td class="n">' + r[4].toFixed(3) + '</td><td class="n">' + r[5] + ' / ' + r[6].toLocaleString() + '</td></tr>').join('');
+
 /* ---------------- KV cache ---------------- */
 function kv() {
   const n = +$('kvN').value, p = 300; $('kvNv').textContent = n;
@@ -608,6 +663,9 @@ const G = [
   ['Few-shot / zero-shot', 'Whether the prompt includes worked examples before the question (few-shot) or not (zero-shot).'],
   ['Temperature', 'Sampling randomness. 0 = always pick the most likely token; higher = more varied.'],
   ['KV cache', 'Stored attention keys/values of previous tokens, so generation does not recompute them for every new token.'],
+  ['MLA', 'Multi-head latent attention (DeepSeek-V2): caches one compressed latent per token and reconstructs every head\'s keys/values from it, plus a small shared RoPE key. Implemented here for nanochat.'],
+  ['Weight absorption', 'MLA inference trick: fold the key up-projection into the query so attention runs directly on the cached latent. Blocked here because nanochat normalizes full keys (QK-norm).'],
+  ['Ablation', 'An experiment that changes one component while holding everything else fixed, to measure that component\'s effect.'],
   ['Quantization (int8)', 'Storing weights in 8-bit integers to save memory/compute. Tested here and rejected: slower on CPU and less accurate.'],
   ['Checkpoint', 'Saved model (and optimizer) state; lets training resume or the model be served.'],
   ['OpenAI-compatible API', 'Server speaking the same /v1/chat/completions protocol as OpenAI, so standard clients work unchanged.'],
@@ -629,6 +687,9 @@ const QA = [
   ['Why was GSM8K so low, and what did RL change?', 'Multi-step arithmetic needs reliable reasoning, which small models lack: after SFT it solved 1.5%. 75 steps of RL (42 min on one H100) rewarded correct final answers and raised it to 10.0% on the same 400 problems, above the reference nanochat d20 (7.6%), with no regression on ARC or MMLU. Answers also got shorter, as the model stopped rambling.'],
   ['Why did the benchmarks beat the original nanochat d20 with fewer tokens?', 'Same depth, newer nanochat code: better data (ClimbMix), architectural tweaks (value embeddings, smear/backout, sliding windows) and tuned optimization. Same harness, so the comparison is fair.'],
   ['How did you make the training run reliable?', 'Checkpoints with optimizer state uploaded every 500 steps (resume after host failure), hard time caps with automatic teardown, secrets kept out of logs, and the throughput/stage probe before committing to the full run. The chat fine-tune was later re-run from the saved checkpoint and reproduced the same validation loss exactly.'],
+  ['What did you add on top of nanochat besides running it?', 'An architecture experiment nanochat does not ship: I implemented multi-head latent attention (latent KV cache, decoupled RoPE key, compact cache in the generation engine, tests that cached decoding matches the full forward pass) and ran a controlled MHA vs GQA vs MLA ablation at equal KV-cache budget, measuring quality, memory per sequence and decode throughput. Plus the same-harness GPT-2 baseline, the budget-capped RL run, the int8 study and the serving stack.'],
+  ['Why did MLA not beat GQA, when DeepSeek says it should?', 'At depth 12 on 0.5B tokens the two were within single-seed noise (0.9189 vs 0.9209 bits/byte). DeepSeek\'s results are at far larger scale, use tuned latent sizes and query compression, and their keys are not re-normalized after up-projection. I would run multiple seeds and sweep the latent width before drawing a stronger conclusion.'],
+  ['Why was MLA slower at generation?', 'Normally MLA folds the key up-projection into the query (weight absorption) and attends directly over the cached latent. nanochat applies QK-norm to the full keys, a nonlinearity between the up-projection and the dot product, so absorption is impossible and every step re-expands all cached latents into keys and values: 2.2x slower at batch 32. Fixing it means moving the norm onto the latent or dropping QK-norm, a stability trade-off.'],
   ['What would you do with 10× more compute?', 'Train deeper (d26 reaches GPT-2 XL quality), use a compute-optimal data ratio, extend RL beyond GSM8K, and add a preference-tuning stage for chat quality.'],
   ['How is it served?', 'One app serves a Gradio chat UI and an OpenAI-compatible streaming API. A free CPU Space hosts the public demo (~7 tok/s); for speed, a control plane launches a small GPU on demand behind a fixed HTTPS relay (~53 tok/s) and destroys it after 45 idle minutes.'],
   ['What did not work?', 'int8 dynamic quantization for the CPU demo: slower (13.7 vs 16.2 tok/s) and ~6 points worse on ARC-Easy, so it was dropped. Also, a checkpoint uploader skipped files younger than 60 s and missed the final SFT checkpoint; it was fixed with explicit post-training upload verification.'],
