@@ -195,7 +195,7 @@
               <button class="copy" data-copy="cfg">Copy</button>
               <pre><code id="cfg">Loading…</code></pre></li>
             <li>Launch a Qwen model above, wait for <b>Ready</b>, then run <code>opencode</code>. Pick
-              <code>private-llm-fast</code> in <code>/models</code> when the Fast profile is running.</li>
+              <code>sumits-uncensored-fast</code> in <code>/models</code> when the Fast profile is running.</li>
           </ol>
         </details>
       </div>
@@ -220,13 +220,13 @@ const store = {
 };
 // Presentation details per server profile; unknown profiles fall back to the server's label/description.
 const META = {
-  long: { name: 'Qwen 3.8 · Long context', tag: 'Coding & long documents', model: 'private-llm', rate: 0.85, boot: 12,
+  long: { name: 'Qwen 3.8 · Long context', tag: 'Coding & long documents', model: 'sumits-uncensored', rate: 0.85, boot: 12,
           desc: 'Uncensored Qwen3.8-27B on vLLM with speculative decoding. Best for opencode and big files.',
           chips: ['216k context', '~110 tok/s', 'RTX 5090', '~$0.85/h', 'ready in ~12 min'] },
-  fast: { name: 'Qwen 3.8 · Fast', tag: 'Fastest replies', model: 'private-llm-fast', rate: 0.75, boot: 15,
+  fast: { name: 'Qwen 3.8 · Fast', tag: 'Fastest replies', model: 'sumits-uncensored-fast', rate: 0.75, boot: 15,
           desc: 'Same Qwen family on SGLang with a draft model. About twice as fast, shorter memory.',
           chips: ['~100k context', '~200 tok/s', 'RTX 5090', '~$0.75/h', 'ready in ~15 min'] },
-  nanochat: { name: 'Nanochat d20', tag: 'Trained from scratch', model: 'nanochat-d20', rate: 0.09, boot: 5,
+  nanochat: { name: 'Nanochat d20', tag: 'Trained from scratch', model: 'sumits-nanochat', rate: 0.09, boot: 5,
           desc: 'The 897M chat model trained from scratch. Fluent and cheap, but makes up facts.',
           chips: ['2k context', '~50 tok/s', 'small GPU', '~$0.09/h', 'ready in ~5 min'] },
 };
@@ -373,11 +373,11 @@ async function loadOpencode() {
   const model = (label, ctx) => ({ name: label, reasoning: true, interleaved: 'reasoning', tool_call: true, attachment: true,
     modalities: { input: ['text', 'image'], output: ['text'] }, limit: { context: ctx, output: 16384 }, cost: { input: 0, output: 0 } });
   const cfg = {
-    $schema: 'https://opencode.ai/config.json', model: 'skdev/private-llm', small_model: 'skdev/private-llm',
+    $schema: 'https://opencode.ai/config.json', model: 'skdev/sumits-uncensored', small_model: 'skdev/sumits-uncensored',
     provider: { skdev: { npm: '@ai-sdk/openai-compatible', name: 'Private LLM (skdev)',
       options: { baseURL: d.base_url, apiKey: d.client_key },
-      models: { 'private-llm': model('Private LLM · long context', d.models['private-llm']),
-                'private-llm-fast': model('Private LLM · fast', d.models['private-llm-fast']) } } },
+      models: { 'sumits-uncensored': model('Sumit\'s uncensored · long context', d.models['sumits-uncensored']),
+                'sumits-uncensored-fast': model('Sumit\'s uncensored · fast', d.models['sumits-uncensored-fast']) } } },
   };
   $('cfg').textContent = JSON.stringify(cfg, null, 2);
 }
