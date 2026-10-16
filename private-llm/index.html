@@ -124,6 +124,8 @@
     .vhint { font-size: 13px; color: var(--fg-muted); margin-top: 10px; }
     .jobs { display: grid; gap: 12px; margin-top: 14px; }
     .job { padding: 14px; }
+    .vlink { display: block; text-decoration: none; } .vlink h3 { font: 600 18px 'Inter', sans-serif; margin: 0 0 4px; }
+    .vlink:hover { border-color: var(--border-strong); }
     .job .p { font-size: 14px; margin: 0 0 8px; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
     .job .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
     .job video { width: 100%; max-height: 70vh; border-radius: 10px; background: #000; margin-top: 10px; display: block; }
@@ -195,20 +197,11 @@
     <section id="lastSession" class="card hidden" style="padding:14px 20px"></section>
 
     <section class="section" id="video">
-      <div class="label">Video · MiniMax H3</div>
-      <div class="card">
-        <form id="videoForm">
-          <textarea id="vPrompt" maxlength="4000" placeholder="Describe the clip: style, scene, what happens, camera, and the sound (dialogue in quotes, effects, music)." required></textarea>
-          <div class="vrow">
-            <select id="vSeconds" aria-label="Length"><option value="15" selected>15 s</option><option value="10">10 s</option><option value="5">5 s</option></select>
-            <select id="vOrient" aria-label="Shape"><option value="vertical" selected>Vertical 9:16</option><option value="landscape">Landscape 16:9</option></select>
-            <button id="vGo" class="primary" type="submit">Generate</button>
-          </div>
-        </form>
-        <div id="vHint" class="vhint"></div>
-        <div id="vMsg" class="msg"></div>
-      </div>
-      <div id="jobs" class="jobs"></div>
+      <div class="label">Video</div>
+      <a class="card vlink" href="video/">
+        <div><h3>Video Studio · MiniMax H3 →</h3>
+          <p class="muted" id="vSummary">Text to video with sound, 768p, 5–15 s clips. Your own characters with @name.</p></div>
+      </a>
     </section>
 
     <section class="section">
@@ -340,10 +333,10 @@ function render(s) {
     $('stats').innerHTML = stats.map(([k, v, cls]) => `<div class="stat ${cls || ''}"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div></div>`).join('');
 
     const isVideo = !!(m && m.video);
-    const chatUrl = isVideo ? '#video' : CHAT + (m && m.model ? '/?model=' + encodeURIComponent(m.model) : '');
+    const chatUrl = isVideo ? 'video/' : CHAT + (m && m.model ? '/?model=' + encodeURIComponent(m.model) : '');
     [$('chatBtn'), $('dockChat')].forEach(a => { a.href = chatUrl; a.target = isVideo ? '' : '_blank';
       a.classList.toggle('disabled', !isVideo && p !== 'serving');
-      a.textContent = isVideo ? 'Your videos ↓' : p === 'serving' ? 'Open chat ↗' : 'Chat opens when ready'; });
+      a.textContent = isVideo ? 'Open Video Studio' : p === 'serving' ? 'Open chat ↗' : 'Chat opens when ready'; });
     [$('stopBtn'), $('dockStop')].forEach(b => (b.disabled = p === 'stopping'));
     $('extendBtn').disabled = !(p === 'serving' || p === 'booting');
     $('msg').textContent = s.message || '';
@@ -358,13 +351,15 @@ function render(s) {
   }
 
   // model cards
-  const canLaunch = p === 'off' || (p === 'error' && !s.instance_id);
+  const paused = p === 'paused';
+  const canLaunch = p === 'off' || paused || (p === 'error' && !s.instance_id);
   $('models').innerHTML = Object.entries(s.profiles).filter(([, prof]) => prof.kind !== 'video').map(([k, prof]) => {
     const mm = meta(k, prof), running = active && s.profile === k;
     const mins = s.credit != null && mm.rate ? Math.floor(s.credit / mm.rate * 60) : null;
     let note = '', noteCls = '';
     if (running) note = 'Running now';
     else if (!canLaunch) note = 'Stop the running model to launch this one';
+    else if (paused) note = 'Launching deletes the paused video GPU';
     else if (mins != null && mins < 60) { note = `Credit covers ~${mins} min`; noteCls = 'warn'; }
     const label = running ? 'Running' : 'Launch';
     return `<div class="card model ${running ? 'running' : ''}">
@@ -376,61 +371,22 @@ function render(s) {
       <button class="${running ? '' : 'primary'}" data-profile="${esc(k)}" ${canLaunch ? '' : 'disabled'}>${label}</button>
     </div>`;
   }).join('');
-  renderVideo(s, active, m);
+  renderVideo(s);
   $('events').innerHTML = (s.events || []).slice().reverse().slice(0, 15)
     .map(([t, msg]) => `<li>${new Date(t * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · ${esc(msg)}</li>`).join('');
 }
 
-// measured on an RTX 5090 at 768p with the 8-step turbo LoRA; the first clip after boot also loads the model (~1 min)
-const RENDER_MIN = { 5: 2.2, 10: 6.5, 15: 13 };
 const OPEN = ['pending', 'sent', 'queued', 'running'];
-const shownJobs = new Map();
-function renderVideo(s, active, m) {
-  const jobs = s.video_jobs || [], p = s.phase, videoActive = active && m && m.video;
-  const otherRunning = active && !(m && m.video);
-  $('vGo').disabled = otherRunning || p === 'stopping';
-  const secs = +$('vSeconds').value, rate = s.dph || META.video.rate, render = RENDER_MIN[secs];
-  if (otherRunning) $('vHint').textContent = `${m ? m.name : s.profile} is using the GPU. Stop it to generate video.`;
-  else if (videoActive && p === 'serving') $('vHint').textContent = `GPU is ready: a ${secs} s clip takes ~${Math.ceil(render)} min (≈ ${money(rate * render / 60)}). It shuts down ${(s.profiles.video && s.profiles.video.idle_minutes) || 10} min after the last clip.`;
-  else if (videoActive) $('vHint').textContent = `GPU is starting (${dur(s.launched_at ? s.now - s.launched_at : 0)} so far, usually ~${META.video.boot} min). Clips queue up and start as soon as it's ready.`;
-  else $('vHint').textContent = `Starts a GPU (~${META.video.boot} min), then ~${Math.ceil(render)} min per ${secs} s clip. About ${money(rate * (META.video.boot + render + 10) / 60)} for one clip (+ up to ~$0.30 download fee on some hosts); extra clips in the same session ≈ ${money(rate * render / 60)} each.`;
-
-  const now = s.now;
-  const html = jobs.map(j => {
-    const est = (RENDER_MIN[j.seconds] || 13);
-    let st = '', body = '';
-    if (j.status === 'done') { st = '<span class="st done">done</span>' + (j.wall_s ? ` <span class="chip">${Math.round(j.wall_s / 60)} min</span>` : '');
-      body = j.url ? `<video controls playsinline preload="metadata" src="${esc(j.url)}"></video>
-        <a class="btn dl" href="${esc(j.url)}&dl=1">Download</a>` : '<div class="muted">file no longer kept</div>'; }
-    else if (j.status === 'error') { st = '<span class="st error">failed</span>'; body = `<div class="err">${esc(j.error || '')}</div>`; }
-    else if (j.status === 'running') { const el = j.started ? (now - j.started) / 60 : 0;
-      st = `<span class="st wait">rendering · ${Math.floor(el)} of ~${Math.ceil(est)} min</span>`; }
-    else st = `<span class="st wait">${j.status === 'pending' ? 'waiting for GPU' : 'queued'}</span>`;
-    return `<div class="card job" data-id="${esc(j.id)}" data-status="${esc(j.status)}"><p class="p">${esc(j.prompt)}</p>
-      <div class="row">${st}<span class="chip">${j.seconds} s</span><span class="chip">${j.orientation === 'landscape' ? '16:9' : '9:16'}</span>
-      <span class="chip">${ago(j.created)}</span></div>${body}</div>`;
-  });
-  // keep players that are already on screen (re-rendering would restart playback)
-  const box = $('jobs');
-  const sig = jobs.map(j => j.id + j.status + (j.status === 'running' ? Math.floor((now - (j.started || now)) / 60) : '')).join('|');
-  if (box.dataset.sig !== sig) {
-    const playing = [...box.querySelectorAll('video')].some(v => !v.paused);
-    if (!playing || jobs.length !== box.children.length) { box.innerHTML = html.join(''); box.dataset.sig = sig; }
-  }
+function renderVideo(s) {
+  const jobs = s.video_jobs || [], open = jobs.filter(j => OPEN.includes(j.status)).length;
+  const done = jobs.filter(j => j.status === 'done').length, prof = s.profiles[s.profile] || {};
+  const parts = [];
+  if (prof.kind === 'video' && s.phase === 'paused') parts.push(`GPU paused (weights kept; deleted in ${dur(s.pause_left_s)} if unused)`);
+  else if (prof.kind === 'video' && ['searching', 'booting', 'serving'].includes(s.phase)) parts.push(s.phase === 'serving' ? 'GPU ready' : 'GPU starting');
+  if (open) parts.push(`${open} clip${open > 1 ? 's' : ''} in progress`);
+  if (done) parts.push(`${done} clip${done > 1 ? 's' : ''} saved`);
+  $('vSummary').textContent = parts.length ? parts.join(' · ') : 'Text to video with sound, 768p, 5–15 s clips. Your own characters with @name.';
 }
-
-$('vSeconds').addEventListener('change', () => last && render(last));
-$('videoForm').addEventListener('submit', async e => {
-  e.preventDefault();
-  const prompt = $('vPrompt').value.trim();
-  if (!prompt) return;
-  $('vGo').disabled = true; $('vMsg').textContent = 'sending…';
-  try {
-    const d = await api('/api/video', { method: 'POST', body: JSON.stringify({ prompt, seconds: +$('vSeconds').value, orientation: $('vOrient').value }) });
-    $('vMsg').textContent = d.message; $('vPrompt').value = '';
-  } catch (err) { $('vMsg').textContent = err.message; }
-  poll();
-});
 
 async function poll() {
   clearTimeout(pollTimer);
