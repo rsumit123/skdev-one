@@ -115,6 +115,24 @@
     .login form { display: grid; gap: 10px; margin-top: 12px; }
     .err { color: var(--bad); font-size: 14px; min-height: 20px; }
 
+    /* video */
+    textarea { font: 16px/1.45 'Inter', sans-serif; padding: 12px; border-radius: 12px; border: 1px solid var(--border-strong);
+               background: var(--bg); color: var(--fg); width: 100%; min-height: 120px; resize: vertical; }
+    .vrow { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: 10px; margin-top: 10px; }
+    select { font: 15px 'Inter', sans-serif; min-height: 48px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border-strong);
+             background: var(--bg-card); color: var(--fg); width: 100%; }
+    .vhint { font-size: 13px; color: var(--fg-muted); margin-top: 10px; }
+    .jobs { display: grid; gap: 12px; margin-top: 14px; }
+    .job { padding: 14px; }
+    .job .p { font-size: 14px; margin: 0 0 8px; overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+    .job .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+    .job video { width: 100%; max-height: 70vh; border-radius: 10px; background: #000; margin-top: 10px; display: block; }
+    .job .err { font-size: 13px; margin-top: 6px; }
+    .job .dl { min-height: 36px; font-size: 13px; margin-top: 8px; }
+    .st { font: 500 12px 'JetBrains Mono', monospace; padding: 3px 8px; border-radius: 6px; }
+    .st.done { color: var(--ok); background: var(--ok-bg); } .st.error { color: var(--bad); background: var(--bad-bg); }
+    .st.wait { color: var(--warn); background: var(--warn-bg); }
+
     /* sticky bottom bar on phones while a model is active */
     .dock { display: none; }
     @media (max-width: 640px) {
@@ -122,6 +140,7 @@
       h1 { font-size: 32px; }
       .actions { grid-template-columns: 1fr 1fr; }
       .actions .primary { grid-column: 1 / -1; }
+      .vrow { grid-template-columns: 1fr 1fr; } .vrow button { grid-column: 1 / -1; }
       .dock.show { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; position: fixed; left: 0; right: 0; bottom: 0;
                    padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); background: var(--bg-card);
                    border-top: 1px solid var(--border); box-shadow: 0 -8px 24px -12px rgba(0,0,0,.25); z-index: 10; }
@@ -175,6 +194,23 @@
 
     <section id="lastSession" class="card hidden" style="padding:14px 20px"></section>
 
+    <section class="section" id="video">
+      <div class="label">Video · MiniMax H3</div>
+      <div class="card">
+        <form id="videoForm">
+          <textarea id="vPrompt" maxlength="4000" placeholder="Describe the clip: style, scene, what happens, camera, and the sound (dialogue in quotes, effects, music)." required></textarea>
+          <div class="vrow">
+            <select id="vSeconds" aria-label="Length"><option value="15" selected>15 s</option><option value="10">10 s</option><option value="5">5 s</option></select>
+            <select id="vOrient" aria-label="Shape"><option value="vertical" selected>Vertical 9:16</option><option value="landscape">Landscape 16:9</option></select>
+            <button id="vGo" class="primary" type="submit">Generate</button>
+          </div>
+        </form>
+        <div id="vHint" class="vhint"></div>
+        <div id="vMsg" class="msg"></div>
+      </div>
+      <div id="jobs" class="jobs"></div>
+    </section>
+
     <section class="section">
       <div class="label">Models</div>
       <div id="models" class="models"></div>
@@ -226,6 +262,8 @@ const META = {
   fast: { name: 'Qwen 3.8 · Fast', tag: 'Fastest replies', model: 'sumits-uncensored-fast', rate: 0.75, boot: 15,
           desc: 'Same Qwen family on SGLang with a draft model. About twice as fast, shorter memory.',
           chips: ['~100k context', '~200 tok/s', 'RTX 5090', '~$0.75/h', 'ready in ~15 min'] },
+  video: { name: 'MiniMax H3 · Video', tag: 'Text to video with sound', model: '', rate: 1.0, boot: 8, video: true,
+          desc: '768p clips with audio, 5–15 s.', chips: [] },
   nanochat: { name: 'Nanochat d20', tag: 'Trained from scratch', model: 'sumits-nanochat', rate: 0.09, boot: 5,
           desc: 'The 897M chat model trained from scratch. Fluent and cheap, but makes up facts.',
           chips: ['2k context', '~50 tok/s', 'small GPU', '~$0.09/h', 'ready in ~5 min'] },
@@ -296,14 +334,16 @@ function render(s) {
     $('eta').textContent = m && p !== 'serving' ? `${dur(elapsed)} so far · usually ready in ~${m.boot} min` : '';
 
     const stats = [];
-    if (p === 'serving') stats.push(['Auto-stop if idle', dur(s.idle_left_s)], ['Hard cap', dur(s.cap_left_s)]);
+    if (p === 'serving') stats.push(['Auto-stop if idle', m && m.video && (s.video_jobs || []).some(j => OPEN.includes(j.status)) ? 'after renders' : dur(s.idle_left_s)], ['Hard cap', dur(s.cap_left_s)]);
     stats.push(['Running', dur(elapsed)], ['Cost so far', money(s.cost_so_far)]);
     if (s.host) stats.push(['Host', s.host.replace(/^[^·]*,\s*([A-Z]{2})\s*·/, '$1 ·') + (s.dph ? ` · ${money(s.dph)}/h` : ''), 'wide']);
     $('stats').innerHTML = stats.map(([k, v, cls]) => `<div class="stat ${cls || ''}"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div></div>`).join('');
 
-    const chatUrl = CHAT + (m && m.model ? '/?model=' + encodeURIComponent(m.model) : '');
-    [$('chatBtn'), $('dockChat')].forEach(a => { a.href = chatUrl; a.classList.toggle('disabled', p !== 'serving');
-      a.textContent = p === 'serving' ? 'Open chat ↗' : 'Chat opens when ready'; });
+    const isVideo = !!(m && m.video);
+    const chatUrl = isVideo ? '#video' : CHAT + (m && m.model ? '/?model=' + encodeURIComponent(m.model) : '');
+    [$('chatBtn'), $('dockChat')].forEach(a => { a.href = chatUrl; a.target = isVideo ? '' : '_blank';
+      a.classList.toggle('disabled', !isVideo && p !== 'serving');
+      a.textContent = isVideo ? 'Your videos ↓' : p === 'serving' ? 'Open chat ↗' : 'Chat opens when ready'; });
     [$('stopBtn'), $('dockStop')].forEach(b => (b.disabled = p === 'stopping'));
     $('extendBtn').disabled = !(p === 'serving' || p === 'booting');
     $('msg').textContent = s.message || '';
@@ -319,7 +359,7 @@ function render(s) {
 
   // model cards
   const canLaunch = p === 'off' || (p === 'error' && !s.instance_id);
-  $('models').innerHTML = Object.entries(s.profiles).map(([k, prof]) => {
+  $('models').innerHTML = Object.entries(s.profiles).filter(([, prof]) => prof.kind !== 'video').map(([k, prof]) => {
     const mm = meta(k, prof), running = active && s.profile === k;
     const mins = s.credit != null && mm.rate ? Math.floor(s.credit / mm.rate * 60) : null;
     let note = '', noteCls = '';
@@ -336,15 +376,68 @@ function render(s) {
       <button class="${running ? '' : 'primary'}" data-profile="${esc(k)}" ${canLaunch ? '' : 'disabled'}>${label}</button>
     </div>`;
   }).join('');
+  renderVideo(s, active, m);
   $('events').innerHTML = (s.events || []).slice().reverse().slice(0, 15)
     .map(([t, msg]) => `<li>${new Date(t * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · ${esc(msg)}</li>`).join('');
 }
+
+// measured on an RTX 5090 at 768p with the 8-step turbo LoRA; the first clip after boot also loads the model (~1 min)
+const RENDER_MIN = { 5: 2.2, 10: 6.5, 15: 13 };
+const OPEN = ['pending', 'sent', 'queued', 'running'];
+const shownJobs = new Map();
+function renderVideo(s, active, m) {
+  const jobs = s.video_jobs || [], p = s.phase, videoActive = active && m && m.video;
+  const otherRunning = active && !(m && m.video);
+  $('vGo').disabled = otherRunning || p === 'stopping';
+  const secs = +$('vSeconds').value, rate = s.dph || META.video.rate, render = RENDER_MIN[secs];
+  if (otherRunning) $('vHint').textContent = `${m ? m.name : s.profile} is using the GPU. Stop it to generate video.`;
+  else if (videoActive && p === 'serving') $('vHint').textContent = `GPU is ready: a ${secs} s clip takes ~${Math.ceil(render)} min (≈ ${money(rate * render / 60)}). It shuts down ${(s.profiles.video && s.profiles.video.idle_minutes) || 10} min after the last clip.`;
+  else if (videoActive) $('vHint').textContent = `GPU is starting (${dur(s.launched_at ? s.now - s.launched_at : 0)} so far, usually ~${META.video.boot} min). Clips queue up and start as soon as it's ready.`;
+  else $('vHint').textContent = `Starts a GPU (~${META.video.boot} min), then ~${Math.ceil(render)} min per ${secs} s clip. About ${money(rate * (META.video.boot + render + 10) / 60)} for one clip; extra clips in the same session ≈ ${money(rate * render / 60)} each.`;
+
+  const now = s.now;
+  const html = jobs.map(j => {
+    const est = (RENDER_MIN[j.seconds] || 13);
+    let st = '', body = '';
+    if (j.status === 'done') { st = '<span class="st done">done</span>' + (j.wall_s ? ` <span class="chip">${Math.round(j.wall_s / 60)} min</span>` : '');
+      body = j.url ? `<video controls playsinline preload="metadata" src="${esc(j.url)}"></video>
+        <a class="btn dl" href="${esc(j.url)}&dl=1">Download</a>` : '<div class="muted">file no longer kept</div>'; }
+    else if (j.status === 'error') { st = '<span class="st error">failed</span>'; body = `<div class="err">${esc(j.error || '')}</div>`; }
+    else if (j.status === 'running') { const el = j.started ? (now - j.started) / 60 : 0;
+      st = `<span class="st wait">rendering · ${Math.floor(el)} of ~${Math.ceil(est)} min</span>`; }
+    else st = `<span class="st wait">${j.status === 'pending' ? 'waiting for GPU' : 'queued'}</span>`;
+    return `<div class="card job" data-id="${esc(j.id)}" data-status="${esc(j.status)}"><p class="p">${esc(j.prompt)}</p>
+      <div class="row">${st}<span class="chip">${j.seconds} s</span><span class="chip">${j.orientation === 'landscape' ? '16:9' : '9:16'}</span>
+      <span class="chip">${ago(j.created)}</span></div>${body}</div>`;
+  });
+  // keep players that are already on screen (re-rendering would restart playback)
+  const box = $('jobs');
+  const sig = jobs.map(j => j.id + j.status + (j.status === 'running' ? Math.floor((now - (j.started || now)) / 60) : '')).join('|');
+  if (box.dataset.sig !== sig) {
+    const playing = [...box.querySelectorAll('video')].some(v => !v.paused);
+    if (!playing || jobs.length !== box.children.length) { box.innerHTML = html.join(''); box.dataset.sig = sig; }
+  }
+}
+
+$('vSeconds').addEventListener('change', () => last && render(last));
+$('videoForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const prompt = $('vPrompt').value.trim();
+  if (!prompt) return;
+  $('vGo').disabled = true; $('vMsg').textContent = 'sending…';
+  try {
+    const d = await api('/api/video', { method: 'POST', body: JSON.stringify({ prompt, seconds: +$('vSeconds').value, orientation: $('vOrient').value }) });
+    $('vMsg').textContent = d.message; $('vPrompt').value = '';
+  } catch (err) { $('vMsg').textContent = err.message; }
+  poll();
+});
 
 async function poll() {
   clearTimeout(pollTimer);
   try { render(await api('/api/status')); } catch (e) { $('msg').textContent = 'status error: ' + e.message; }
   const busy = last && ['searching', 'booting', 'stopping'].includes(last.phase);
-  if (token) pollTimer = setTimeout(poll, busy ? 4000 : 15000);
+  const rendering = last && (last.video_jobs || []).some(j => OPEN.includes(j.status));
+  if (token) pollTimer = setTimeout(poll, busy ? 4000 : rendering ? 10000 : 15000);
 }
 async function act(path, body, confirmMsg) {
   if (confirmMsg && !window.confirm(confirmMsg)) return;
