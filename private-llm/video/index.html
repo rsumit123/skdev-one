@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="robots" content="noindex, nofollow" />
-  <title>Video Studio</title>
+  <title>Studio</title>
   <meta name="theme-color" content="#0a0a0a" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -81,6 +81,12 @@
     .mention { font: 500 13px 'JetBrains Mono', monospace; padding: 4px 10px; border-radius: 999px; border: 1px dashed var(--border-strong);
                background: var(--bg-soft); cursor: pointer; min-height: 30px; }
     .hint { font-size: 13px; color: var(--fg-muted); margin-top: 10px; }
+    .seg { display: inline-grid; grid-template-columns: 1fr 1fr; background: var(--bg-soft); border-radius: 12px; padding: 4px; gap: 4px; margin-bottom: 12px; }
+    .seg button { min-height: 38px; border: 0; background: transparent; font-size: 14px; padding: 6px 18px; }
+    .seg button.on { background: var(--bg-card); box-shadow: var(--shadow); }
+    .imgs { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin-top: 10px; }
+    .imgs a { display: block; border-radius: 10px; overflow: hidden; background: var(--bg-soft); }
+    .imgs img { width: 100%; display: block; }
 
     /* characters */
     .chars { display: grid; gap: 12px; }
@@ -124,8 +130,8 @@
   <a class="back" href="/private-llm/">← Private LLM</a>
   <div class="head">
     <div>
-      <h1>Video Studio</h1>
-      <p>MiniMax H3 on a rented RTX 5090: text to video with sound, 768p, 5–15 s.</p>
+      <h1>Studio</h1>
+      <p>Video with sound (MiniMax H3, 768p, 5–15 s) and images (Qwen-Image-2.1, ~1 MP) on rented GPUs.</p>
     </div>
     <span id="credit" class="pill hidden">credit –</span>
   </div>
@@ -151,14 +157,17 @@
     </section>
 
     <section class="section">
-      <div class="label">New clip</div>
+      <div class="label">Create</div>
       <div class="card">
+        <div class="seg" role="tablist"><button type="button" id="modeVideo" class="on">Video</button><button type="button" id="modeImage">Image</button></div>
         <form id="videoForm">
           <textarea id="vPrompt" maxlength="4000" placeholder="Describe the clip: style, scene, what happens, camera, and the sound (dialogue in quotes, effects, music). Type @name to use one of your characters." required></textarea>
           <div id="mentions" class="mentions"></div>
           <div class="row3">
             <select id="vSeconds" aria-label="Length"><option value="15" selected>15 s</option><option value="10">10 s</option><option value="5">5 s</option></select>
             <select id="vOrient" aria-label="Shape"><option value="vertical" selected>Vertical 9:16</option><option value="landscape">Landscape 16:9</option></select>
+            <select id="iAspect" aria-label="Aspect" class="hidden"><option value="1:1">Square 1:1</option><option value="3:4">Portrait 3:4</option><option value="9:16" selected>Tall 9:16</option><option value="4:3">Landscape 4:3</option><option value="16:9">Wide 16:9</option></select>
+            <select id="iCount" aria-label="How many" class="hidden"><option value="1">1 image</option><option value="2">2 images</option><option value="4" selected>4 images</option></select>
             <button id="vGo" class="primary" type="submit">Generate</button>
           </div>
         </form>
@@ -168,15 +177,15 @@
     </section>
 
     <section class="section">
-      <div class="label">Clips</div>
+      <div class="label">Results</div>
       <div id="jobs" class="jobs"><div class="muted">No clips yet.</div></div>
     </section>
 
     <section class="section">
       <div class="label">Characters</div>
       <div class="card">
-        <p class="muted" style="margin:0 0 12px">Upload a picture of a character, name it, then write <code>@name</code> in a prompt to keep
-          that character's look. Plain backgrounds work best: the model copies whatever else is in the picture, so use
+        <p class="muted" style="margin:0 0 12px">Upload a picture of a character, name it, then write <code>@name</code> in a video or image prompt to keep
+          that character's look (an image prompt with a character makes 1 image, edited from the reference). Plain backgrounds work best: the model copies whatever else is in the picture, so use
           <b>Clean up</b> to redraw it as a white-background character sheet (~$0.07, via Gemini; non-explicit designs only).
           Use original or cartoon characters, not photos of real people.</p>
         <form id="charForm" class="addchar">
@@ -189,7 +198,9 @@
       <div id="chars" class="chars" style="margin-top:12px"></div>
     </section>
 
-    <p class="muted" style="text-align:center;margin-top:32px"><a href="#" id="logout">Sign out</a></p>
+    <p class="muted" style="text-align:center;margin-top:24px">Licences: MiniMax H3 Community License (not for the EU/UK/US/KR; hosts are
+      filtered for it) · Qwen Research License (personal, non-commercial use).</p>
+    <p class="muted" style="text-align:center;margin-top:12px"><a href="#" id="logout">Sign out</a></p>
   </div>
 </main>
 
@@ -203,6 +214,18 @@ const store = {
 // measured on an RTX 5090 at 768p; character clips use a 4-step model and are faster
 const RENDER_MIN = { 5: 2.2, 10: 6.5, 15: 13 }, RENDER_REF_MIN = { 5: 1.5, 10: 3.7, 15: 7.5 };
 const BOOT_MIN = 8, RESUME_MIN = 2, RATE = 1.0;
+const IMG_SEC = 8, IMG_BOOT_MIN = 6;  // estimate until measured: Qwen-Image-2.1 turbo, 8 steps, ~1 MP, per image
+let mode = (() => { try { return localStorage.getItem('studio-mode') || 'video'; } catch { return 'video'; } })();
+function setMode(m) {
+  mode = m; try { localStorage.setItem('studio-mode', m); } catch {}
+  $('modeVideo').classList.toggle('on', m === 'video'); $('modeImage').classList.toggle('on', m === 'image');
+  ['vSeconds', 'vOrient'].forEach(id => $(id).classList.toggle('hidden', m !== 'video'));
+  ['iAspect', 'iCount'].forEach(id => $(id).classList.toggle('hidden', m !== 'image'));
+  $('vPrompt').placeholder = m === 'video'
+    ? 'Describe the clip: style, scene, what happens, camera, and the sound (dialogue in quotes, effects, music). Type @name to use one of your characters.'
+    : 'Describe the image: subject, style, lighting, composition, any text to render. Type @name to use one of your characters.';
+  last && render(last);
+}
 const OPEN = ['pending', 'sent', 'queued', 'running'];
 let token = store.get(), pollTimer = null, last = null, chars = [];
 
@@ -232,14 +255,15 @@ const mentioned = () => [...new Set(($('vPrompt').value.match(/@([a-z0-9][a-z0-9
 
 function render(s) {
   last = s;
-  const p = s.phase, prof = s.profiles[s.profile] || {}, isVideo = prof.kind === 'video';
+  const p = s.phase, prof = s.profiles[s.profile] || {}, isVideo = prof.kind === 'video' || prof.kind === 'image';
   const other = s.profile && !isVideo && ['searching', 'booting', 'serving', 'stopping'].includes(p);
   $('credit').textContent = 'credit ' + money(s.credit);
 
   // GPU strip
+  const gpuName = prof.kind === 'image' ? 'Image GPU' : 'GPU';
   const label = !s.profile || p === 'off' ? 'GPU off' : other ? `${prof.label || s.profile} is running`
-    : { searching: 'finding a GPU', booting: s.resuming ? 'resuming' : 'starting', serving: 'GPU ready', paused: 'GPU paused',
-        stopping: 'stopping', error: 'error' }[p] || p;
+    : ({ searching: 'finding a GPU', booting: s.resuming ? 'resuming' : 'starting', serving: 'GPU ready', paused: 'GPU paused',
+        stopping: 'stopping', error: 'error' }[p] || p).replace('GPU', gpuName);
   const badge = $('badge'); badge.className = 'badge ' + (other ? 'booting' : !s.profile ? 'off' : p); badge.textContent = label;
   let line = '';
   if (other) line = 'Stop it on the main page to make videos.';
@@ -260,7 +284,9 @@ function render(s) {
 
   // hint + button
   $('vGo').disabled = other || p === 'stopping';
-  const secs = +$('vSeconds').value, withChars = mentioned().length > 0;
+  const withChars = mentioned().length > 0;
+  if (mode === 'image') { renderImageHint(s, p, isVideo, prof, other, withChars); renderJobs(s.video_jobs || [], s.now); return; }
+  const secs = +$('vSeconds').value;
   const rmin = (withChars ? RENDER_REF_MIN : RENDER_MIN)[secs], rate = s.dph || RATE;
   const extra = withChars ? ' Character clips use the reference model (first one in a session downloads it, ~1–2 min).' : '';
   if (other) $('vHint').textContent = '';
@@ -269,7 +295,19 @@ function render(s) {
   else if (isVideo && ['searching', 'booting'].includes(p)) $('vHint').textContent = 'The GPU is starting; new clips queue and run as soon as it is ready.' + extra;
   else $('vHint').textContent = `Starts a GPU (~${BOOT_MIN} min), then ~${Math.ceil(rmin)} min per ${secs} s clip. About ${money(rate * (BOOT_MIN + rmin + 10) / 60)} for one clip, plus up to ~$0.30 download fee on some hosts. More clips in the same session ≈ ${money(rate * rmin / 60)} each.${extra}`;
 
+  if (isVideo && prof.kind === 'image' && !other) $('vHint').textContent = 'The image GPU is running; a video request swaps it for a video GPU (~8 min start).';
   renderJobs(s.video_jobs || [], s.now);
+}
+
+function renderImageHint(s, p, isMedia, prof, other, withChars) {
+  const n = withChars ? 1 : +$('iCount').value, rate = s.dph || 0.6, secs = n * IMG_SEC;
+  const each = rate * IMG_SEC / 3600;
+  const extra = withChars ? ' With a character the image is edited from its reference, 1 per prompt.' : '';
+  if (other) $('vHint').textContent = '';
+  else if (isMedia && p === 'serving') $('vHint').textContent = `Ready: ${n} image${n > 1 ? 's' : ''} in ~${Math.max(10, Math.round(secs))} s (≈ ${money(each * n)})${prof.kind === 'video' ? '. The first images on a video GPU download the image model (~1–2 min).' : '.'}${extra}`;
+  else if (isMedia && p === 'paused') $('vHint').textContent = `Resumes the paused GPU (~${RESUME_MIN} min), then ~${Math.max(10, Math.round(secs))} s.${extra}`;
+  else if (isMedia && ['searching', 'booting'].includes(p)) $('vHint').textContent = 'The GPU is starting; images run as soon as it is ready.' + extra;
+  else $('vHint').textContent = `Starts a cheaper image GPU (~${IMG_BOOT_MIN} min, ~$0.4–1/h), then ~${IMG_SEC} s per image (≈ $0.002 each). It pauses 10 min after the last job.${extra}`;
 }
 
 function renderJobs(jobs, now) {
@@ -280,20 +318,26 @@ function renderJobs(jobs, now) {
   box.dataset.sig = sig;
   if (!jobs.length) { box.innerHTML = '<div class="muted">No clips yet.</div>'; return; }
   box.innerHTML = jobs.map(j => {
-    const est = ((j.characters || []).length ? RENDER_REF_MIN : RENDER_MIN)[j.seconds] || 13;
+    const isImg = j.kind === 'image';
+    const est = isImg ? 1 : ((j.characters || []).length ? RENDER_REF_MIN : RENDER_MIN)[j.seconds] || 13;
     let st = '', body = '';
-    if (j.status === 'done') {
+    if (j.status === 'done' && isImg) {
+      st = '<span class="st done">done</span>' + (j.wall_s ? `<span class="chip">${Math.round(j.wall_s)} s</span>` : '');
+      body = (j.urls || []).length ? `<div class="imgs">${j.urls.map((u, k) => `<a href="${esc(u)}" target="_blank" rel="noopener"><img src="${esc(u)}" alt="image ${k + 1}" loading="lazy"></a>`).join('')}</div>
+        <div class="row" style="margin-top:8px">${j.urls.map((u, k) => `<a class="btn small" href="${esc(u)}&dl=1">Download ${j.urls.length > 1 ? k + 1 : ''}</a>`).join('')}</div>` : '<div class="muted">files no longer kept</div>';
+    } else if (j.status === 'done') {
       st = '<span class="st done">done</span>' + (j.wall_s ? `<span class="chip">${Math.round(j.wall_s / 60)} min</span>` : '');
       body = j.url ? `<video controls playsinline preload="metadata" src="${esc(j.url)}"></video>
         <a class="btn small" style="margin-top:8px" href="${esc(j.url)}&dl=1">Download</a>` : '<div class="muted">file no longer kept</div>';
     } else if (j.status === 'error') { st = '<span class="st error">failed</span>'; body = `<div class="err">${esc(j.error || '')}</div>`; }
     else if (j.status === 'running') { const el = j.started ? (now - j.started) / 60 : 0;
-      st = `<span class="st wait">rendering · ${Math.floor(el)} of ~${Math.ceil(est)} min</span>`; }
+      st = isImg ? '<span class="st wait">generating…</span>' : `<span class="st wait">rendering · ${Math.floor(el)} of ~${Math.ceil(est)} min</span>`; }
     else st = `<span class="st wait">${j.status === 'pending' ? 'waiting for GPU' : 'queued'}</span>`;
     if (j.note) body += `<div class="note">${esc(j.note)}</div>`;
     const cs = (j.characters || []).map(c => `<span class="chip">@${esc(c)}</span>`).join('');
     return `<div class="card job"><p class="p">${esc(j.prompt)}</p>
-      <div class="row">${st}<span class="chip">${j.seconds} s</span><span class="chip">${j.orientation === 'landscape' ? '16:9' : '9:16'}</span>${cs}
+      <div class="row">${st}${isImg ? `<span class="chip">image</span><span class="chip">${esc(j.aspect)}</span><span class="chip">×${j.count || 1}</span>`
+        : `<span class="chip">${j.seconds} s</span><span class="chip">${j.orientation === 'landscape' ? '16:9' : '9:16'}</span>`}${cs}
       <span class="chip">${ago(j.created)}</span></div>${body}</div>`;
   }).join('');
 }
@@ -319,6 +363,9 @@ $('mentions').addEventListener('click', e => {
 });
 $('vPrompt').addEventListener('input', () => last && render(last));
 $('vSeconds').addEventListener('change', () => last && render(last));
+$('iCount').addEventListener('change', () => last && render(last));
+$('modeVideo').addEventListener('click', () => setMode('video'));
+$('modeImage').addEventListener('click', () => setMode('image'));
 $('chars').addEventListener('click', async e => {
   const b = e.target.closest('button[data-act]'); if (!b) return;
   const { act, name, file } = b.dataset;
@@ -362,7 +409,9 @@ $('videoForm').addEventListener('submit', async e => {
   const prompt = $('vPrompt').value.trim(); if (!prompt) return;
   $('vGo').disabled = true; $('vMsg').textContent = 'sending…';
   try {
-    const d = await api('/api/video', { method: 'POST', body: JSON.stringify({ prompt, seconds: +$('vSeconds').value, orientation: $('vOrient').value }) });
+    const d = mode === 'image'
+      ? await api('/api/image', { method: 'POST', body: JSON.stringify({ prompt, aspect: $('iAspect').value, count: +$('iCount').value }) })
+      : await api('/api/video', { method: 'POST', body: JSON.stringify({ prompt, seconds: +$('vSeconds').value, orientation: $('vOrient').value }) });
     $('vMsg').textContent = d.message + (d.characters && d.characters.length ? ` · with ${d.characters.map(c => '@' + c).join(', ')}` : '');
     $('vPrompt').value = '';
   } catch (err) { $('vMsg').textContent = err.message; }
@@ -380,7 +429,7 @@ async function poll() {
   const busy = last && (['searching', 'booting', 'stopping'].includes(last.phase) || (last.video_jobs || []).some(j => OPEN.includes(j.status)));
   if (token) pollTimer = setTimeout(poll, busy ? 6000 : 20000);
 }
-function start() { show(true); poll(); loadChars(); }
+function start() { show(true); setMode(mode); poll(); loadChars(); }
 token ? start() : show(false);
 </script>
 </body>

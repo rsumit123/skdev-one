@@ -199,8 +199,8 @@
     <section class="section" id="video">
       <div class="label">Video</div>
       <a class="card vlink" href="/private-llm/video/">
-        <div><h3>Video Studio · MiniMax H3 →</h3>
-          <p class="muted" id="vSummary">Text to video with sound, 768p, 5–15 s clips. Your own characters with @name.</p></div>
+        <div><h3>Studio · video &amp; images →</h3>
+          <p class="muted" id="vSummary">Video with sound (MiniMax H3) and images (Qwen-Image-2.1). Your own characters with @name.</p></div>
       </a>
     </section>
 
@@ -257,6 +257,8 @@ const META = {
           chips: ['~100k context', '~200 tok/s', 'RTX 5090', '~$0.75/h', 'ready in ~15 min'] },
   video: { name: 'MiniMax H3 · Video', tag: 'Text to video with sound', model: '', rate: 1.0, boot: 8, video: true,
           desc: '768p clips with audio, 5–15 s.', chips: [] },
+  image: { name: 'Qwen-Image 2.1 · Images', tag: 'Text to image', model: '', rate: 0.6, boot: 6, video: true,
+          desc: 'Images and edits, ~1 MP.', chips: [] },
   nanochat: { name: 'Nanochat d20', tag: 'Trained from scratch', model: 'sumits-nanochat', rate: 0.09, boot: 5,
           desc: 'The 897M chat model trained from scratch. Fluent and cheap, but makes up facts.',
           chips: ['2k context', '~50 tok/s', 'small GPU', '~$0.09/h', 'ready in ~5 min'] },
@@ -336,7 +338,7 @@ function render(s) {
     const chatUrl = isVideo ? '/private-llm/video/' : CHAT + (m && m.model ? '/?model=' + encodeURIComponent(m.model) : '');
     [$('chatBtn'), $('dockChat')].forEach(a => { a.href = chatUrl; a.target = isVideo ? '' : '_blank';
       a.classList.toggle('disabled', !isVideo && p !== 'serving');
-      a.textContent = isVideo ? 'Open Video Studio' : p === 'serving' ? 'Open chat ↗' : 'Chat opens when ready'; });
+      a.textContent = isVideo ? 'Open Studio' : p === 'serving' ? 'Open chat ↗' : 'Chat opens when ready'; });
     [$('stopBtn'), $('dockStop')].forEach(b => (b.disabled = p === 'stopping'));
     $('extendBtn').disabled = !(p === 'serving' || p === 'booting');
     $('msg').textContent = s.message || '';
@@ -353,7 +355,7 @@ function render(s) {
   // model cards
   const paused = p === 'paused';
   const canLaunch = p === 'off' || paused || (p === 'error' && !s.instance_id);
-  $('models').innerHTML = Object.entries(s.profiles).filter(([, prof]) => prof.kind !== 'video').map(([k, prof]) => {
+  $('models').innerHTML = Object.entries(s.profiles).filter(([, prof]) => !['video', 'image'].includes(prof.kind)).map(([k, prof]) => {
     const mm = meta(k, prof), running = active && s.profile === k;
     const mins = s.credit != null && mm.rate ? Math.floor(s.credit / mm.rate * 60) : null;
     let note = '', noteCls = '';
@@ -381,11 +383,11 @@ function renderVideo(s) {
   const jobs = s.video_jobs || [], open = jobs.filter(j => OPEN.includes(j.status)).length;
   const done = jobs.filter(j => j.status === 'done').length, prof = s.profiles[s.profile] || {};
   const parts = [];
-  if (prof.kind === 'video' && s.phase === 'paused') parts.push(`GPU paused (weights kept; deleted in ${dur(s.pause_left_s)} if unused)`);
-  else if (prof.kind === 'video' && ['searching', 'booting', 'serving'].includes(s.phase)) parts.push(s.phase === 'serving' ? 'GPU ready' : 'GPU starting');
-  if (open) parts.push(`${open} clip${open > 1 ? 's' : ''} in progress`);
-  if (done) parts.push(`${done} clip${done > 1 ? 's' : ''} saved`);
-  $('vSummary').textContent = parts.length ? parts.join(' · ') : 'Text to video with sound, 768p, 5–15 s clips. Your own characters with @name.';
+  if (['video', 'image'].includes(prof.kind) && s.phase === 'paused') parts.push(`GPU paused (weights kept; deleted in ${dur(s.pause_left_s)} if unused)`);
+  else if (['video', 'image'].includes(prof.kind) && ['searching', 'booting', 'serving'].includes(s.phase)) parts.push(s.phase === 'serving' ? 'GPU ready' : 'GPU starting');
+  if (open) parts.push(`${open} job${open > 1 ? 's' : ''} in progress`);
+  if (done) parts.push(`${done} result${done > 1 ? 's' : ''} saved`);
+  $('vSummary').textContent = parts.length ? parts.join(' · ') : 'Video with sound (MiniMax H3) and images (Qwen-Image-2.1). Your own characters with @name.';
 }
 
 async function poll() {
