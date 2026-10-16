@@ -214,7 +214,7 @@ const store = {
 // measured on an RTX 5090 at 768p; character clips use a 4-step model and are faster
 const RENDER_MIN = { 5: 2.2, 10: 6.5, 15: 13 }, RENDER_REF_MIN = { 5: 1.5, 10: 3.7, 15: 7.5 };
 const BOOT_MIN = 8, RESUME_MIN = 2, RATE = 1.0;
-const IMG_SEC = 8, IMG_BOOT_MIN = 6;  // estimate until measured: Qwen-Image-2.1 turbo, 8 steps, ~1 MP, per image
+const IMG_SEC = 4, IMG_BOOT_MIN = 4;  // measured 2026-10-16 on an RTX 5090: 2 images at 1024x1024 in 7.0 s incl. model load; serving 3 min after start
 let mode = (() => { try { return localStorage.getItem('studio-mode') || 'video'; } catch { return 'video'; } })();
 function setMode(m) {
   mode = m; try { localStorage.setItem('studio-mode', m); } catch {}
