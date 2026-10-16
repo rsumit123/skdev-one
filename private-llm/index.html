@@ -198,7 +198,7 @@
 
     <section class="section" id="video">
       <div class="label">Video</div>
-      <a class="card vlink" href="video/">
+      <a class="card vlink" href="/private-llm/video/">
         <div><h3>Video Studio · MiniMax H3 →</h3>
           <p class="muted" id="vSummary">Text to video with sound, 768p, 5–15 s clips. Your own characters with @name.</p></div>
       </a>
@@ -213,7 +213,7 @@
       <div class="label">Connect</div>
       <div class="connect">
         <a class="btn" href="https://chat.skdev.one" target="_blank" rel="noopener">Open WebUI · chat.skdev.one ↗</a>
-        <a class="btn" href="explainer/">How nanochat-d20 works · explainer &amp; PDF</a>
+        <a class="btn" href="/private-llm/explainer/">How nanochat-d20 works · explainer &amp; PDF</a>
         <details class="card" style="margin:0">
           <summary style="color:var(--fg)">Use the Qwen models from opencode (any laptop)</summary>
           <p class="muted">The address never changes between launches, so set this up once per machine. Nanochat is a
@@ -333,7 +333,7 @@ function render(s) {
     $('stats').innerHTML = stats.map(([k, v, cls]) => `<div class="stat ${cls || ''}"><div class="k">${esc(k)}</div><div class="v">${esc(v)}</div></div>`).join('');
 
     const isVideo = !!(m && m.video);
-    const chatUrl = isVideo ? 'video/' : CHAT + (m && m.model ? '/?model=' + encodeURIComponent(m.model) : '');
+    const chatUrl = isVideo ? '/private-llm/video/' : CHAT + (m && m.model ? '/?model=' + encodeURIComponent(m.model) : '');
     [$('chatBtn'), $('dockChat')].forEach(a => { a.href = chatUrl; a.target = isVideo ? '' : '_blank';
       a.classList.toggle('disabled', !isVideo && p !== 'serving');
       a.textContent = isVideo ? 'Open Video Studio' : p === 'serving' ? 'Open chat ↗' : 'Chat opens when ready'; });
