@@ -393,7 +393,7 @@ function renderVideo(s, active, m) {
   if (otherRunning) $('vHint').textContent = `${m ? m.name : s.profile} is using the GPU. Stop it to generate video.`;
   else if (videoActive && p === 'serving') $('vHint').textContent = `GPU is ready: a ${secs} s clip takes ~${Math.ceil(render)} min (≈ ${money(rate * render / 60)}). It shuts down ${(s.profiles.video && s.profiles.video.idle_minutes) || 10} min after the last clip.`;
   else if (videoActive) $('vHint').textContent = `GPU is starting (${dur(s.launched_at ? s.now - s.launched_at : 0)} so far, usually ~${META.video.boot} min). Clips queue up and start as soon as it's ready.`;
-  else $('vHint').textContent = `Starts a GPU (~${META.video.boot} min), then ~${Math.ceil(render)} min per ${secs} s clip. About ${money(rate * (META.video.boot + render + 10) / 60)} for one clip; extra clips in the same session ≈ ${money(rate * render / 60)} each.`;
+  else $('vHint').textContent = `Starts a GPU (~${META.video.boot} min), then ~${Math.ceil(render)} min per ${secs} s clip. About ${money(rate * (META.video.boot + render + 10) / 60)} for one clip (+ up to ~$0.30 download fee on some hosts); extra clips in the same session ≈ ${money(rate * render / 60)} each.`;
 
   const now = s.now;
   const html = jobs.map(j => {
