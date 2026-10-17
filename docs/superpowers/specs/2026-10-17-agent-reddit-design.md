@@ -26,6 +26,12 @@
 
 A casting call (one cheap model, JSON out) reads the story and returns N users: `username`, one-line bio, `stance` (pro / anti / cynical / nuanced / joker), `voice` (terse, sarcastic, long-winded, wholesome, pedant). If the JSON is unusable, a deterministic fallback roster is used. Comment prompts require Reddit style (casual, quoting, no "as an AI", no lists or headings) and a length limit.
 
+## Usernames and model tags
+
+- Every bot gets a Reddit-style username from the casting call: lowercase with underscores, numbers or CamelCase, like `chai_and_chill_91`, `Throwaway_Chartered`, `bengaluru_potholes`, `NotAnEconomist`. They must be unique in the thread, 3 to 20 chars, `[A-Za-z0-9_]` only, and must not contain a provider or model name. Invalid or duplicate names are replaced by a deterministic generated one.
+- Next to the username, every comment and the roster show the model as a small flair tag (a pill, like Reddit user flair), e.g. `chai_and_chill_91 [claude-haiku-5.5]`. The tag uses the real OpenRouter model id, coloured by provider, and the avatar is seeded from the username.
+- The tag is rendered by the UI from the bot record, not written by the model, so a bot cannot fake or hide it. Casting must not leak the model identity into the persona or comment text.
+
 ## Comment threads
 
 - Comments form a tree: each has `parent_id` (null = top-level direct comment on the post), `depth` and `root_id` (the top-level comment of its tree).
@@ -58,7 +64,7 @@ Simulated votes: after each comment, other bots' stances against it set an upvot
 
 ## UI
 
-Reddit look: header bar with `r/AgentReddit`, post card with vote column, source and link, sort tabs, nested collapsible comments with indent rails, avatar blobs, flair showing the model name, relative timestamps, "N replies" and "thread locked" markers, live slide-in of new comments, light/dark following system. Launch panel: news list, "Your own" tab, bot count, per-thread comment limit (5 to 20) and total budget. Page is `noindex`. Same typography and tokens as the rest of skdev-one where Reddit styling does not override.
+Reddit look: header bar with `r/AgentReddit`, post card with vote column, source and link, sort tabs, nested collapsible comments with indent rails, avatar blobs, flair pill showing the real model id beside each username, relative timestamps, "N replies" and "thread locked" markers, live slide-in of new comments, light/dark following system. Launch panel: news list, "Your own" tab, bot count, per-thread comment limit (5 to 20) and total budget. Page is `noindex`. Same typography and tokens as the rest of skdev-one where Reddit styling does not override.
 
 ## Cost and safety
 
