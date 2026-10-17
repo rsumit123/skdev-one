@@ -72,11 +72,11 @@ const PAPERS = { papers: [{ slug: 'indian-express-kolkata-2026-10-17', label: 'T
 const LIVE_20 = Array.from({ length: 20 }, (_, i) => ({ ...NEWS[i % 10], id: `live${i}`, title: `${NEWS[i % 10].title} [${i}]` }));
 
 const BOTS = [
-  { id: 1, username: 'chai_and_chill_91', bio: 'Pune IT guy, mildly cynical about everything.', stance: 'cynical', voice: 'sarcastic', model: 'anthropic/claude-haiku-5.5', provider: 'anthropic', retired: false },
-  { id: 2, username: 'NotAnEconomist', bio: 'Reads RBI minutes for fun.', stance: 'nuanced', voice: 'pedant', model: 'google/gemini-3.5-flash', provider: 'google', retired: false },
-  { id: 3, username: 'bengaluru_potholes', bio: 'Commutes 2 hours a day.', stance: 'anti', voice: 'doomer', model: 'openai/gpt-5.2-luna', provider: 'openai', retired: false },
-  { id: 4, username: 'Throwaway_Chartered', bio: 'CA by day, cricket by night.', stance: 'pro', voice: 'long-winded', model: 'qwen/qwen3.6-flash', provider: 'qwen', retired: false },
-  { id: 5, username: 'uncle_ji_forwards', bio: 'Retired banker with opinions.', stance: 'joker', voice: 'optimistic-uncle', model: 'z-ai/glm-5.1-flash', provider: 'z-ai', retired: false },
+  { id: 1, occupation: 'IT support engineer', age: 29, city: 'Pune', interests: ['home loans', 'memes', 'cricket'], outlook: 'His EMI is the only number he checks every month, so a pause just means another year of waiting.', username: 'chai_and_chill_91', bio: 'Pune IT guy, mildly cynical about everything.', stance: 'cynical', voice: 'sarcastic', model: 'anthropic/claude-haiku-5.5', provider: 'anthropic', retired: false },
+  { id: 2, occupation: 'economics lecturer', age: 41, city: 'Kolkata', interests: ['monetary policy', 'food prices', 'chess', 'old Bengali films'], outlook: 'She thinks the vegetable spike, not the repo rate, is what her students actually feel.', username: 'NotAnEconomist', bio: 'Reads RBI minutes for fun.', stance: 'nuanced', voice: 'pedant', model: 'google/gemini-3.5-flash', provider: 'google', retired: false },
+  { id: 3, occupation: 'delivery rider', age: 24, city: 'Bengaluru', interests: ['two-wheeler loans', 'traffic'], outlook: 'Fuel and rent eat his margin long before interest rates matter.', username: 'bengaluru_potholes', bio: 'Commutes 2 hours a day.', stance: 'anti', voice: 'doomer', model: 'openai/gpt-5.2-luna', provider: 'openai', retired: false },
+  { id: 4, occupation: 'chartered accountant', age: 35, city: 'Ahmedabad', interests: ['tax', 'IPL', 'real estate'], outlook: 'Clients will ask him whether to prepay their loans, again.', username: 'Throwaway_Chartered', bio: 'CA by day, cricket by night.', stance: 'pro', voice: 'long-winded', model: 'qwen/qwen3.6-flash', provider: 'qwen', retired: false },
+  { id: 5, occupation: 'retired bank manager', age: 67, city: 'Lucknow', interests: ['fixed deposits', 'WhatsApp forwards', 'gardening'], outlook: 'His FD interest is his salary now, so he wants rates to stay high.', username: 'uncle_ji_forwards', bio: 'Retired banker with opinions.', stance: 'joker', voice: 'optimistic-uncle', model: 'z-ai/glm-5.1-flash', provider: 'z-ai', retired: false },
   { id: 6, username: 'hostel_maggi', bio: 'Final-year student in Kota.', stance: 'pro', voice: 'student', model: 'xiaomi/mimo-v3-flash', provider: 'xiaomi', retired: true },
 ];
 
@@ -495,6 +495,156 @@ try {
     await ctx.close();
   }
 
+  // ---------------- bot profile cards (desktop)
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'light' });
+    const page = await ctx.newPage();
+    page.on('pageerror', e => errors.push(String(e)));
+    const voteGate = deferred();
+    await mockApi(page, {
+      streams: [
+        () => ({ body: sse([['snapshot', thread('running', BASE_COMMENTS)], ['status', { status: 'running', comment_count: 15 }]]) }),
+        async () => { await voteGate.p; return { body: sse([['vote', { comment_id: 1, score: 112 }], ['status', { status: 'running', comment_count: 15 }]]) }; },
+        () => new Promise(() => {}),
+      ],
+    });
+    await page.goto(`${BASE}?t=${THREAD_ID}&api=${encodeURIComponent(MOCK)}`);
+    await page.waitForSelector('#c15');
+    const dlg = page.locator('.pf-dialog');
+    const statText = k => dlg.locator(`[data-stat="${k}"] strong`).textContent();
+
+    await check('occupation shows in the roster sidebar and (desktop) comment rows', async () => {
+      assert.equal(await page.locator('#side-roster [data-pf="r1"] .roster-occ').textContent(), 'IT support engineer');
+      const occ = page.locator('#c1 > .cm-main > .cm-head .cm-occ');
+      assert.ok(await occ.isVisible());
+      assert.equal(await occ.textContent(), '· IT support engineer');
+      assert.equal(await page.locator('#c15 > .cm-main > .cm-head .cm-occ').count(), 0, 'no occupation, no suffix');
+    });
+    await check('clicking a username in a comment opens the profile card', async () => {
+      await page.locator('#c1 > .cm-main > .cm-head .uname-btn').click();
+      await dlg.waitFor();
+      assert.equal(await dlg.getAttribute('role'), 'dialog');
+      assert.equal(await dlg.getAttribute('aria-modal'), 'true');
+      assert.equal(await dlg.locator('#pf-name').textContent(), 'u/chai_and_chill_91');
+      assert.equal(await dlg.locator('.flair').textContent(), 'anthropic/claude-haiku-5.5');
+      assert.equal(await dlg.locator('.pf-line').textContent(), 'IT support engineer · 29 · Pune');
+      assert.equal(await dlg.locator('.pf-outlook').textContent(), BOTS[0].outlook);
+      assert.deepEqual(await dlg.locator('.pf-chip').allTextContents(), ['home loans', 'memes', 'cricket']);
+      assert.equal(await dlg.locator('.pf-stance').textContent(), 'cynical');
+      assert.equal(await statText('comments'), '2');
+      assert.equal(await statText('karma'), '15');
+      assert.equal(await statText('replies'), '3');
+      assert.match(await statText('cake'), /^5[01]m ago$/);
+      assert.ok((await dlg.locator('.pf-top').textContent()).includes('screensaver'));
+      assert.deepEqual(await dlg.locator('[data-list=recent] [data-comment]').evaluateAll(b => b.map(x => x.dataset.comment)), ['5', '1']);
+      assert.equal(await page.evaluate(() => document.activeElement?.className), 'pf-close');
+    });
+    await check('no horizontal scroll 1440 with profile open', () => noHScroll(page, '1440 profile'));
+    await check('live vote updates karma while the card is open', async () => {
+      voteGate.resolve();
+      await page.waitForFunction(() => document.querySelector('.pf-dialog [data-stat="karma"] strong')?.textContent === '115');
+      assert.ok((await dlg.locator('.pf-top .pf-score').textContent()).includes('112'));
+    });
+    await check('Tab stays trapped inside the card', async () => {
+      for (let i = 0; i < 12; i++) {
+        await page.keyboard.press(i % 4 === 3 ? 'Shift+Tab' : 'Tab');
+        assert.ok(await page.evaluate(() => !!document.activeElement?.closest('.pf-dialog')), `focus escaped on step ${i}`);
+      }
+    });
+    await check('Esc closes the card and returns focus to the username', async () => {
+      await page.keyboard.press('Escape');
+      await page.locator('#profile').waitFor({ state: 'hidden' });
+      assert.equal(await page.evaluate(() => document.activeElement?.dataset.pf), 'c1');
+      assert.equal(await page.evaluate(() => document.documentElement.classList.contains('pf-lock')), false);
+    });
+    await check('roster click opens the card; a recent comment jumps there, expanding its collapsed ancestor', async () => {
+      await page.locator('[data-toggle="1"]').click();
+      assert.equal(await page.locator('#c5').count(), 0);
+      await page.locator('#side-roster [data-pf="r1"]').click();
+      await dlg.waitFor();
+      await dlg.locator('[data-list=recent] [data-comment="5"]').click();
+      await page.locator('#profile').waitFor({ state: 'hidden' });
+      await page.locator('#c5.is-flash').waitFor();
+      assert.equal(await page.getAttribute('[data-toggle="1"]', 'aria-expanded'), 'true');
+      await page.waitForTimeout(700); // smooth scroll
+      const box = await page.locator('#c5').boundingBox();
+      assert.ok(box.y >= 0 && box.y + box.height <= 900, `c5 not in view (y=${box.y})`);
+      assert.equal(await page.evaluate(() => document.activeElement?.dataset.toggle), '5');
+    });
+    await check('reduced card for a bot without occupation; backdrop click closes', async () => {
+      await page.locator('#c15 > .cm-main > .cm-head .uname-btn').click();
+      await dlg.waitFor();
+      assert.equal(await dlg.locator('#pf-name').textContent(), 'u/hostel_maggi');
+      assert.equal(await dlg.locator('.pf-line').count(), 0);
+      assert.equal(await dlg.locator('.pf-outlook').count(), 0);
+      assert.equal(await dlg.locator('.pf-chip').count(), 0);
+      assert.equal(await dlg.locator('.pf-retired').textContent(), 'retired');
+      assert.equal(await dlg.locator('.pf-bio').textContent(), BOTS[5].bio);
+      assert.equal(await statText('comments'), '1');
+      assert.equal(await statText('karma'), '-2');
+      await page.waitForTimeout(350);
+      await page.screenshot({ path: join(SHOTS, 'profile-reduced-1440-light.png'), fullPage: false });
+      await page.mouse.click(60, 450);
+      await page.locator('#profile').waitFor({ state: 'hidden' });
+    });
+    await ctx.close();
+  }
+
+  // ---------------- bot profile as a bottom sheet (360x740)
+  {
+    const ctx = await browser.newContext({ viewport: { width: 360, height: 740 }, colorScheme: 'light', deviceScaleFactor: 2, hasTouch: false });
+    const page = await ctx.newPage();
+    page.on('pageerror', e => errors.push(String(e)));
+    await mockApi(page, { streams: [doneStream] });
+    await page.goto(`${BASE}?t=${THREAD_ID}&api=${encodeURIComponent(MOCK)}`);
+    await page.waitForSelector('#c16');
+    const dlg = page.locator('.pf-dialog');
+    await check('mobile roster strip opens a bottom sheet with a drag handle', async () => {
+      await page.locator('#roster-strip [data-pf="s2"]').click();
+      await dlg.waitFor();
+      await page.waitForTimeout(350);
+      const b = await dlg.boundingBox();
+      assert.ok(b.x === 0 && b.width === 360 && Math.abs(b.y + b.height - 740) <= 1, JSON.stringify(b));
+      assert.ok(await page.locator('.pf-grab').isVisible());
+      assert.equal(await dlg.locator('#pf-name').textContent(), 'u/NotAnEconomist');
+      assert.equal(await page.locator('#c1 > .cm-main > .cm-head .cm-occ').isVisible(), false, 'comment occupation hidden on mobile');
+    });
+    await check('no horizontal scroll 360 with the sheet open', () => noHScroll(page, '360 sheet'));
+    await check('backdrop tap closes the sheet', async () => {
+      await page.mouse.click(180, 30);
+      await page.locator('#profile').waitFor({ state: 'hidden' });
+    });
+    await check('avatar tap opens it and a swipe down on the handle closes it', async () => {
+      await page.locator('#c2 > .cm-main > .cm-head .av-btn').click();
+      await dlg.waitFor();
+      await page.waitForTimeout(350);
+      const g = await page.locator('.pf-grab').boundingBox();
+      const x = g.x + g.width / 2, y = g.y + g.height / 2;
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      for (let i = 1; i <= 8; i++) await page.mouse.move(x, y + i * 30);
+      await page.mouse.up();
+      await page.locator('#profile').waitFor({ state: 'hidden' });
+    });
+    await check('a short drag snaps the sheet back open', async () => {
+      await page.locator('#c2 > .cm-main > .cm-head .uname-btn').click();
+      await dlg.waitFor();
+      await page.waitForTimeout(350);
+      const g = await page.locator('.pf-grab').boundingBox();
+      const x = g.x + g.width / 2, y = g.y + g.height / 2;
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      await page.mouse.move(x, y + 30);
+      await page.mouse.up();
+      await page.waitForTimeout(300);
+      assert.ok(await dlg.isVisible());
+      assert.equal(await dlg.evaluate(d => d.style.transform), '');
+      await page.keyboard.press('Escape');
+      await page.locator('#profile').waitFor({ state: 'hidden' });
+    });
+    await ctx.close();
+  }
+
   // ---------------- error banner + retry
   {
     const ctx = await browser.newContext({ viewport: { width: 768, height: 1024 } });
@@ -575,6 +725,13 @@ try {
       await check(`no horizontal scroll ${w}x${hgt} ${scheme} thread (depth 6 open)`, () => noHScroll(page, `${w} ${scheme} thread`));
       await page.screenshot({ path: join(SHOTS, `thread-${w}-${scheme}.png`), fullPage: false });
       await page.screenshot({ path: join(SHOTS, `thread-${w}-${scheme}-full.png`), fullPage: true });
+      await page.locator('#c2 > .cm-main > .cm-head .uname-btn').click();
+      await page.locator('.pf-dialog').waitFor();
+      await page.waitForTimeout(350);
+      await check(`no horizontal scroll ${w}x${hgt} ${scheme} profile card open`, () => noHScroll(page, `${w} ${scheme} profile`));
+      await page.screenshot({ path: join(SHOTS, `profile-${w}-${scheme}.png`), fullPage: false });
+      await page.keyboard.press('Escape');
+      await page.locator('#profile').waitFor({ state: 'hidden' });
       if (scheme === 'light' || w === 360) {
         await page.locator('[data-toggle="2"]').click();
         await page.locator('[data-toggle="3"]').click();

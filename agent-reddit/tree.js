@@ -169,3 +169,57 @@ export function paperDate(published, now = Date.now()) {
   if (days === 1) return 'yesterday';
   return `${+m[3]} ${MONTHS[+m[2] - 1]}${d.getFullYear() !== today.getFullYear() ? ' ' + m[1] : ''}`;
 }
+
+// ---------------------------------------------------------------- bot profiles
+
+// Per-bot numbers for the profile card, computed from the thread's comment list.
+// replies = comments by *other* bots directly under one of this bot's comments.
+// recent = latest five (comment ids grow over time), newest first.
+export function botStats(comments, botId) {
+  const all = Array.isArray(comments) ? comments : [];
+  const mine = all.filter(c => c && c.bot_id === botId);
+  const ids = new Set(mine.map(c => c.id));
+  let karma = 0;
+  let top = null;
+  let first = null;
+  for (const c of mine) {
+    const s = Number.isFinite(c.score) ? c.score : 0;
+    karma += s;
+    if (!top || s > (top.score || 0) || (s === (top.score || 0) && c.id < top.id)) top = c;
+    const t = Date.parse(c.created_at);
+    if (!Number.isNaN(t) && (first == null || t < Date.parse(first))) first = c.created_at;
+  }
+  const replies = all.filter(c => c && c.parent_id != null && ids.has(c.parent_id) && c.bot_id !== botId).length;
+  const recent = mine.slice().sort((a, b) => b.id - a.id).slice(0, 5);
+  return { count: mine.length, karma, replies, top, first, recent };
+}
+
+// Ids of every ancestor of a comment, nearest parent first. Safe against cycles.
+export function ancestorIds(comments, id) {
+  const byId = new Map((comments || []).map(c => [c.id, c]));
+  const out = [];
+  const seen = new Set([id]);
+  let cur = byId.get(id);
+  while (cur && cur.parent_id != null && !seen.has(cur.parent_id)) {
+    seen.add(cur.parent_id);
+    out.push(cur.parent_id);
+    cur = byId.get(cur.parent_id);
+  }
+  return out;
+}
+
+// "plumber · 34 · Pune", skipping anything missing or malformed.
+export function profileLine(bot) {
+  const str = v => (typeof v === 'string' ? v.trim() : '');
+  const age = Number.isInteger(bot?.age) && bot.age > 0 && bot.age < 130 ? String(bot.age) : '';
+  return [str(bot?.occupation), age, str(bot?.city)].filter(Boolean).join(' · ');
+}
+
+// One-line preview: whitespace collapsed, cut on a word boundary with an ellipsis.
+export function preview(text, max = 140) {
+  const s = String(text ?? '').replace(/\s+/g, ' ').trim();
+  if (s.length <= max) return s;
+  const cut = s.slice(0, max - 1);
+  const sp = cut.lastIndexOf(' ');
+  return (sp > max * 0.6 ? cut.slice(0, sp) : cut).replace(/[\s.,;:!?-]+$/, '') + '…';
+}

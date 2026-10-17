@@ -4,6 +4,7 @@ import {
   buildTree, sortTree, countDescendants, isLocked, relTime,
   upsertComment, applyVote, formatScore, providerColor, avatarSeed,
   mergeItems, nextOffset, paperSource, paperDate,
+  botStats, ancestorIds, profileLine, preview,
 } from './tree.js';
 
 // ---------------------------------------------------------------- config
@@ -286,6 +287,7 @@ const H = {
 
 function route() {
   closeStream();
+  closeProfile(false);
   const t = new URLSearchParams(location.search).get('t');
   if (t && /^[A-Za-z0-9_-]{1,64}$/.test(t)) showThread(t);
   else showHome();
@@ -934,12 +936,13 @@ function renderAll() {
   renderPost();
   renderRoster();
   renderComments();
+  renderProfile();
 }
 
 function scheduleRender(fn = renderComments) {
   if (S.renderQueued) return;
   S.renderQueued = true;
-  requestAnimationFrame(() => { S.renderQueued = false; renderPost(); fn(); });
+  requestAnimationFrame(() => { S.renderQueued = false; renderPost(); fn(); renderProfile(); });
 }
 
 function renderPost() {
@@ -983,16 +986,20 @@ function renderPost() {
 }
 
 function rosterItem(bot, full) {
-  return h(full ? 'li' : 'div', { class: `roster-item${bot.retired ? ' is-retired' : ''}` },
+  const occ = occupationOf(bot);
+  const btn = pfOpener(bot, `${full ? 'r' : 's'}${bot.id}`, `roster-item roster-btn${bot.retired ? ' is-retired' : ''}`,
     avatar(bot.username),
-    h('div', { class: 'roster-text' },
-      h('div', { class: 'roster-name' },
+    h('span', { class: 'roster-text' },
+      h('span', { class: 'roster-name' },
         h('span', { class: 'uname', text: `u/${bot.username}` }),
+        full && occ ? h('span', { class: 'roster-occ', text: occ }) : null,
         bot.retired ? h('span', { class: 'left-tag', text: 'left' }) : null),
-      flair(bot),
-      full && bot.bio ? h('p', { class: 'roster-bio', text: bot.bio }) : null,
+      full ? flair(bot) : h('span', { class: 'roster-sub' }, flair(bot), occ ? h('span', { class: 'roster-occ', text: occ }) : null),
+      full && bot.bio ? h('span', { class: 'roster-bio', text: bot.bio }) : null,
     ),
   );
+  btn.setAttribute('aria-label', `u/${bot.username}${occ ? `, ${occ}` : ''}${bot.retired ? ', left the thread' : ''}. View profile`);
+  return full ? h('li', {}, btn) : btn;
 }
 
 function renderRoster() {
@@ -1058,11 +1065,15 @@ function renderNode(node, level, locked) {
   }, collapsed ? (hidden ? `[+${hidden}]` : '[+]') : '[–]');
 
   const time = relTime(node.created_at);
+  const known = S.bots.has(node.bot_id);
+  const occ = occupationOf(bot);
+  const pfKey = `c${node.id}`;
   const head = h('div', { class: 'cm-head' },
-    avatar(name, 'av-inline'),
+    known ? avatarOpener(bot, pfKey, 'av-inline') : avatar(name, 'av-inline'),
     toggle,
-    h('span', { class: 'uname', text: name }),
+    known ? pfOpener(bot, pfKey, 'uname uname-btn', name) : h('span', { class: 'uname', text: name }),
     flair(bot),
+    occ ? h('span', { class: 'cm-occ', text: `· ${occ}` }) : null,
     collapsed
       ? h('span', { class: 'cm-collapsed-meta' },
         h('span', { text: `· ${plural(node.score, 'point')}` }),
@@ -1077,7 +1088,7 @@ function renderNode(node, level, locked) {
   if (level >= DISPLAY_DEPTH) classes.push('is-flat');
   const wrap = h('div', { class: classes.join(' '), id: `c${node.id}`, 'data-id': node.id, 'data-level': level });
 
-  const gutter = h('div', { class: 'cm-gutter' }, avatar(name, 'av-gutter'));
+  const gutter = h('div', { class: 'cm-gutter' }, known ? avatarOpener(bot, pfKey, 'av-gutter') : avatar(name, 'av-gutter'));
   if (!collapsed) {
     gutter.append(h('button', { class: 'rail', type: 'button', tabindex: '-1', 'aria-hidden': 'true', title: `Collapse ${name}'s comment`, on: { click: () => toggleCollapse(node.id) } }));
   }
@@ -1109,6 +1120,208 @@ function renderNode(node, level, locked) {
     main.append(kids);
   }
   return wrap;
+}
+
+// ---------------------------------------------------------------- bot profiles
+
+// One profile card at a time. P.key names the element that opened it (data-pf),
+// so focus can go back even after a live re-render has replaced that element.
+const P = { botId: null, key: null, trigger: null, root: null, dialog: null, body: null, drag: null };
+const NARROW = matchMedia('(max-width: 639.98px)');
+const STANCE_COLOR = { pro: '#46a508', anti: '#ea0027', nuanced: '#0079d3', cynical: '#787c7e', joker: '#ff4500' };
+const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function pfOpener(bot, key, cls, ...kids) {
+  return h('button', {
+    class: cls, type: 'button', 'data-pf': key, 'aria-haspopup': 'dialog',
+    on: { click: e => { e.stopPropagation(); openProfile(bot.id, key, e.currentTarget); } },
+  }, ...kids);
+}
+
+// Avatar version: mouse/touch shortcut only; the username button next to it is the
+// keyboard and screen-reader path, so this one stays out of the tab order.
+function avatarOpener(bot, key, cls) {
+  return h('button', {
+    class: 'av-btn', type: 'button', tabindex: '-1', 'aria-hidden': 'true', 'data-pf': `${key}a`,
+    on: { click: e => { e.stopPropagation(); openProfile(bot.id, key, document.querySelector(`[data-pf="${CSS.escape(key)}"]`) || e.currentTarget); } },
+  }, avatar(bot.username, cls));
+}
+
+function occupationOf(bot) {
+  return typeof bot?.occupation === 'string' && bot.occupation.trim() ? bot.occupation.trim() : '';
+}
+
+function ensureProfileRoot() {
+  if (P.root) return;
+  const body = h('div', { class: 'pf-body' });
+  const handle = h('div', { class: 'pf-grab', 'aria-hidden': 'true' }, h('span', { class: 'pf-handle' }));
+  const dialog = h('div', { class: 'pf-dialog', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'pf-name', tabindex: '-1' }, handle, body);
+  const backdrop = h('div', { class: 'pf-backdrop', 'aria-hidden': 'true', on: { click: () => closeProfile() } });
+  const root = h('div', { class: 'pf-root', id: 'profile', hidden: true }, backdrop, dialog);
+  root.addEventListener('keydown', profileKeys);
+  // Swipe down to dismiss (bottom sheet): from the handle anywhere, or from the
+  // banner/body when the card is scrolled to the top.
+  dialog.addEventListener('pointerdown', e => {
+    if (!NARROW.matches || e.button !== 0) return;
+    const fromHandle = handle.contains(e.target);
+    if (!fromHandle && (body.scrollTop > 0 || !e.target.closest('.pf-banner, .pf-head'))) return;
+    P.drag = { y: e.clientY, dy: 0, id: e.pointerId };
+    dialog.setPointerCapture?.(e.pointerId);
+  });
+  dialog.addEventListener('pointermove', e => {
+    if (!P.drag || e.pointerId !== P.drag.id) return;
+    P.drag.dy = Math.max(0, e.clientY - P.drag.y);
+    dialog.style.transition = 'none';
+    dialog.style.transform = `translateY(${P.drag.dy}px)`;
+  });
+  const endDrag = e => {
+    if (!P.drag || e.pointerId !== P.drag.id) return;
+    const { dy } = P.drag;
+    P.drag = null;
+    dialog.style.transition = '';
+    dialog.style.transform = '';
+    if (dy > Math.min(120, dialog.offsetHeight * 0.25)) closeProfile();
+  };
+  dialog.addEventListener('pointerup', endDrag);
+  dialog.addEventListener('pointercancel', endDrag);
+  document.body.append(root);
+  Object.assign(P, { root, dialog, body });
+}
+
+function openProfile(botId, key, trigger) {
+  if (!S.bots.has(botId)) return;
+  ensureProfileRoot();
+  const wasOpen = P.botId != null;
+  P.botId = botId;
+  P.key = key;
+  if (!wasOpen) P.trigger = trigger || null;
+  P.root.hidden = false;
+  document.documentElement.classList.add('pf-lock');
+  P.body.scrollTop = 0;
+  renderProfile();
+  P.root.classList.remove('is-in');
+  void P.root.offsetWidth; // restart the entrance animation
+  P.root.classList.add('is-in');
+  P.dialog.querySelector('.pf-close')?.focus({ preventScroll: true });
+}
+
+function closeProfile(returnFocus = true) {
+  if (P.botId == null) return;
+  const key = P.key;
+  const trigger = P.trigger;
+  P.botId = null; P.key = null; P.trigger = null; P.drag = null;
+  P.root.hidden = true;
+  P.root.classList.remove('is-in');
+  P.dialog.style.transform = '';
+  document.documentElement.classList.remove('pf-lock');
+  if (!returnFocus) return;
+  const target = trigger?.isConnected ? trigger : key ? document.querySelector(`[data-pf="${CSS.escape(key)}"]`) : null;
+  target?.focus({ preventScroll: true });
+}
+
+function profileKeys(e) {
+  if (P.botId == null) return;
+  if (e.key === 'Escape') { e.preventDefault(); closeProfile(); return; }
+  if (e.key !== 'Tab') return;
+  const items = [...P.dialog.querySelectorAll('button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])')].filter(el => el.offsetParent !== null);
+  if (!items.length) { e.preventDefault(); return; }
+  const first = items[0];
+  const last = items[items.length - 1];
+  if (e.shiftKey && (document.activeElement === first || !P.dialog.contains(document.activeElement))) { e.preventDefault(); last.focus(); }
+  else if (!e.shiftKey && (document.activeElement === last || !P.dialog.contains(document.activeElement))) { e.preventDefault(); first.focus(); }
+}
+// Focus that escapes the dialog (e.g. a click on the page behind in some browsers) is pulled back.
+document.addEventListener('focusin', e => {
+  if (P.botId != null && P.dialog && !P.dialog.contains(e.target)) P.dialog.querySelector('.pf-close')?.focus({ preventScroll: true });
+});
+
+function jumpToComment(id) {
+  closeProfile(false);
+  for (const a of ancestorIds(S.comments, id)) { S.collapsed.delete(a); S.continued.add(a); }
+  S.collapsed.delete(id);
+  renderComments();
+  const el = document.getElementById(`c${id}`);
+  if (!el) return;
+  el.scrollIntoView({ block: 'center', behavior: reducedMotion() ? 'auto' : 'smooth' });
+  el.classList.remove('is-flash');
+  void el.offsetWidth;
+  el.classList.add('is-flash');
+  setTimeout(() => el.classList.remove('is-flash'), 2400);
+  el.querySelector(`[data-toggle="${id}"]`)?.focus({ preventScroll: true });
+}
+
+function commentRow(c, cls) {
+  const time = relTime(c.created_at);
+  return h('li', {}, h('button', {
+    class: `pf-cm ${cls || ''}`.trim(), type: 'button', 'data-k': `rc${c.id}`, 'data-comment': c.id,
+    on: { click: () => jumpToComment(c.id) },
+  },
+  h('span', { class: 'pf-cm-text', text: preview(String(c.text ?? '').replace(/^\s*>+\s?/gm, ''), 140) || '(empty)' }),
+  h('span', { class: 'pf-cm-meta' },
+    h('span', { class: `pf-score${c.score < 0 ? ' neg' : ''}` }, ICONS.up(), formatScore(c.score ?? 0)),
+    h('span', { text: Math.abs(c.score ?? 0) === 1 ? 'point' : 'points' }),
+    time ? h('span', { text: `· ${time === 'just now' ? time : time + ' ago'}` }) : null,
+    h('span', { class: 'pf-go', 'aria-hidden': 'true', text: 'View →' }),
+  )));
+}
+
+function renderProfile() {
+  if (P.botId == null || !P.root) return;
+  const bot = S.bots.get(P.botId);
+  if (!bot || S.view !== 'thread') { closeProfile(false); return; }
+  const hadFocus = P.dialog.contains(document.activeElement);
+  const focusKey = hadFocus ? document.activeElement.dataset.k : null;
+  const scroll = P.body.scrollTop;
+  const st = botStats(S.comments, bot.id);
+  const { hue } = avatarSeed(bot.username);
+  const line = profileLine(bot);
+  const interests = (Array.isArray(bot.interests) ? bot.interests : []).filter(x => typeof x === 'string' && x.trim()).slice(0, 6);
+  const outlook = typeof bot.outlook === 'string' ? bot.outlook.trim() : '';
+  const stance = typeof bot.stance === 'string' ? bot.stance.trim() : '';
+  const voice = typeof bot.voice === 'string' ? bot.voice.trim().replace(/-/g, ' ') : '';
+  const cake = st.first ? relTime(st.first) : '';
+  const stat = (k, label, value, cls) => h('div', { class: `pf-stat ${cls || ''}`.trim(), 'data-stat': k },
+    h('strong', { text: value }), h('span', { text: label }));
+  const section = (title, ...kids) => h('section', { class: 'pf-sec' }, h('h3', { class: 'pf-h', text: title }), ...kids);
+
+  const fl = flair(bot);
+  fl.classList.add('flair-full');
+
+  P.body.replaceChildren(
+    h('div', { class: 'pf-banner', vars: { '--hue': String(hue) } },
+      h('button', { class: 'pf-close', type: 'button', 'aria-label': 'Close profile', 'data-k': 'close', on: { click: () => closeProfile() } },
+        svg('0 0 20 20', [['path', { d: 'M5 5l10 10M15 5 5 15', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round' }]], 'ic'))),
+    h('div', { class: 'pf-head' },
+      avatar(bot.username, 'pf-av'),
+      h('div', { class: 'pf-id' },
+        h('h2', { class: 'pf-name', id: 'pf-name', text: `u/${bot.username}` }),
+        h('div', { class: 'pf-tags' }, fl, bot.retired ? h('span', { class: 'left-tag pf-retired', text: 'retired' }) : null),
+      ),
+    ),
+    h('div', { class: 'pf-main' },
+      line ? h('p', { class: 'pf-line', text: line }) : null,
+      bot.bio ? h('p', { class: 'pf-bio', text: bot.bio }) : null,
+      stance || voice ? h('div', { class: 'pf-badges' },
+        stance ? h('span', { class: 'mpill pf-stance', vars: { '--pc': STANCE_COLOR[stance.toLowerCase()] || '#787c7e' }, text: stance }) : null,
+        voice ? h('span', { class: 'pf-voice' }, h('span', { class: 'pf-voice-k', text: 'voice' }), h('span', { text: voice })) : null,
+      ) : null,
+      h('div', { class: 'pf-stats', 'aria-label': 'Stats in this thread' },
+        stat('karma', 'Karma', formatScore(st.karma), st.karma < 0 ? 'neg' : ''),
+        stat('comments', st.count === 1 ? 'Comment' : 'Comments', String(st.count)),
+        stat('replies', st.replies === 1 ? 'Reply received' : 'Replies received', String(st.replies)),
+        stat('cake', 'Cake day', cake ? (cake === 'just now' ? cake : `${cake} ago`) : '–'),
+      ),
+      outlook ? section('Take on this story', h('blockquote', { class: 'pf-outlook' }, h('p', { text: outlook }))) : null,
+      interests.length ? section('Interests', h('ul', { class: 'pf-chips' }, interests.map(t => h('li', { class: 'pf-chip', text: t.trim() })))) : null,
+      st.top && st.count > 1 ? section('Top comment', h('ul', { class: 'pf-list' }, commentRow(st.top, 'pf-top'))) : null,
+      section('Recent comments', st.recent.length
+        ? h('ul', { class: 'pf-list', 'data-list': 'recent' }, st.recent.map(c => commentRow(c)))
+        : h('p', { class: 'pf-empty', text: S.thread?.status === 'running' || S.thread?.status === 'casting' ? 'No comments yet. They may still chime in.' : 'No comments in this thread.' })),
+    ),
+  );
+  P.body.scrollTop = scroll;
+  if (focusKey) P.body.querySelector(`[data-k="${CSS.escape(focusKey)}"]`)?.focus({ preventScroll: true });
+  if (hadFocus && !P.dialog.contains(document.activeElement)) P.dialog.querySelector('.pf-close')?.focus({ preventScroll: true });
 }
 
 // ---------------------------------------------------------------- stream
@@ -1217,6 +1430,6 @@ async function onStreamClosed(id) {
 }
 
 // keep relative times fresh
-setInterval(() => { if (S.view === 'thread' && S.thread) { renderPost(); renderComments(); } }, 60000);
+setInterval(() => { if (S.view === 'thread' && S.thread) { renderPost(); renderComments(); renderProfile(); } }, 60000);
 
 route();

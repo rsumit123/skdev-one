@@ -4,6 +4,7 @@ import {
   buildTree, sortTree, countDescendants, hiddenCount, isLocked, relTime,
   upsertComment, applyVote, formatScore, providerColor, avatarSeed,
   mergeItems, nextOffset, paperSource, paperDate,
+  botStats, ancestorIds, profileLine, preview,
 } from './tree.js';
 
 const c = (id, parent_id, score = 1, extra = {}) => ({
@@ -187,4 +188,55 @@ test('paperDate: today, yesterday, short date, timestamps', () => {
   assert.equal(paperDate('2025-12-31', now), '31 Dec 2025');
   assert.equal(paperDate(new Date(now - 2 * 3600e3).toISOString(), now), '2h');
   assert.equal(paperDate(null, now), '');
+});
+
+test('botStats: count, karma, replies from others, top, first, recent', () => {
+  const at = m => `2026-10-17T10:${String(m).padStart(2, '0')}:00Z`;
+  const cs = [
+    { id: 1, bot_id: 1, parent_id: null, score: 12, created_at: at(5) },
+    { id: 2, bot_id: 2, parent_id: 1, score: 3, created_at: at(6) },
+    { id: 3, bot_id: 1, parent_id: 2, score: 12, created_at: at(7) },
+    { id: 4, bot_id: 1, parent_id: 3, score: -4, created_at: at(8) }, // self-reply: not a reply received
+    { id: 5, bot_id: 3, parent_id: 3, score: 1, created_at: at(9) },
+    { id: 6, bot_id: 3, parent_id: 4, score: 1, created_at: at(10) },
+  ];
+  const frozen = JSON.stringify(cs);
+  const s = botStats(cs, 1);
+  assert.equal(s.count, 3);
+  assert.equal(s.karma, 20);
+  assert.equal(s.replies, 3);
+  assert.equal(s.top.id, 1, 'ties go to the earlier comment');
+  assert.equal(s.first, at(5));
+  assert.deepEqual(s.recent.map(c => c.id), [4, 3, 1]);
+  assert.equal(JSON.stringify(cs), frozen);
+  const none = botStats(cs, 99);
+  assert.deepEqual(none, { count: 0, karma: 0, replies: 0, top: null, first: null, recent: [] });
+  assert.equal(botStats(undefined, 1).count, 0);
+  const many = Array.from({ length: 8 }, (_, i) => ({ id: i + 1, bot_id: 7, parent_id: null, score: 0, created_at: at(i) }));
+  assert.deepEqual(botStats(many, 7).recent.map(c => c.id), [8, 7, 6, 5, 4]);
+});
+
+test('ancestorIds walks to the root and survives cycles', () => {
+  const cs = [{ id: 1, parent_id: null }, { id: 2, parent_id: 1 }, { id: 3, parent_id: 2 }, { id: 9, parent_id: 10 }, { id: 10, parent_id: 9 }];
+  assert.deepEqual(ancestorIds(cs, 3), [2, 1]);
+  assert.deepEqual(ancestorIds(cs, 1), []);
+  assert.deepEqual(ancestorIds(cs, 42), []);
+  assert.deepEqual(ancestorIds(cs, 9), [10]);
+});
+
+test('profileLine skips missing parts', () => {
+  assert.equal(profileLine({ occupation: 'plumber', age: 34, city: 'Pune' }), 'plumber · 34 · Pune');
+  assert.equal(profileLine({ occupation: ' plumber ', age: null, city: 'Pune' }), 'plumber · Pune');
+  assert.equal(profileLine({ age: 61 }), '61');
+  assert.equal(profileLine({ age: '34', city: '' }), '');
+  assert.equal(profileLine(undefined), '');
+});
+
+test('preview collapses whitespace and cuts on a word boundary', () => {
+  assert.equal(preview('short\n\n text'), 'short text');
+  const long = 'word '.repeat(60);
+  const p = preview(long, 140);
+  assert.ok(p.length <= 140 && p.endsWith('…') && !p.includes('  '));
+  assert.equal(preview('x'.repeat(200), 10), 'xxxxxxxxx…');
+  assert.equal(preview(null), '');
 });
