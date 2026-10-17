@@ -43,6 +43,34 @@ const NEWS = Array.from({ length: 10 }, (_, i) => ({
   summary: 'Officials said the decision follows weeks of consultation, with critics arguing the timeline is unrealistic and supporters calling it overdue.',
 }));
 
+// Today's paper: 30 stories (17 politics, 13 economy), paged 12 at a time.
+const PAPER_TITLES = [
+  'Opposition walks out as Lok Sabha passes the delimitation amendment by voice vote',
+  'GST council trims rates on 40 items, states seek compensation for the shortfall',
+  'Election Commission orders recount in two Bihar assembly seats after EVM mismatch',
+  'Rupee slips past 87 against the dollar as foreign investors pull out of equities',
+  'Supreme Court reserves verdict on governors sitting on state bills indefinitely',
+  'Why the RBI is quietly letting bank credit growth cool: an explainer',
+  'Kolkata civic polls: ruling party sweeps wards, opposition alleges booth capture',
+  'Retail inflation eases to 3.1% on cheaper vegetables, core stays sticky',
+];
+const PAPER = Array.from({ length: 30 }, (_, i) => {
+  const section = i % 7 === 3 || i % 2 === 1 ? 'economy' : 'politics';
+  return {
+    id: `p${String(i).padStart(3, '0')}`,
+    title: `${PAPER_TITLES[i % PAPER_TITLES.length]}${i >= PAPER_TITLES.length ? ` (${i})` : ''}`,
+    source: 'The Indian Express', link: null, published: new Date(now).toLocaleDateString('en-CA'),
+    summary: 'The move drew sharp reactions across party lines, with officials defending the timing while critics said the fine print leaves several questions unanswered for states and taxpayers alike.',
+    body: `Story ${i} opening paragraph. The government said on Thursday that the measure would be rolled out in phases, beginning with the larger states.\n\nOfficials familiar with the discussions said the finance ministry had raised concerns about the revenue impact, which could run into several thousand crore in the first year. <script>alert(1)</script>`,
+    section, kind: ['news', 'news', 'analysis', 'news', 'opinion'][i % 5], page: 1 + (i % 14),
+    byline: i % 3 === 0 ? null : ['Liz Mathew', 'Aanchal Magazine', 'Express News Service'][i % 3],
+    dateline: i % 4 === 0 ? null : ['New Delhi', 'Kolkata', 'Mumbai', 'Patna'][i % 4],
+  };
+});
+const PAPER_COUNTS = { politics: PAPER.filter(p => p.section === 'politics').length, economy: PAPER.filter(p => p.section === 'economy').length, total: PAPER.length };
+const PAPERS = { papers: [{ slug: 'indian-express-kolkata-2026-10-17', label: 'The Indian Express, Kolkata, 17 Oct 2026', source: 'The Indian Express', date: '2026-10-17', counts: PAPER_COUNTS }] };
+const LIVE_20 = Array.from({ length: 20 }, (_, i) => ({ ...NEWS[i % 10], id: `live${i}`, title: `${NEWS[i % 10].title} [${i}]` }));
+
 const BOTS = [
   { id: 1, username: 'chai_and_chill_91', bio: 'Pune IT guy, mildly cynical about everything.', stance: 'cynical', voice: 'sarcastic', model: 'anthropic/claude-haiku-5.5', provider: 'anthropic', retired: false },
   { id: 2, username: 'NotAnEconomist', bio: 'Reads RBI minutes for fun.', stance: 'nuanced', voice: 'pedant', model: 'google/gemini-3.5-flash', provider: 'google', retired: false },
@@ -91,15 +119,30 @@ const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers
 function deferred() { let resolve; const p = new Promise(r => { resolve = r; }); return { p, resolve }; }
 
 // Installs API mocks. `streams` is a list of handlers; call n uses streams[min(n, len-1)].
-async function mockApi(page, { streams, threadGet = () => ({ status: 200, body: thread('running', BASE_COMMENTS) }), down = false } = {}) {
-  const st = { streamCalls: 0, posts: [] };
+// /reddit/news is paged per the API contract; `newsHook(q, n)` may delay a request or
+// return { status } to fail it. Every news request is recorded in st.news as { feed, offset, limit, section }.
+async function mockApi(page, { streams, threadGet = () => ({ status: 200, body: thread('running', BASE_COMMENTS) }), down = false,
+  papers = PAPERS, paperItems = PAPER, liveItems = NEWS, newsHook = null } = {}) {
+  const st = { streamCalls: 0, posts: [], news: [] };
   await page.route(`${MOCK}/**`, async route => {
     const req = route.request();
     const url = new URL(req.url());
     if (down) return route.abort('connectionrefused');
     if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: CORS });
     const json = (status, body) => route.fulfill({ status, headers: CORS, contentType: 'application/json', body: JSON.stringify(body) });
-    if (url.pathname === '/reddit/news') return json(200, { cached_age_s: 120, items: NEWS });
+    if (url.pathname === '/reddit/papers') return json(200, papers);
+    if (url.pathname === '/reddit/news') {
+      const sp = url.searchParams;
+      const q = { feed: sp.get('feed'), offset: Number(sp.get('offset')), limit: Number(sp.get('limit')), section: sp.get('section') };
+      const n = st.news.push(q) - 1;
+      if (newsHook) { const r = await newsHook(q, n); if (r?.status) return json(r.status, { detail: 'boom' }); }
+      const isPaper = q.feed === 'paper';
+      const all = isPaper ? paperItems.filter(it => !q.section || it.section === q.section) : liveItems;
+      const items = all.slice(q.offset, q.offset + q.limit);
+      const next = q.offset + q.limit < all.length ? q.offset + q.limit : null;
+      return json(200, { cached_age_s: 120, items, total: all.length, next_offset: next, feed: isPaper ? 'paper' : 'live',
+        paper: isPaper ? { slug: papers.papers[0]?.slug, label: papers.papers[0]?.label } : null });
+    }
     if (url.pathname === '/reddit/threads' && req.method() === 'POST') { st.posts.push(req.postDataJSON()); return json(201, { id: THREAD_ID }); }
     if (url.pathname === '/reddit/threads') return json(200, RECENT);
     if (url.pathname.endsWith('/stream')) {
@@ -151,6 +194,7 @@ try {
       assert.equal(await page.getAttribute('meta[name=robots]', 'content'), 'noindex, nofollow');
     });
     await check('10 news cards render', async () => {
+      await page.locator('#tab-news').click();
       await page.waitForSelector('.news-card');
       assert.equal(await page.locator('.news-card').count(), 10);
     });
@@ -260,6 +304,197 @@ try {
     await ctx.close();
   }
 
+  // ---------------- today's paper: default tab, infinite scroll, excerpt, launch (360x740)
+  {
+    const ctx = await browser.newContext({ viewport: { width: 360, height: 740 }, colorScheme: 'light', deviceScaleFactor: 2 });
+    const page = await ctx.newPage();
+    page.on('pageerror', e => errors.push(String(e)));
+    const page2 = deferred();
+    const PAPER_SRC = 'The Indian Express (print, p. 2)';
+    const st = await mockApi(page, {
+      newsHook: async q => { if (q.feed === 'paper' && q.offset === 12 && !q.section) await page2.p; },
+      streams: [() => ({ body: sse([['snapshot', { ...thread('done', BASE_COMMENTS), headline: PAPER[1].title, body: PAPER[1].body, source: PAPER_SRC, link: null }]]) })],
+    });
+    await page.goto(`${BASE}?api=${encodeURIComponent(MOCK)}`);
+    const cards = () => page.locator('.paper-card').count();
+
+    await check("Today's paper is the default tab, with label, count and section chips", async () => {
+      await page.waitForSelector('.paper-card');
+      assert.deepEqual(await page.locator('.tabs .tab').allTextContents(), ["Today's paper", 'Live India news', 'Your own']);
+      assert.equal(await page.getAttribute('#tab-paper', 'aria-selected'), 'true');
+      assert.equal(await page.locator('.paper-label').textContent(), 'The Indian Express, Kolkata, 17 Oct 2026');
+      assert.ok((await page.locator('.feed-head .feed-meta').textContent()).includes('30 stories'));
+      assert.deepEqual(await page.locator('.fchip').allTextContents(), ['All30', `Politics${PAPER_COUNTS.politics}`, `Economy${PAPER_COUNTS.economy}`]);
+      assert.equal(await page.getAttribute('.fchip[data-section=all]', 'aria-pressed'), 'true');
+    });
+    await check('first page shows exactly 12 paper cards from offset 0', async () => {
+      assert.equal(await cards(), 12);
+      assert.deepEqual(st.news[0], { feed: 'paper', offset: 0, limit: 12, section: null });
+    });
+    await check('paper card meta: source, section and kind pills, page, date, byline; no link', async () => {
+      const meta = await page.locator('.paper-card').nth(0).locator('.post-meta').textContent();
+      for (const bit of ['The Indian Express', 'Politics', 'p. 1', 'today']) assert.ok(meta.includes(bit), `meta "${meta}" lacks ${bit}`);
+      assert.equal(await page.locator('.paper-card').nth(2).locator('.kind-pill').textContent(), 'Analysis');
+      assert.equal(await page.locator('.paper-card').nth(1).locator('.byline').textContent(), 'Aanchal Magazine · Kolkata');
+      assert.equal(await page.locator('.paper-card a').count(), 0);
+    });
+    await check('Read excerpt shows the full body as text without picking the card', async () => {
+      const card = page.locator('.paper-card').nth(0);
+      assert.ok(await card.locator('.excerpt').isHidden());
+      await card.locator('.excerpt-toggle').click();
+      assert.ok(await card.locator('.excerpt').isVisible());
+      assert.equal(await card.locator('.excerpt-toggle').getAttribute('aria-expanded'), 'true');
+      assert.ok((await card.locator('.excerpt').textContent()).includes('<script>alert(1)</script>'));
+      assert.equal(await card.locator('.excerpt script').count(), 0);
+      assert.equal(await page.locator('.news-card.is-selected').count(), 0);
+      await page.screenshot({ path: join(SHOTS, 'paper-excerpt-360-light.png'), fullPage: false });
+      await card.locator('.excerpt-toggle').click();
+      assert.ok(await card.locator('.excerpt').isHidden());
+    });
+    await check('selecting a paper story shows its headline in the launch panel', async () => {
+      await page.locator('.paper-card').nth(1).locator('.post-title').click();
+      assert.equal(await page.locator('.news-card.is-selected').getAttribute('data-id'), 'p001');
+      assert.equal(await page.locator('#sel-title').textContent(), PAPER[1].title);
+      assert.equal(await page.locator('#launch-btn').isDisabled(), false);
+    });
+    await check('scrolling to the bottom requests offset 12 and shows a loading row', async () => {
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      await page.locator('.feed-loading').waitFor();
+      assert.ok((await page.locator('.feed-loading').textContent()).includes('Loading more stories'));
+      assert.deepEqual(st.news[1], { feed: 'paper', offset: 12, limit: 12, section: null });
+      assert.equal(st.news.length, 2, 'no duplicate request while one is in flight');
+      await page.locator('.feed-foot').scrollIntoViewIfNeeded();
+      await page.evaluate(() => window.scrollBy(0, 150));
+      await page.screenshot({ path: join(SHOTS, 'paper-loading-360-light.png'), fullPage: false });
+      page2.resolve();
+      await page.waitForFunction(() => document.querySelectorAll('.paper-card').length === 24);
+    });
+    await check('keeps paging to the end: offsets 0/12/24, exactly 30 unique cards, caught-up row', async () => {
+      for (let i = 0; i < 20 && !(await page.locator('.feed-end').count()); i++) {
+        await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+        await page.waitForTimeout(150);
+      }
+      await page.locator('.feed-end').waitFor();
+      assert.ok((await page.locator('.feed-end').textContent()).includes("You're all caught up"));
+      const ids = await page.locator('.paper-card').evaluateAll(cs => cs.map(c => c.dataset.id));
+      assert.equal(ids.length, 30);
+      assert.equal(new Set(ids).size, 30);
+      assert.deepEqual(ids, PAPER.map(p => p.id));
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      await page.waitForTimeout(400);
+      assert.deepEqual(st.news.map(q => q.offset), [0, 12, 24]);
+    });
+    await check('selection survives paging (one selected card, still p001)', async () => {
+      const sel = await page.locator('.news-card.is-selected').evaluateAll(cs => cs.map(c => c.dataset.id));
+      assert.deepEqual(sel, ['p001']);
+      assert.equal(await page.locator('#sel-title').textContent(), PAPER[1].title);
+    });
+    await check('no horizontal scroll 360 paper feed fully loaded', () => noHScroll(page, '360 paper'));
+    await page.screenshot({ path: join(SHOTS, 'paper-end-360-light.png'), fullPage: false });
+    await check('launching a paper story posts its full body and print source', async () => {
+      await page.locator('#launch-btn').click();
+      await page.waitForURL(u => new URL(u).searchParams.get('t') === THREAD_ID);
+      assert.equal(st.posts.length, 1);
+      const { headline, body, source, link } = st.posts[0];
+      assert.deepEqual({ headline, body, source, link }, { headline: PAPER[1].title, body: PAPER[1].body, source: PAPER_SRC, link: null });
+    });
+    await check('thread post shows the print source sensibly', async () => {
+      await page.locator('.post-full .post-title').waitFor();
+      const meta = await page.locator('.post-full .post-meta').textContent();
+      assert.ok(meta.includes('Posted by u/The_Indian_Express') && meta.includes('print, p. 2'), meta);
+      assert.equal(await page.locator('.post-full .post-link').count(), 0);
+      assert.ok((await page.locator('.post-full .post-text').textContent()).includes('Story 1 opening paragraph'));
+    });
+    await page.screenshot({ path: join(SHOTS, 'thread-paper-360-light.png'), fullPage: false });
+    await ctx.close();
+  }
+
+  // ---------------- section chips, stale responses, failed page + Retry (768x1024 dark)
+  {
+    const ctx = await browser.newContext({ viewport: { width: 768, height: 1024 }, colorScheme: 'dark' });
+    const page = await ctx.newPage();
+    page.on('pageerror', e => errors.push(String(e)));
+    let holdPolitics = null;
+    let failNext = true;
+    const st = await mockApi(page, {
+      streams: [doneStream],
+      newsHook: async q => {
+        if (q.section === 'politics' && holdPolitics) await holdPolitics.p;
+        if (q.feed === 'paper' && !q.section && q.offset === 12 && failNext) { failNext = false; return { status: 500 }; }
+      },
+    });
+    await page.goto(`${BASE}?api=${encodeURIComponent(MOCK)}`);
+    await page.waitForSelector('.paper-card');
+    const sections = () => page.locator('.paper-card').evaluateAll(cs => cs.map(c => c.dataset.section));
+    await check('section chip refetches from offset 0 with the section param', async () => {
+      await page.locator('.fchip[data-section=economy]').click();
+      await page.waitForFunction(() => document.querySelector('.paper-card')?.dataset.section === 'economy');
+      const q = st.news.find(x => x.section === 'economy');
+      assert.deepEqual(q, { feed: 'paper', offset: 0, limit: 12, section: 'economy' });
+      const secs = await sections();
+      assert.ok(secs.length >= 12 && secs.every(x => x === 'economy'), String(secs));
+      assert.equal(await page.getAttribute('.fchip[data-section=economy]', 'aria-pressed'), 'true');
+      assert.equal(await page.getAttribute('.fchip[data-section=all]', 'aria-pressed'), 'false');
+      assert.ok((await page.locator('.feed-head .feed-meta').textContent()).includes(`${PAPER_COUNTS.economy} stories`));
+    });
+    await check('a slow response for an abandoned chip is discarded', async () => {
+      holdPolitics = deferred();
+      await page.locator('.fchip[data-section=politics]').click();
+      await page.waitForFunction(() => document.querySelector('.fchip[data-section=politics]')?.getAttribute('aria-pressed') === 'true');
+      for (let i = 0; i < 50 && !st.news.some(x => x.section === 'politics'); i++) await page.waitForTimeout(20);
+      await page.locator('.fchip[data-section=all]').click();
+      await page.waitForFunction(() => document.querySelectorAll('.paper-card').length === 12);
+      holdPolitics.resolve();
+      await page.waitForTimeout(500);
+      const ids = await page.locator('.paper-card').evaluateAll(cs => cs.map(c => c.dataset.id));
+      assert.deepEqual(ids, PAPER.slice(0, 12).map(p => p.id));
+      assert.equal(await page.getAttribute('.fchip[data-section=all]', 'aria-pressed'), 'true');
+    });
+    await check('a failed page shows "Couldn\'t load more · Retry" and Retry loads it', async () => {
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      await page.locator('.feed-err').waitFor();
+      assert.ok((await page.locator('.feed-err').textContent()).includes("Couldn't load more"));
+      assert.equal(await page.locator('.paper-card').count(), 12);
+      await page.screenshot({ path: join(SHOTS, 'paper-error-768-dark.png'), fullPage: false });
+      await page.locator('.feed-err .feed-retry').click();
+      await page.waitForFunction(() => document.querySelectorAll('.paper-card').length === 24);
+      assert.equal(await page.locator('.feed-err').count(), 0);
+      const ids = await page.locator('.paper-card').evaluateAll(cs => cs.map(c => c.dataset.id));
+      assert.equal(new Set(ids).size, 24);
+    });
+    await ctx.close();
+  }
+
+  // ---------------- live tab pages too; no papers -> live is the default (1440x900)
+  {
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: 'light' });
+    const page = await ctx.newPage();
+    page.on('pageerror', e => errors.push(String(e)));
+    const live2 = deferred();
+    const st = await mockApi(page, {
+      streams: [doneStream], papers: { papers: [] }, liveItems: LIVE_20,
+      newsHook: async q => { if (q.feed === 'live' && q.offset === 12) await live2.p; },
+    });
+    await page.goto(`${BASE}?api=${encodeURIComponent(MOCK)}`);
+    await check('with no paper today, live news is the default and the paper tab is hidden', async () => {
+      await page.waitForSelector('.news-card');
+      assert.equal(await page.locator('#tab-paper').count(), 0);
+      assert.equal(await page.getAttribute('#tab-news', 'aria-selected'), 'true');
+      assert.equal(st.news.some(q => q.feed === 'paper'), false);
+    });
+    await check('live tab pages with offset/limit and ends caught up', async () => {
+      assert.equal(await page.locator('.news-card').count(), 12);
+      assert.deepEqual(st.news[0], { feed: 'live', offset: 0, limit: 12, section: null });
+      await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+      await page.locator('.feed-loading').waitFor();
+      live2.resolve();
+      await page.locator('.feed-end').waitFor();
+      assert.equal(await page.locator('.news-card').count(), 20);
+      assert.deepEqual(st.news.map(q => [q.feed, q.offset]), [['live', 0], ['live', 12]]);
+    });
+    await ctx.close();
+  }
+
   // ---------------- error banner + retry
   {
     const ctx = await browser.newContext({ viewport: { width: 768, height: 1024 } });
@@ -311,12 +546,20 @@ try {
       page.on('pageerror', e => errors.push(String(e)));
       await mockApi(page, { streams: [() => ({ body: sse([['snapshot', thread('running', BASE_COMMENTS)], ['comment', LIVE_16], ['comment', LIVE_17], ['status', { status: 'running', comment_count: 17 }]]) }), async () => new Promise(() => {})] });
       await page.goto(`${BASE}?api=${encodeURIComponent(MOCK)}`);
-      await page.waitForSelector('.news-card');
+      await page.waitForSelector('.paper-card');
       await page.locator('.news-card').nth(1).click();
       await page.evaluate(() => document.fonts.ready);
       await check(`no horizontal scroll ${w}x${hgt} ${scheme} home`, () => noHScroll(page, `${w} ${scheme} home`));
       await page.screenshot({ path: join(SHOTS, `home-${w}-${scheme}.png`), fullPage: false });
       await page.screenshot({ path: join(SHOTS, `home-${w}-${scheme}-full.png`), fullPage: true });
+      if (scheme === 'light' || w === 360) {
+        await page.locator('.paper-card').nth(1).locator('.excerpt-toggle').click();
+        await page.screenshot({ path: join(SHOTS, `home-excerpt-${w}-${scheme}.png`), fullPage: false });
+        await page.locator('#tab-news').click();
+        await page.waitForSelector('.news-card:not(.paper-card)');
+        await page.screenshot({ path: join(SHOTS, `home-live-${w}-${scheme}.png`), fullPage: false });
+        await page.locator('#tab-paper').click();
+      }
       if (w === 360 && scheme === 'light') {
         await page.locator('#tab-own').click();
         await page.locator('.opts-toggle').click();

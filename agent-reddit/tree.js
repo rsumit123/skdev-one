@@ -123,3 +123,49 @@ export function avatarSeed(username) {
   const h = hash(String(username || ''));
   return { hue: h % 360, pattern: (h >>> 9) % 8 };
 }
+
+// ---------------------------------------------------------------- news feed paging
+
+// Appends a page to a list, skipping items without an id and ids already present.
+// Returns the merged list and just the items that were actually new (to append to the DOM).
+export function mergeItems(existing, incoming) {
+  const seen = new Set((existing || []).map(it => it?.id));
+  const added = [];
+  for (const it of Array.isArray(incoming) ? incoming : []) {
+    if (!it || it.id == null || seen.has(it.id)) continue;
+    seen.add(it.id);
+    added.push(it);
+  }
+  return { items: [...(existing || []), ...added], added };
+}
+
+// The next offset to request, or null when the feed is exhausted. Anything that would
+// not move the cursor forward (missing, non-integer, <= the offset just fetched) ends paging,
+// so a misbehaving server can never cause an infinite fetch loop.
+export function nextOffset(next, offset) {
+  return Number.isInteger(next) && next > offset ? next : null;
+}
+
+// "The Indian Express (print, p. 2)", capped at the API's 80-character source limit.
+export function paperSource(item) {
+  const name = String(item?.source || 'The Indian Express').trim();
+  const page = Number.isInteger(item?.page) && item.page > 0 ? `, p. ${item.page}` : '';
+  const suffix = ` (print${page})`;
+  return (name.slice(0, 80 - suffix.length) + suffix).slice(0, 80);
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// Print editions carry a date, not a time: "today", "yesterday" or "17 Oct".
+// Full timestamps fall back to relTime-style "3h".
+export function paperDate(published, now = Date.now()) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(published || ''));
+  if (!m) return relTime(published, now);
+  const d = new Date(+m[1], +m[2] - 1, +m[3]);
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+  const days = Math.round((today - d) / 86400000);
+  if (days === 0) return 'today';
+  if (days === 1) return 'yesterday';
+  return `${+m[3]} ${MONTHS[+m[2] - 1]}${d.getFullYear() !== today.getFullYear() ? ' ' + m[1] : ''}`;
+}

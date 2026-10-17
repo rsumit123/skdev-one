@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   buildTree, sortTree, countDescendants, hiddenCount, isLocked, relTime,
   upsertComment, applyVote, formatScore, providerColor, avatarSeed,
+  mergeItems, nextOffset, paperSource, paperDate,
 } from './tree.js';
 
 const c = (id, parent_id, score = 1, extra = {}) => ({
@@ -143,4 +144,47 @@ test('avatarSeed deterministic', () => {
   assert.ok(a.hue >= 0 && a.hue < 360 && Number.isInteger(a.hue));
   assert.ok(Number.isInteger(a.pattern) && a.pattern >= 0 && a.pattern < 8);
   assert.notDeepEqual(a, avatarSeed('quiet_owl'));
+});
+
+test('mergeItems appends new ids only, keeps order, does not mutate', () => {
+  const a = [{ id: 'a' }, { id: 'b' }];
+  const frozen = JSON.stringify(a);
+  const { items, added } = mergeItems(a, [{ id: 'b', title: 'dup' }, { id: 'c' }, null, { title: 'no id' }, { id: 'c' }, { id: 'd' }]);
+  assert.deepEqual(items.map(i => i.id), ['a', 'b', 'c', 'd']);
+  assert.deepEqual(added.map(i => i.id), ['c', 'd']);
+  assert.equal(items[1].title, undefined, 'existing item wins over a duplicate');
+  assert.equal(JSON.stringify(a), frozen);
+  assert.deepEqual(mergeItems([], undefined), { items: [], added: [] });
+  assert.deepEqual(mergeItems(null, [{ id: 1 }]).items, [{ id: 1 }]);
+});
+
+test('nextOffset only moves forward', () => {
+  assert.equal(nextOffset(12, 0), 12);
+  assert.equal(nextOffset(24, 12), 24);
+  assert.equal(nextOffset(null, 12), null);
+  assert.equal(nextOffset(undefined, 0), null);
+  assert.equal(nextOffset(12, 12), null);
+  assert.equal(nextOffset(5, 12), null);
+  assert.equal(nextOffset('24', 12), null);
+  assert.equal(nextOffset(12.5, 0), null);
+});
+
+test('paperSource formats print page and caps at 80 chars', () => {
+  assert.equal(paperSource({ source: 'The Indian Express', page: 2 }), 'The Indian Express (print, p. 2)');
+  assert.equal(paperSource({ source: 'The Indian Express' }), 'The Indian Express (print)');
+  assert.equal(paperSource({}), 'The Indian Express (print)');
+  assert.equal(paperSource({ source: 'The Indian Express', page: 0 }), 'The Indian Express (print)');
+  const long = paperSource({ source: 'X'.repeat(200), page: 14 });
+  assert.equal(long.length, 80);
+  assert.ok(long.endsWith(' (print, p. 14)'));
+});
+
+test('paperDate: today, yesterday, short date, timestamps', () => {
+  const now = new Date(2026, 9, 17, 15, 30).getTime();
+  assert.equal(paperDate('2026-10-17', now), 'today');
+  assert.equal(paperDate('2026-10-16', now), 'yesterday');
+  assert.equal(paperDate('2026-10-03', now), '3 Oct');
+  assert.equal(paperDate('2025-12-31', now), '31 Dec 2025');
+  assert.equal(paperDate(new Date(now - 2 * 3600e3).toISOString(), now), '2h');
+  assert.equal(paperDate(null, now), '');
 });

@@ -3,6 +3,7 @@
 import {
   buildTree, sortTree, countDescendants, isLocked, relTime,
   upsertComment, applyVote, formatScore, providerColor, avatarSeed,
+  mergeItems, nextOffset, paperSource, paperDate,
 } from './tree.js';
 
 // ---------------------------------------------------------------- config
@@ -270,10 +271,13 @@ const S = {
 };
 
 const H = {
-  tab: 'news',
-  news: null, newsErr: null, newsAge: null,
+  tab: null, // null = automatic (paper when one exists, else live); 'paper' | 'news' | 'own' once picked
+  papers: null, // null while /reddit/papers is loading
+  feeds: { paper: null, news: null },
+  homeGen: 0,
+  io: null, els: null,
   recent: null, recentErr: null,
-  selected: null,
+  selected: null, selectedFeed: null,
   own: { headline: '', body: '', link: '' },
   bots: 5, limit: 5, budget: 40,
   optsOpen: false,
@@ -294,14 +298,15 @@ function showHome() {
   S.view = 'home';
   statusChip(null);
   document.title = 'Agent Reddit';
+  H.homeGen++;
+  H.papers = null;
+  H.feeds = { paper: newFeed(), news: newFeed() };
+  disconnectFeed();
   $hero.replaceChildren(communityHeader());
   $main.replaceChildren(
     h('div', { id: 'home-alert' }),
     h('section', { class: 'card tabs-card', 'aria-label': 'Choose a story' },
-      h('div', { class: 'tabs', role: 'tablist' },
-        tabBtn('news', 'Top 10 India news'),
-        tabBtn('own', 'Your own'),
-      ),
+      h('div', { class: 'tabs', id: 'tabs', role: 'tablist' }),
       h('div', { id: 'tab-panel', role: 'tabpanel' }),
     ),
     launchPanel(),
@@ -311,6 +316,7 @@ function showHome() {
     ),
   );
   renderHomeSide();
+  renderTabs();
   renderTab();
   renderRecent();
   updateLaunch();
@@ -353,30 +359,58 @@ function communityHeader() {
   );
 }
 
+function hasPapers() { return Array.isArray(H.papers) && H.papers.length > 0; }
+
+// Which tab is showing. Until the user picks one, "Today's paper" wins when a paper
+// exists (and is assumed while /reddit/papers is still loading); otherwise live news.
+function activeTab() {
+  if (H.tab === 'own' || H.tab === 'news') return H.tab;
+  if (H.papers === null || hasPapers()) return 'paper';
+  return 'news';
+}
+
+function isFeed(key) { return key === 'paper' || key === 'news'; }
+
+function renderTabs() {
+  const bar = document.getElementById('tabs');
+  if (!bar) return;
+  const keys = [...(H.papers === null || hasPapers() ? ['paper'] : []), 'news', 'own'];
+  bar.replaceChildren(...keys.map(k => tabBtn(k, TAB_LABELS[k])));
+}
+
 function tabBtn(key, label) {
   return h('button', {
     class: 'tab', type: 'button', role: 'tab', id: `tab-${key}`,
-    'aria-selected': H.tab === key ? 'true' : 'false',
-    on: { click: () => { H.tab = key; document.querySelectorAll('.tabs .tab').forEach(b => b.setAttribute('aria-selected', String(b.id === `tab-${key}`))); renderTab(); updateLaunch(); } },
-  }, label);
+    'aria-selected': activeTab() === key ? 'true' : 'false',
+    on: { click: () => {
+      if (activeTab() === key) return;
+      H.tab = key;
+      // update in place so the button keeps keyboard focus
+      document.querySelectorAll('#tabs .tab').forEach(b => b.setAttribute('aria-selected', String(b.id === `tab-${key}`)));
+      renderTab();
+      if (isFeed(key)) ensureFeed(key);
+      updateLaunch();
+    } },
+  }, h('span', { class: 'tab-text', text: label }));
 }
 
 async function loadHome() {
-  const [news, recent] = await Promise.allSettled([api('/reddit/news'), api('/reddit/threads')]);
-  if (S.view !== 'home') return;
-  if (news.status === 'fulfilled') {
-    H.news = Array.isArray(news.value?.items) ? news.value.items.slice(0, 10) : [];
-    H.newsAge = news.value?.cached_age_s ?? null;
-    H.newsErr = null;
-  } else { H.newsErr = news.reason; }
+  const gen = H.homeGen;
+  const [papers, recent] = await Promise.allSettled([api('/reddit/papers'), api('/reddit/threads')]);
+  if (S.view !== 'home' || gen !== H.homeGen) return;
+  H.papers = papers.status === 'fulfilled' && Array.isArray(papers.value?.papers)
+    ? papers.value.papers.filter(p => p && typeof p === 'object') : [];
   if (recent.status === 'fulfilled') {
     H.recent = Array.isArray(recent.value?.threads) ? recent.value.threads : [];
     H.recentErr = null;
   } else { H.recentErr = recent.reason; }
-  const down = news.status === 'rejected' && recent.status === 'rejected' && !news.reason?.status;
+  const down = papers.status === 'rejected' && recent.status === 'rejected' && !papers.reason?.status && !recent.reason?.status;
   const alert = document.getElementById('home-alert');
-  alert.replaceChildren(down ? unreachable(() => { alert.replaceChildren(); H.news = null; renderTab(); loadHome(); }) : '');
-  if (H.tab === 'news') renderTab();
+  alert.replaceChildren(down ? unreachable(() => { alert.replaceChildren(); showHome(); }) : '');
+  renderTabs();
+  renderTab();
+  const tab = activeTab();
+  if (isFeed(tab)) ensureFeed(tab);
   renderRecent();
   renderHomeSide();
   updateLaunch();
@@ -392,53 +426,249 @@ function unreachable(onRetry, what = 'the Agent Reddit server') {
   );
 }
 
+// ---------------------------------------------------------------- feeds (infinite scroll)
+
+const PAGE_SIZE = 12;
+const FEED_API = { paper: 'paper', news: 'live' };
+const TAB_LABELS = { paper: "Today's paper", news: 'Live India news', own: 'Your own' };
+const SECTIONS = [[null, 'All', 'total'], ['politics', 'Politics', 'politics'], ['economy', 'Economy', 'economy']];
+const SECTION_COLOR = { politics: '#0079d3', economy: '#0f9d58' };
+const KIND_COLOR = { analysis: '#7e53c1', opinion: '#d4760a' };
+let FEED_TOKEN = 0;
+
+// Every reset gets a fresh token; a response whose token no longer matches the
+// feed's current one (tab reload, chip change) is dropped on arrival.
+function newFeed(section = null) {
+  return {
+    token: ++FEED_TOKEN, section, items: [], total: null, next: 0,
+    loading: false, loaded: false, err: null, moreErr: null, age: null, paper: null,
+  };
+}
+
+function disconnectFeed() {
+  H.io?.disconnect();
+  H.io = null;
+  H.els = null;
+}
+
+function ensureFeed(key) {
+  const f = H.feeds[key];
+  if (!f.loaded && !f.loading && !f.err) loadPage(key);
+}
+
+async function loadPage(key) {
+  const f = H.feeds[key];
+  if (f.loading || f.next == null || f.err || f.moreErr) return;
+  const { token } = f;
+  const offset = f.next;
+  f.loading = true;
+  if (f.loaded) renderFoot(key);
+  const q = new URLSearchParams({ feed: FEED_API[key], offset: String(offset), limit: String(PAGE_SIZE) });
+  if (key === 'paper' && f.section) q.set('section', f.section);
+  let data;
+  try {
+    data = await api(`/reddit/news?${q}`);
+  } catch (err) {
+    if (H.feeds[key].token !== token) return;
+    f.loading = false;
+    if (f.loaded) { f.moreErr = err; renderFoot(key); }
+    else { f.err = err; if (S.view === 'home' && activeTab() === key) renderTab(); }
+    return;
+  }
+  if (H.feeds[key].token !== token) return; // stale: tab or chip changed while in flight
+  const first = !f.loaded;
+  const { items, added } = mergeItems(f.items, data?.items);
+  f.items = items;
+  f.loaded = true;
+  f.loading = false;
+  f.next = nextOffset(data?.next_offset, offset);
+  f.total = Number.isInteger(data?.total) ? data.total : (f.next == null ? items.length : null);
+  if (data?.cached_age_s != null) f.age = data.cached_age_s;
+  if (data?.paper && typeof data.paper === 'object') f.paper = data.paper;
+  if (S.view !== 'home' || activeTab() !== key) return;
+  const els = H.els;
+  if (first || !els || els.key !== key || !els.list) { renderTab(); return; }
+  for (const it of added) els.list.append(storyCard(key, it, true));
+  els.head.replaceWith(els.head = feedHead(key));
+  renderFoot(key);
+  recheckSentinel();
+}
+
+function retryMore(key) {
+  const f = H.feeds[key];
+  f.moreErr = null;
+  loadPage(key);
+}
+
+function reloadFeed(key, section = H.feeds[key].section) {
+  H.feeds[key] = newFeed(section);
+  renderTab();
+  loadPage(key);
+}
+
+// IntersectionObserver only reports changes, so after each append we re-observe:
+// that delivers a fresh initial callback and keeps loading while the sentinel is
+// still within reach (short pages, tall screens).
+function recheckSentinel() {
+  const els = H.els;
+  if (!H.io || !els?.sentinel) return;
+  H.io.unobserve(els.sentinel);
+  H.io.observe(els.sentinel);
+}
+
 function renderTab() {
   const panel = document.getElementById('tab-panel');
   if (!panel) return;
-  panel.setAttribute('aria-labelledby', `tab-${H.tab}`);
-  if (H.tab === 'own') { panel.replaceChildren(ownForm()); return; }
-  if (H.newsErr) {
-    panel.replaceChildren(h('div', { class: 'empty' },
-      h('p', { text: H.newsErr.status ? `News is unavailable right now (${H.newsErr.message}).` : 'News could not be loaded.' }),
+  disconnectFeed();
+  const tab = activeTab();
+  panel.setAttribute('aria-labelledby', `tab-${tab}`);
+  if (tab === 'own') { panel.replaceChildren(ownForm()); return; }
+  const f = H.feeds[tab];
+  if (tab === 'paper' && H.papers === null) { panel.replaceChildren(skeletonList(4)); return; }
+  const head = feedHead(tab);
+  if (f.err) {
+    panel.replaceChildren(head, h('div', { class: 'empty' },
+      h('p', { text: f.err.status ? `Stories are unavailable right now (${f.err.message}).` : 'Stories could not be loaded.' }),
       h('div', { class: 'empty-actions' },
-        h('button', { class: 'btn btn-outline', type: 'button', on: { click: () => { H.newsErr = null; H.news = null; renderTab(); loadHome(); } } }, ICONS.retry(), 'Retry'),
+        h('button', { class: 'btn btn-outline', type: 'button', id: 'feed-retry', on: { click: () => reloadFeed(tab) } }, ICONS.retry(), 'Retry'),
         h('button', { class: 'btn btn-text', type: 'button', text: 'Write your own', on: { click: () => document.getElementById('tab-own').click() } }),
       )));
     return;
   }
-  if (!H.news) {
-    panel.replaceChildren(h('div', { class: 'news-list', 'aria-busy': 'true' },
-      Array.from({ length: 4 }, () => h('div', { class: 'post-card skeleton', 'aria-hidden': 'true' }, h('div', { class: 'vote-col' }), h('div', { class: 'post-main' }, h('span', { class: 'sk sk-meta' }), h('span', { class: 'sk sk-title' }), h('span', { class: 'sk sk-title short' }))))));
+  if (!f.loaded) { panel.replaceChildren(head, skeletonList(4)); return; }
+  if (!f.items.length) {
+    panel.replaceChildren(head, h('div', { class: 'empty' }, h('p', {
+      text: tab === 'paper' && f.section ? `No ${f.section} stories in today's paper.` : 'No stories right now. Write your own instead.',
+    })));
     return;
   }
-  if (!H.news.length) {
-    panel.replaceChildren(h('div', { class: 'empty' }, h('p', { text: 'No headlines right now. Write your own story instead.' })));
-    return;
+  const list = h('div', { class: 'news-list', id: 'feed-list', role: 'radiogroup', 'aria-label': TAB_LABELS[tab] });
+  for (const item of f.items) list.append(storyCard(tab, item, false));
+  const foot = h('div', { class: 'feed-foot', id: 'feed-foot', 'aria-live': 'polite' });
+  const sentinel = h('div', { class: 'feed-sentinel', 'aria-hidden': 'true' });
+  panel.replaceChildren(head, list, foot, sentinel);
+  H.els = { key: tab, head, list, foot, sentinel };
+  if ('IntersectionObserver' in window) {
+    H.io = new IntersectionObserver(entries => {
+      if (entries.some(e => e.isIntersecting) && S.view === 'home' && activeTab() === tab) loadPage(tab);
+    }, { rootMargin: '0px 0px 600px 0px' });
+    H.io.observe(sentinel);
   }
-  const list = h('div', { class: 'news-list', role: 'radiogroup', 'aria-label': 'Top 10 India news' });
-  for (const item of H.news) list.append(newsCard(item));
-  const meta = H.newsAge != null ? h('p', { class: 'list-meta', text: `Headlines from Google News, The Hindu, Indian Express and NDTV. Updated ${H.newsAge < 60 ? 'just now' : relTime(new Date(Date.now() - H.newsAge * 1000).toISOString()) + ' ago'}.` }) : null;
-  panel.replaceChildren(list, meta || '');
+  renderFoot(tab);
+}
+
+function skeletonCard() {
+  return h('div', { class: 'post-card skeleton', 'aria-hidden': 'true' }, h('div', { class: 'vote-col' }), h('div', { class: 'post-main' }, h('span', { class: 'sk sk-meta' }), h('span', { class: 'sk sk-title' }), h('span', { class: 'sk sk-title short' })));
+}
+
+function skeletonList(n) {
+  return h('div', { class: 'news-list', 'aria-busy': 'true' }, Array.from({ length: n }, skeletonCard));
+}
+
+function renderFoot(key) {
+  const els = H.els;
+  if (!els || els.key !== key) return;
+  const f = H.feeds[key];
+  const foot = els.foot;
+  foot.removeAttribute('aria-busy');
+  if (f.loading) {
+    foot.setAttribute('aria-busy', 'true');
+    foot.replaceChildren(h('div', { class: 'feed-row feed-loading' },
+      h('span', { class: 'spinner', 'aria-hidden': 'true' }), h('span', { text: 'Loading more stories…' })), skeletonCard());
+  } else if (f.moreErr) {
+    foot.replaceChildren(h('div', { class: 'feed-row feed-err', role: 'alert' },
+      h('span', { text: "Couldn't load more" }), h('span', { class: 'feed-sep', 'aria-hidden': 'true', text: '·' }),
+      h('button', { class: 'btn-link feed-retry', type: 'button', on: { click: () => retryMore(key) } }, ICONS.retry(), 'Retry')));
+  } else if (f.next == null) {
+    const n = f.items.length;
+    foot.replaceChildren(h('div', { class: 'feed-row feed-end' },
+      h('span', { class: 'feed-end-mark', 'aria-hidden': 'true' }),
+      h('span', {},
+        h('strong', { text: "You're all caught up" }),
+        h('span', { class: 'feed-end-sub', text: key === 'paper' ? `${plural(n, 'story', 'stories')} from today's paper` : `${plural(n, 'headline')} from the live feed` }))));
+  } else if (!H.io) {
+    foot.replaceChildren(h('div', { class: 'feed-row' },
+      h('button', { class: 'btn btn-outline', type: 'button', text: 'Load more stories', on: { click: () => loadPage(key) } })));
+  } else {
+    foot.replaceChildren();
+  }
+}
+
+function feedHead(key) {
+  const f = H.feeds[key];
+  const count = f.total != null ? plural(f.total, 'story', 'stories') : '';
+  if (key === 'news') {
+    const updated = f.age == null ? '' : f.age < 60 ? 'updated just now' : `updated ${relTime(new Date(Date.now() - f.age * 1000).toISOString())} ago`;
+    return h('div', { class: 'feed-head' },
+      h('p', { class: 'feed-meta', text: ['Google News, The Hindu, Indian Express and NDTV', updated, count].filter(Boolean).join(' · ') }));
+  }
+  const paper = H.papers?.[0] || {};
+  const label = f.paper?.label || paper.label || "Today's paper";
+  const counts = paper.counts && typeof paper.counts === 'object' ? paper.counts : {};
+  const chips = h('div', { class: 'fchips', role: 'group', 'aria-label': 'Filter by section' },
+    SECTIONS.map(([sec, name, ck]) => h('button', {
+      class: 'fchip', type: 'button', 'data-section': sec || 'all', 'aria-pressed': String(f.section === sec),
+      on: { click: () => { if (H.feeds.paper.section !== sec) reloadFeed('paper', sec); } },
+    }, h('span', { text: name }), Number.isInteger(counts[ck]) ? h('span', { class: 'fchip-n', text: String(counts[ck]) }) : null)));
+  return h('div', { class: 'feed-head' },
+    h('div', { class: 'paper-id' },
+      paperIcon(),
+      h('div', { class: 'paper-id-text' },
+        h('strong', { class: 'paper-label', text: label }),
+        h('span', { class: 'feed-meta', text: ['Print edition', count].filter(Boolean).join(' · ') }),
+      ),
+    ),
+    chips,
+  );
+}
+
+function paperIcon() {
+  return svg('0 0 20 20', [
+    ['rect', { x: 2.5, y: 3.5, width: 15, height: 13, rx: 1.5, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5 }],
+    ['path', { d: 'M5.5 7h9M5.5 10h4M5.5 13h4M11.5 10h3v3h-3z', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.4, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }],
+  ], 'paper-ic');
+}
+
+function selectStory(key, item) {
+  H.selected = item;
+  H.selectedFeed = key;
+  document.querySelectorAll('.news-card').forEach(c => {
+    const on = c.dataset.id === String(item.id);
+    c.classList.toggle('is-selected', on);
+    c.querySelector('.pick-label').textContent = on ? 'Selected' : 'Pick this story';
+  });
+  H.launchErr = '';
+  updateLaunch();
+}
+
+function isSelected(key, item) { return H.selectedFeed === key && H.selected?.id === item.id; }
+
+function storyCard(key, item, appended) {
+  const card = key === 'paper' ? paperCard(item) : newsCard(item);
+  if (appended) card.classList.add('is-appended');
+  return card;
+}
+
+function pickRow(selected, ...extra) {
+  return h('div', { class: 'news-foot' },
+    h('span', { class: 'pick' }, h('span', { class: 'pick-box', 'aria-hidden': 'true' }), h('span', { class: 'pick-label', text: selected ? 'Selected' : 'Pick this story' })),
+    ...extra,
+  );
+}
+
+function storyInput(key, item, selected) {
+  const input = h('input', { type: 'radio', name: 'story', class: 'sr-only', value: String(item.id), checked: selected });
+  input.addEventListener('change', () => selectStory(key, item));
+  return input;
 }
 
 function newsCard(item) {
-  const selected = H.selected?.id === item.id;
-  const input = h('input', { type: 'radio', name: 'story', class: 'sr-only', value: item.id, checked: selected });
-  input.addEventListener('change', () => {
-    H.selected = item;
-    document.querySelectorAll('.news-card').forEach(c => {
-      const on = c.dataset.id === item.id;
-      c.classList.toggle('is-selected', on);
-      c.querySelector('.pick-label').textContent = on ? 'Selected' : 'Pick this story';
-    });
-    H.launchErr = '';
-    updateLaunch();
-  });
+  const selected = isSelected('news', item);
   const when = relTime(item.published);
   const link = extLink(item.link, domainOf(item.link) || 'article', 'news-link');
   if (link) link.addEventListener('click', e => e.stopPropagation());
   return h('label', { class: `post-card news-card${selected ? ' is-selected' : ''}`, 'data-id': item.id },
-    input,
+    storyInput('news', item, selected),
     h('div', { class: 'vote-col', 'aria-hidden': 'true' }, ICONS.up(), h('span', { class: 'vote-dot', text: '•' }), ICONS.down()),
     h('div', { class: 'post-main' },
       h('div', { class: 'post-meta' },
@@ -447,10 +677,56 @@ function newsCard(item) {
       ),
       h('h3', { class: 'post-title', text: item.title || '' }),
       item.summary ? h('p', { class: 'news-summary', text: item.summary }) : null,
-      h('div', { class: 'news-foot' },
-        h('span', { class: 'pick' }, h('span', { class: 'pick-box', 'aria-hidden': 'true' }), h('span', { class: 'pick-label', text: selected ? 'Selected' : 'Pick this story' })),
-        link,
-      ),
+      pickRow(selected, link),
+    ),
+  );
+}
+
+let EXCERPT_SEQ = 0;
+
+function paperCard(item) {
+  const selected = isSelected('paper', item);
+  const section = typeof item.section === 'string' ? item.section.toLowerCase() : '';
+  const kind = typeof item.kind === 'string' ? item.kind.toLowerCase() : '';
+  const when = paperDate(item.published);
+  const pill = (cls, text, color) => h('span', { class: `mpill ${cls}`, vars: { '--pc': color }, text });
+  const sep = () => h('span', { class: 'meta-sep', 'aria-hidden': 'true', text: '·' });
+  const meta = [h('span', { class: 'meta-src', text: item.source || 'The Indian Express' })];
+  if (section) meta.push(sep(), pill('sec-pill', section[0].toUpperCase() + section.slice(1), SECTION_COLOR[section] || '#787c7e'));
+  if (KIND_COLOR[kind]) meta.push(pill('kind-pill', kind[0].toUpperCase() + kind.slice(1), KIND_COLOR[kind]));
+  if (Number.isInteger(item.page)) meta.push(sep(), h('span', { class: 'meta-page', text: `p. ${item.page}` }));
+  if (when) meta.push(sep(), h('span', { text: when }));
+  const byline = [item.byline, item.dateline].filter(v => typeof v === 'string' && v.trim()).map(v => v.trim());
+
+  const body = typeof item.body === 'string' && item.body.trim() ? item.body : '';
+  let excerpt = null;
+  let toggle = null;
+  if (body) {
+    const id = `excerpt-${++EXCERPT_SEQ}`;
+    excerpt = h('div', { class: 'excerpt', id, hidden: true },
+      h('p', { class: 'excerpt-note', text: 'What the redditors will read' }),
+      richText(body, 'excerpt-text'));
+    toggle = h('button', { class: 'excerpt-toggle', type: 'button', 'aria-expanded': 'false', 'aria-controls': id,
+      on: { click: e => {
+        e.preventDefault(); // keep the click from also picking the card
+        const open = excerpt.hidden;
+        excerpt.hidden = !open;
+        toggle.setAttribute('aria-expanded', String(open));
+        toggle.querySelector('.excerpt-label').textContent = open ? 'Hide excerpt' : 'Read excerpt';
+      } } },
+    h('span', { class: 'excerpt-label', text: 'Read excerpt' }), h('span', { class: 'chev', 'aria-hidden': 'true' }));
+  }
+
+  return h('label', { class: `post-card news-card paper-card${selected ? ' is-selected' : ''}`, 'data-id': item.id, 'data-section': section || null },
+    storyInput('paper', item, selected),
+    h('div', { class: 'vote-col', 'aria-hidden': 'true' }, ICONS.up(), h('span', { class: 'vote-dot', text: '•' }), ICONS.down()),
+    h('div', { class: 'post-main' },
+      h('div', { class: 'post-meta' }, meta),
+      h('h3', { class: 'post-title', text: item.title || '' }),
+      item.summary ? h('p', { class: 'news-summary', text: item.summary }) : null,
+      byline.length ? h('p', { class: 'byline', text: byline.join(' · ') }) : null,
+      excerpt,
+      pickRow(selected, toggle),
     ),
   );
 }
@@ -516,8 +792,15 @@ function launchPanel() {
 }
 
 function currentStory() {
-  if (H.tab === 'news') {
-    const it = H.selected;
+  const tab = activeTab();
+  if (tab === 'paper') {
+    const it = H.selectedFeed === 'paper' ? H.selected : null;
+    if (!it) return null;
+    const text = typeof it.body === 'string' && it.body.trim() ? it.body : it.summary;
+    return { headline: String(it.title || '').slice(0, 300), body: text ? String(text).slice(0, 6000) : null, link: null, source: paperSource(it) };
+  }
+  if (tab === 'news') {
+    const it = H.selectedFeed === 'news' ? H.selected : null;
     if (!it) return null;
     return { headline: String(it.title || '').slice(0, 300), body: it.summary ? String(it.summary).slice(0, 6000) : null, link: safeUrl(it.link), source: it.source || null };
   }
@@ -536,7 +819,7 @@ function updateLaunch() {
   const sel = document.getElementById('sel-title');
   if (story) { sel.textContent = story.headline; sel.classList.remove('is-empty'); }
   else {
-    sel.textContent = H.tab === 'news' ? 'Pick a story from the list.' : 'Write a headline of at least 3 characters.';
+    sel.textContent = activeTab() === 'own' ? 'Write a headline of at least 3 characters.' : 'Pick a story from the list.';
     sel.classList.add('is-empty');
   }
   document.getElementById('opts-sum').textContent = `${H.bots} bots · ${H.limit}/thread · ${H.budget} total`;
@@ -587,6 +870,7 @@ function renderRecent() {
 function showThread(id) {
   const same = S.threadId === id;
   S.view = 'thread';
+  disconnectFeed();
   if (!same) {
     S.threadId = id; S.thread = null; S.comments = []; S.bots = new Map();
     S.collapsed = new Set(); S.continued = new Set(); S.fresh = new Set(); S.prevHidden = new Map();
@@ -663,7 +947,10 @@ function renderPost() {
   if (!t || !S.els.post) return;
   const n = S.comments.length;
   const score = 1 + S.comments.reduce((a, c) => a + Math.max(0, c.score || 0), 0);
-  const who = t.source ? String(t.source).replace(/\s+/g, '_') : 'you';
+  const src = t.source ? String(t.source).trim() : '';
+  const paren = /^(.*?)\s*\(([^()]*)\)$/.exec(src); // "The Indian Express (print, p. 2)"
+  const who = src ? (paren && paren[1] ? paren[1] : src).replace(/\s+/g, '_') : 'you';
+  const edition = paren && paren[1] ? paren[2] : '';
   const body = t.body ? String(t.body) : '';
   const long = body.length > 420;
   const bodyEl = body ? richText(body, `post-text${long && !S.bodyOpen ? ' is-clamped' : ''}`) : null;
@@ -678,6 +965,7 @@ function renderPost() {
         avatarLogo("meta-icon"),
         h('strong', { class: 'meta-sub', text: 'r/AgentReddit' }),
         h('span', { text: ` • Posted by u/${who}` }),
+        edition ? h('span', { class: 'meta-edition', text: edition }) : null,
         t.created_at ? h('span', { text: ` ${relTime(t.created_at)}${relTime(t.created_at) === 'just now' ? '' : ' ago'}` }) : null,
       ),
       h('h1', { class: 'post-title', text: t.headline || '' }),
