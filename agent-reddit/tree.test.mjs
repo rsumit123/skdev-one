@@ -394,3 +394,67 @@ test('buildCreateBody: ask, opinion, poll, ama', () => {
   assert.deepEqual({ h: amaU.ama_host, t: amaU.title, b: amaU.body }, { h: null, t: "I'm a nurse, AMA", b: 'Night shifts.' });
   assert.equal(buildCreateBody(base({ type: 'ask', author: 'user', title: 'x?', handle: 'bad handle' })).user_name, null);
 });
+
+// ---------------------------------------------------------------- v2 thread interactions
+import {
+  applyEdit, applyDelete, applyRemove, applyAwards, applyLock, lockedIds, awardCounts, canReply,
+  reconcileComment, pollRows, opRoles,
+} from './tree.js';
+
+test('edit/delete/remove/awards/lock patch one comment immutably', () => {
+  const list = [c(1, null), c(2, 1)];
+  const e = applyEdit(list, { comment_id: 2, text: 'new' });
+  assert.deepEqual([e[1].text, e[1].edited, list[1].edited], ['new', true, undefined]);
+  assert.deepEqual([applyDelete(list, 1)[0].deleted, applyDelete(list, 1)[0].text], [true, '']);
+  assert.deepEqual([applyRemove(list, 1)[0].removed, applyRemove(list, 1)[0].text], [true, '']);
+  assert.deepEqual(applyAwards(list, { comment_id: 1, awards: ['🏅', 3, '😂'] })[0].awards, ['🏅', '😂']);
+  assert.equal(applyLock(list, 1)[0].locked, true);
+  assert.deepEqual(applyLock(list, 99), list); // unknown id: unchanged
+});
+
+test('lockedIds covers the locked comment and its whole subtree only', () => {
+  const list = [c(1, null), c(2, 1, 1, { locked: true }), c(3, 2), c(4, 3), c(5, 1), c(6, null)];
+  assert.deepEqual([...lockedIds(list)].sort(), [2, 3, 4]);
+  assert.deepEqual([...lockedIds([c(1, 2), c(2, 1)])], []); // cycle-safe
+});
+
+test('awardCounts groups in first-seen order', () => {
+  assert.deepEqual(awardCounts(['🏅', '😂', '🏅', '', 7]), [['🏅', 2], ['😂', 1]]);
+  assert.deepEqual(awardCounts(null), []);
+});
+
+test('canReply: not pending/deleted/removed/sticky/locked', () => {
+  assert.ok(canReply(c(1, null), false));
+  for (const x of [{ pending: true }, { deleted: true }, { removed: true }, { stickied: true }]) assert.ok(!canReply(c(1, null, 1, x), false));
+  assert.ok(!canReply(c(1, null), true));
+});
+
+test('reconcileComment replaces the optimistic comment or upserts', () => {
+  const temp = { id: 9e15, pending: true, author_type: 'user', author_name: 'me', text: 'hi there', parent_id: 1 };
+  const real = { id: 40, author_type: 'user', author_name: 'me', text: 'hi there ', parent_id: 1, score: 1 };
+  const r = reconcileComment([c(1, null), temp], real);
+  assert.equal(r.replaced, 9e15);
+  assert.deepEqual(r.comments.map(x => x.id), [1, 40]);
+  assert.equal(r.comments[1].pending, false);
+  const again = reconcileComment(r.comments, { ...real, score: 3 });
+  assert.deepEqual([again.comments.length, again.comments[1].score], [2, 3]);
+  const both = reconcileComment([real, temp], real); // 201 and SSE both arrived
+  assert.deepEqual(both.comments.map(x => x.id), [40]);
+  const bot = reconcileComment([temp], { id: 41, author_type: 'bot', bot_id: 2, text: 'hi there', parent_id: 1 });
+  assert.deepEqual(bot.comments.map(x => x.id), [9e15, 41]);
+  const other = reconcileComment([temp], { ...real, parent_id: null });
+  assert.equal(other.comments.length, 2, 'different parent does not match');
+});
+
+test('pollRows marks the leader(s)', () => {
+  const r = pollRows({ question: 'Q', options: [{ text: 'A', votes: 2 }, { text: 'B', votes: 2 }, { text: 'C', votes: 1 }], total: 5 });
+  assert.deepEqual(r.rows.map(x => [x.pct, x.lead]), [[40, true], [40, true], [20, false]]);
+  assert.deepEqual(pollRows({ options: [{ text: 'A', votes: 0 }] }).rows.map(x => x.lead), [false]);
+});
+
+test('opRoles from op, flags and ama_host_bot_id', () => {
+  assert.deepEqual(opRoles({ op: { type: 'bot', bot_id: 3 }, ama_host_bot_id: 5 }, []), { opBot: 3, opUser: null, host: 5 });
+  assert.deepEqual(opRoles({ op: { type: 'user', name: 'me' } }, [{ id: 2, is_host: true }]), { opBot: null, opUser: 'me', host: 2 });
+  assert.deepEqual(opRoles({ op: { type: 'bot', bot_id: 0 } }, [{ id: 4, is_op: true }]), { opBot: 4, opUser: null, host: null });
+  assert.deepEqual(opRoles({}, []), { opBot: null, opUser: null, host: null });
+});

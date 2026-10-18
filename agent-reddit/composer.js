@@ -31,6 +31,19 @@ export const AMA_HOSTS = [
   'textile factory owner', 'real-estate broker', 'shipping logistics manager', 'NRI in the US',
 ];
 const AMA_SHORTLIST = 10;
+let HOSTS = AMA_HOSTS; // replaced by GET /reddit/hosts when the server has it
+let hostsTried = false;
+
+async function loadHosts() {
+  if (hostsTried) return;
+  hostsTried = true;
+  try {
+    const d = await api('/reddit/hosts');
+    const list = Array.isArray(d?.hosts) ? [...new Set(d.hosts.filter(x => typeof x === 'string').map(x => x.trim()).filter(x => x && x.length <= 60))] : [];
+    if (list.length) HOSTS = list;
+  } catch { /* older backend: keep the built-in list */ }
+  if (view.name === 'compose' && C.type === 'ama') document.getElementById('ama-hosts')?._draw?.();
+}
 const FIELD_FROM_API = {
   title: 'title', body: 'body', idea: 'idea', poll_options: 'options', user_name: 'handle', article: 'story',
   headline: 'headline', link: 'link', ama_host: 'amaHost', thread_limit: 'limit', bots: 'crowd', max_comments: 'length',
@@ -88,6 +101,7 @@ export function showComposer({ type, src } = {}) {
   document.getElementById('side').replaceChildren(tipsCard(), rulesCard());
   renderBody();
   loadPapers();
+  loadHosts();
 }
 
 export function leaveComposer() {
@@ -245,7 +259,7 @@ function pollFields() {
 function amaFields() {
   const chips = h('div', { class: 'host-chips', id: 'ama-hosts', role: 'radiogroup', 'aria-label': 'AMA host' });
   const drawChips = () => {
-    const list = C.amaAll ? AMA_HOSTS : AMA_HOSTS.slice(0, AMA_SHORTLIST);
+    const list = C.amaAll ? HOSTS : HOSTS.slice(0, AMA_SHORTLIST);
     const shown = C.amaHost && !list.includes(C.amaHost) ? [...list, C.amaHost] : list;
     const chip = (val, label, extra) => h('button', {
       class: `host-chip${extra ? ' ' + extra : ''}`, type: 'button', role: 'radio', 'data-host': val || '', 'aria-checked': String((C.amaHost || '') === (val || '')),
@@ -255,9 +269,11 @@ function amaFields() {
       chip(null, h('span', {}, ICONS.sparkle(), 'Random'), 'host-random'),
       ...shown.map(o => chip(o, o[0].toUpperCase() + o.slice(1))),
       h('button', { class: 'host-more', type: 'button', id: 'ama-more', 'aria-expanded': String(C.amaAll),
-        on: { click: () => { C.amaAll = !C.amaAll; drawChips(); } } }, C.amaAll ? 'Fewer' : `+${AMA_HOSTS.length - AMA_SHORTLIST} more`),
+        on: { click: () => { C.amaAll = !C.amaAll; drawChips(); } } }, C.amaAll ? 'Fewer' : `+${HOSTS.length - AMA_SHORTLIST} more`),
     );
+    if (HOSTS.length <= AMA_SHORTLIST) chips.querySelector('.host-more')?.remove();
   };
+  chips._draw = drawChips;
   drawChips();
   const pick = h('div', { class: 'field' },
     h('span', { class: 'field-label', text: 'Who is the host?' }),

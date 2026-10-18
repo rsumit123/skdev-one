@@ -380,3 +380,86 @@ export function buildCreateBody(st) {
   if (type === 'ama') out.ama_host = clean(st.amaHost) || null;
   return out;
 }
+
+// ---------------------------------------------------------------- v2: thread interactions
+
+const patch = (comments, id, fn) => comments.map(c => (c.id === id ? { ...c, ...fn(c) } : c));
+export function applyEdit(comments, { comment_id, text }) {
+  return patch(comments, comment_id, () => ({ text: String(text ?? ''), edited: true }));
+}
+export function applyDelete(comments, id) {
+  return patch(comments, id, () => ({ deleted: true, text: '' }));
+}
+export function applyRemove(comments, id) {
+  return patch(comments, id, () => ({ removed: true, text: '' }));
+}
+export function applyAwards(comments, { comment_id, awards }) {
+  return patch(comments, comment_id, () => ({ awards: Array.isArray(awards) ? awards.filter(a => typeof a === 'string') : [] }));
+}
+export function applyLock(comments, id) {
+  return patch(comments, id, () => ({ locked: true }));
+}
+
+// Ids of comments that sit in a locked subtree (the locked comment itself included).
+export function lockedIds(comments) {
+  const all = comments || [];
+  const byId = new Map(all.map(c => [c.id, c]));
+  const out = new Set();
+  for (const c of all) {
+    const seen = new Set();
+    let cur = c;
+    while (cur && !seen.has(cur.id)) {
+      if (cur.locked) { out.add(c.id); break; }
+      seen.add(cur.id);
+      cur = cur.parent_id != null ? byId.get(cur.parent_id) : null;
+    }
+  }
+  return out;
+}
+
+// ["🏅", "😂", "🏅"] -> [["🏅", 2], ["😂", 1]] in order of first appearance.
+export function awardCounts(awards) {
+  const m = new Map();
+  for (const a of Array.isArray(awards) ? awards : []) if (typeof a === 'string' && a) m.set(a, (m.get(a) || 0) + 1);
+  return [...m.entries()];
+}
+
+// Whether the human can reply to this comment.
+export function canReply(c, locked) {
+  return !!c && !c.pending && !c.deleted && !c.removed && !c.stickied && !locked;
+}
+
+// SSE/201 comment arrives: replace the matching optimistic one (same human, same text),
+// else upsert by id. Returns { comments, replaced } (replaced = the pending id or null).
+export function reconcileComment(comments, real) {
+  const list = comments || [];
+  if (list.some(c => c.id === real.id)) {
+    return { comments: list.filter(c => !(c.pending && matchesPending(c, real))).map(c => (c.id === real.id ? { ...c, ...real, pending: false } : c)), replaced: null };
+  }
+  const i = list.findIndex(c => c.pending && matchesPending(c, real));
+  if (i === -1) return { comments: [...list, real], replaced: null };
+  const out = list.slice();
+  const tempId = out[i].id;
+  out[i] = { ...real, pending: false };
+  // children of the optimistic comment (none expected) are re-pointed at the real id
+  return { comments: out.map(c => (c.parent_id === tempId ? { ...c, parent_id: real.id } : c)), replaced: tempId };
+}
+function matchesPending(p, real) {
+  return real.author_type === 'user' && p.author_name === real.author_name && String(p.text).trim() === String(real.text).trim()
+    && (p.parent_id ?? null) === (real.parent_id ?? null);
+}
+
+// Poll rows for the full results bar, sorted as given; widths are % of total.
+export function pollRows(poll) {
+  const s = pollSummary(poll);
+  return { ...s, rows: s.options.map(o => ({ ...o, lead: !!s.leader && o.votes === s.leader.votes })) };
+}
+
+// Who the OP / AMA host is, from Thread fields and the bots' flags.
+export function opRoles(thread, bots) {
+  const list = Array.isArray(bots) ? bots : [];
+  const op = thread?.op;
+  const opBot = op?.type === 'bot' && op.bot_id ? op.bot_id : (list.find(b => b?.is_op)?.id ?? null);
+  const host = thread?.ama_host_bot_id ?? (list.find(b => b?.is_host)?.id ?? null);
+  return { opBot, opUser: op?.type === 'user' ? op.name || null : null, host };
+}

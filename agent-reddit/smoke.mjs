@@ -111,6 +111,18 @@ const HUMAN_C = { id: 101, bot_id: null, author_type: 'user', author_name: 'priy
   text: 'Repo rate is what banks pay to borrow from the RBI. Your loan rate usually follows it.' };
 const V2_COMMENTS = [AUTOMOD, ...BASE_COMMENTS, HUMAN_C];
 
+// A thread after some moderation and texture: edits, awards, deletions, removals, a lock,
+// an AutoMod reply, a human comment with a bot reply.
+const BOT_REPLY = { id: 103, bot_id: 3, author_type: 'bot', parent_id: 101, root_id: 15, depth: 2, score: 2, created_at: ago(3), text: 'u/priya_k nailed it. Banks pass it on, slowly.' };
+const MOD_REPLY = { id: 120, bot_id: null, author_type: 'automod', author_name: 'AutoModerator', parent_id: 14, root_id: 1, depth: 3, score: 1, created_at: ago(19), text: 'Removed: rule 1, be civil.' };
+const RICH = [...V2_COMMENTS.map(c => ({
+  ...c,
+  ...(c.id === 4 ? { edited: true, locked: true, text: `${c.text}\n\nEDIT: thanks for the award, kind stranger` } : {}),
+  ...(c.id === 2 ? { awards: ['🏅', '🏅', '😂'] } : {}),
+  ...(c.id === 5 ? { deleted: true, text: '' } : {}),
+  ...(c.id === 14 ? { removed: true, text: '' } : {}),
+})), BOT_REPLY, MOD_REPLY];
+
 const ARTICLE = { headline: NEWS[0].title, body: `${NEWS[0].summary}\n\nThe monetary policy committee voted 5-1 to keep the rate unchanged.`, link: 'https://example.com/story-0', source: 'The Hindu' };
 // v2 thread: news post by bot OP 1, with an article block and a post score.
 const thread = (status, comments) => ({
@@ -169,8 +181,9 @@ function deferred() { let resolve; const p = new Promise(r => { resolve = r; });
 // Records: st.news (feed queries), st.lists (front page queries), st.posts (create bodies),
 // st.votes ({id, body}), st.surprises (count).
 async function mockApi(page, { streams = [doneStream], threadGet = () => ({ status: 200, body: thread('running', V2_COMMENTS) }), down = false,
-  papers = PAPERS, paperItems = PAPER, liveItems = NEWS, newsHook = null, cards = CARDS, listHook = null, createHook = null, newId = THREAD_ID } = {}) {
-  const st = { streamCalls: 0, posts: [], news: [], lists: [], votes: [], surprises: 0 };
+  papers = PAPERS, paperItems = PAPER, liveItems = NEWS, newsHook = null, cards = CARDS, listHook = null, createHook = null, newId = THREAD_ID,
+  commentHook = null, hosts = null } = {}) {
+  const st = { streamCalls: 0, posts: [], news: [], lists: [], votes: [], surprises: 0, comments: [], hostsCalls: 0 };
   await page.route(`${MOCK}/**`, async route => {
     const req = route.request();
     const url = new URL(req.url());
@@ -179,6 +192,16 @@ async function mockApi(page, { streams = [doneStream], threadGet = () => ({ stat
     const json = (status, body) => route.fulfill({ status, headers: CORS, contentType: 'application/json', body: JSON.stringify(body) });
     const p = url.pathname;
     if (p === '/reddit/papers') return json(200, papers);
+    if (p === '/reddit/hosts') { st.hostsCalls++; return hosts ? json(200, { hosts }) : json(404, { detail: 'Not Found' }); }
+    const cm = /^\/reddit\/threads\/([^/]+)\/comments$/.exec(p);
+    if (cm && req.method() === 'POST') {
+      const b = req.postDataJSON();
+      const n = st.comments.push({ id: cm[1], body: b }) - 1;
+      if (commentHook) { const r = await commentHook(b, n); if (r) return json(r.status, r.body); }
+      const nid = n === 0 ? 500 : 600 + n; // first one is 500 so SSE fixtures can refer to it
+      return json(201, { id: nid, author_type: 'user', author_name: b.user_name, bot_id: null, parent_id: b.parent_id, root_id: b.parent_id ?? nid,
+        depth: 0, text: b.text, score: 1, created_at: new Date().toISOString(), edited: false, deleted: false, removed: false, awards: [], stickied: false, locked: false, kind: 'human' });
+    }
     if (p === '/reddit/news') {
       const sp = url.searchParams;
       const q = { feed: sp.get('feed'), offset: Number(sp.get('offset')), limit: Number(sp.get('limit')), section: sp.get('section') };
@@ -213,7 +236,8 @@ async function mockApi(page, { streams = [doneStream], threadGet = () => ({ stat
       const body = req.postDataJSON();
       st.votes.push({ id: vm[1], body });
       const card = CARDS.find(c => c.id === vm[1]);
-      return json(200, { score: (card ? card.score : 57) + body.dir + 100 });
+      const cmt = typeof body.target === 'number' ? V2_COMMENTS.find(c => c.id === body.target) : null;
+      return json(200, { score: (cmt ? cmt.score : card ? card.score : 57) + body.dir + 100 });
     }
     if (p.endsWith('/stream')) {
       const n = st.streamCalls++;
@@ -552,8 +576,10 @@ try {
       assert.equal(await page.locator('.cm-body b').count(), 0);
       assert.equal(await page.locator('#c2 > .cm-main > .cm-body blockquote').count(), 1);
     });
-    await check('"thread locked" appears for a full tree only', async () => {
+    await check('"thread full" appears for a full tree only', async () => {
       await page.locator('#c1 > .cm-main > .cm-actions > .locked').waitFor();
+      assert.equal(await page.locator('#c1 > .cm-main > .cm-actions > .locked').textContent(), 'thread full');
+      assert.equal(await page.locator('#c1 > .cm-main > .cm-actions .reply-btn').count(), 1, 'humans can still reply in a full thread');
       assert.equal(await page.locator('#c2 .locked').count(), 0);
     });
     await check('sort tab changes order; the sticky stays on top', async () => {
@@ -656,6 +682,288 @@ try {
       assert.equal(await page.locator('.post-full .meta-pending').count(), 0);
     });
     await ctx.close();
+  }
+
+  // ---------------- F2: comment, reply, optimistic reconcile, events, votes, errors (1440 light)
+  {
+    const ctx = await newCtx({ viewport: { width: 1440, height: 900 }, colorScheme: 'light' });
+    const page = await ctx.newPage();
+    track(page);
+    const g1 = deferred(); const g2 = deferred();
+    let hold = null; let fail = null;
+    const st = await mockApi(page, {
+      streams: [
+        () => ({ body: sse([['snapshot', thread('running', V2_COMMENTS)], ['status', { status: 'running', comment_count: 16 }]]) }),
+        async () => { await g2.p; return { body: sse([
+          ['comment', { id: 500, author_type: 'user', author_name: HANDLE, bot_id: null, parent_id: null, root_id: 500, depth: 0, text: 'First human here. Rates feel like a sideshow.', score: 1, created_at: new Date().toISOString() }],
+          ['comment', { id: 501, author_type: 'bot', bot_id: 3, parent_id: 500, root_id: 500, depth: 1, text: 'Sideshow for you, main event for anyone with a floating loan.', score: 1, created_at: new Date().toISOString() }],
+          ['post', { score: 77, poll: null }],
+          ['status', { status: 'running', comment_count: 18 }],
+        ]) }; },
+        async () => { await g1.p; return { body: sse([
+          ['edit', { comment_id: 4, text: 'Exactly. People want cuts but forget the housing angle.\n\nEDIT: typo' }],
+          ['award', { comment_id: 2, awards: ['🏅', '🏅', '😂'] }],
+          ['delete', { comment_id: 5 }],
+          ['remove', { comment_id: 14 }],
+          ['lock', { comment_id: 4 }],
+          ['comment', MOD_REPLY],
+          ['vote', { comment_id: 1, score: 99 }],
+          ['status', { status: 'running', comment_count: 16 }],
+        ]) }; },
+        n => (n === 3 ? new Promise(() => {}) : { body: sse([['snapshot', thread('running', V2_COMMENTS)], ['status', { status: 'done', comment_count: 16 }]]) }), // after a reload
+      ],
+      commentHook: async (b, n) => { if (hold) await hold.p; if (fail) { const f = fail; fail = null; return f; } return null; },
+    });
+    await page.goto(`${BASE}?t=${THREAD_ID}&${Q}`);
+    await page.waitForSelector('#c15');
+    const cmt = id => page.locator(`#c${id}`);
+    const actions = id => page.locator(`#c${id} > .cm-main > .cm-actions`);
+
+    await check('OP badge on the OP bot\'s comments only', async () => {
+      assert.equal(await cmt(1).locator('> .cm-main > .cm-head .role-op').textContent(), 'OP');
+      assert.equal(await cmt(5).locator('> .cm-main > .cm-head .role-op').count(), 1);
+      assert.equal(await cmt(2).locator('> .cm-main > .cm-head .role-badge').count(), 0);
+    });
+    await check('Reply is offered on comments but not on the AutoMod sticky', async () => {
+      assert.equal(await actions(1).locator('.reply-btn').count(), 1);
+      assert.equal(await page.locator('#c100 .reply-btn').count(), 0);
+    });
+    await check('Add a comment: optimistic insert while posting, then the 201 comment replaces it', async () => {
+      await page.locator('#add-comment').click();
+      const box = page.locator('#comment-box-slot .cbox');
+      assert.equal(await box.locator('.cbox-who-name').textContent(), `u/${HANDLE}`);
+      assert.ok(await box.locator('.cbox-send').isDisabled(), 'empty comment cannot be sent');
+      await box.locator('textarea').fill('First human here. Rates feel like a sideshow.');
+      hold = deferred();
+      await box.locator('.cbox-send').click();
+      await page.locator('.cm.is-pending').waitFor();
+      assert.ok((await page.locator('.cm.is-pending .cm-body').textContent()).includes('sideshow'));
+      assert.ok((await page.locator('.cm.is-pending .cm-head').textContent()).includes('posting…'));
+      assert.equal(await page.locator('.cm.is-pending .flair-human').textContent(), 'HUMAN');
+      hold.resolve(); hold = null;
+      await cmt(500).waitFor();
+      assert.equal(await page.locator('.cm.is-pending').count(), 0);
+      assert.deepEqual(st.comments[0], { id: THREAD_ID, body: { parent_id: null, text: 'First human here. Rates feel like a sideshow.', user_name: HANDLE } });
+      assert.equal(await box.locator('textarea').inputValue(), '', 'box clears after posting');
+    });
+    await check('SSE copy of the same comment does not duplicate it; a bot reply highlights the human comment', async () => {
+      g2.resolve();
+      await cmt(501).waitFor();
+      assert.equal(await page.locator('#c500').count(), 1);
+      assert.equal(await page.locator('#c500 > .cm-main > .cm-children > #c501').count(), 1);
+      assert.equal(await page.locator('#c500.is-replied').count(), 1, 'human comment flashes when a bot replies');
+      assert.equal(await page.locator('.post-full .vote-col .score').textContent(), '77', 'SSE post event updates the post score');
+    });
+    await check('inline Reply keeps the draft and focus through live updates, then posts with parent_id', async () => {
+      await actions(1).locator('.reply-btn').click();
+      const ta = page.locator('#c1 > .cm-main > .cbox-reply textarea');
+      await ta.waitFor();
+      assert.equal(await page.evaluate(() => document.activeElement?.tagName), 'TEXTAREA');
+      await ta.type('Half-written thought');
+      g1.resolve();
+      await page.waitForFunction(() => document.querySelector('#c4 .cm-edited'));
+      assert.equal(await ta.inputValue(), 'Half-written thought');
+      assert.ok(await ta.evaluate(el => document.activeElement === el), 'focus survived the re-render');
+      await ta.type(', finished.');
+      await page.locator('#c1 > .cm-main > .cbox-reply .cbox-send').click();
+      await page.waitForFunction(() => document.querySelector('#c1 > .cm-main > .cm-children > [data-author="user"]:not(.is-pending)'));
+      assert.deepEqual(st.comments.at(-1).body, { parent_id: 1, text: 'Half-written thought, finished.', user_name: HANDLE });
+      assert.equal(await page.locator('#c1 > .cm-main > .cbox-reply').count(), 0, 'reply box closes after posting');
+    });
+    await check('edit event: new text and an "edited" label', async () => {
+      assert.ok((await cmt(4).locator('> .cm-main > .cm-body').textContent()).includes('EDIT: typo'));
+      assert.equal(await cmt(4).locator('> .cm-main > .cm-head .cm-edited').textContent(), '· edited');
+    });
+    await check('award event: emoji row with counts', async () => {
+      const a = cmt(2).locator('> .cm-main > .cm-awards .award');
+      assert.deepEqual(await a.allTextContents(), ['🏅×2', '😂']);
+    });
+    await check('delete event: [deleted] author and text, children stay, no Reply', async () => {
+      assert.equal(await cmt(5).locator('> .cm-main > .cm-head .uname').textContent(), '[deleted]');
+      assert.equal(await cmt(5).locator('> .cm-main > .cm-body').textContent(), '[deleted]');
+      assert.equal(await cmt(5).locator('> .cm-main > .cm-head .flair').count(), 0);
+      assert.equal(await page.locator('#c5 > .cm-main > .cm-children > #c9').count(), 1);
+      assert.equal(await actions(5).locator('.reply-btn').count(), 0);
+    });
+    await check('remove event: [removed by moderator], no Reply; AutoMod reply has the MOD shield', async () => {
+      assert.equal(await cmt(14).locator('> .cm-main > .cm-body').textContent(), '[removed by moderator]');
+      assert.equal(await actions(14).locator('.reply-btn').count(), 0);
+      assert.equal((await cmt(120).locator('> .cm-main > .cm-head .mod-badge').textContent()).trim(), 'MOD');
+      assert.equal(await cmt(120).locator('> .cm-main > .cm-head .uname').textContent(), 'AutoModerator');
+      assert.equal(await cmt(120).locator('.cm-sticky').count(), 0);
+    });
+    await check('lock event: lock icon on that comment, no Reply anywhere in its subtree', async () => {
+      assert.equal(await cmt(4).locator('> .cm-main > .cm-head .cm-lock').getAttribute('title'), 'Locked by moderators');
+      for (const id of [4, 6, 8, 10, 12]) assert.equal(await actions(id).locator('.reply-btn').count(), 0, `c${id}`);
+      assert.equal(await actions(2).locator('.reply-btn').count(), 1, 'parent outside the lock keeps Reply');
+    });
+    await check('SSE vote sets the server score on a comment', async () => {
+      assert.equal(await actions(1).locator('.score').textContent(), '99');
+    });
+    await check('comment upvote posts {target: id, dir: 1}, shows the server score, persists', async () => {
+      await actions(1).locator('.vote-up').click();
+      await page.waitForFunction(() => document.querySelector('#c1 > .cm-main > .cm-actions .score')?.textContent === '113');
+      assert.deepEqual(st.votes.at(-1), { id: THREAD_ID, body: { target: 1, dir: 1 } });
+      assert.equal(await page.evaluate(id => localStorage.getItem(`ar:votes:${id}`), THREAD_ID), '{"1":1}');
+      await actions(2).locator('.vote-down').click();
+      await page.waitForFunction(() => document.querySelector('#c2 > .cm-main > .cm-actions .vote-down')?.getAttribute('aria-pressed') === 'true');
+      assert.deepEqual(st.votes.at(-1).body, { target: 2, dir: -1 });
+    });
+    await check('post upvote posts {target:"post"} and persists next to comment votes', async () => {
+      await page.locator('.post-full .vote-col .vote-up').click();
+      await page.waitForFunction(() => document.querySelector('.post-full .vote-col .vote-up')?.getAttribute('aria-pressed') === 'true');
+      await page.waitForTimeout(100);
+      assert.deepEqual(st.votes.at(-1).body, { target: 'post', dir: 1 });
+      assert.deepEqual(JSON.parse(await page.evaluate(id => localStorage.getItem(`ar:votes:${id}`), THREAD_ID)), { 1: 1, 2: -1, post: 1 });
+    });
+    await check('own votes are highlighted again after a reload', async () => {
+      await page.reload();
+      await page.waitForSelector('#c2');
+      assert.equal(await actions(1).locator('.vote-up').getAttribute('aria-pressed'), 'true');
+      assert.equal(await actions(2).locator('.vote-down').getAttribute('aria-pressed'), 'true');
+      assert.equal(await page.locator('.post-full .vote-col .vote-up').getAttribute('aria-pressed'), 'true');
+    });
+    await check('423 on a reply is shown in the box; the optimistic comment is rolled back and the text kept', async () => {
+      await actions(2).locator('.reply-btn').click();
+      const box = page.locator('#c2 > .cm-main > .cbox-reply');
+      await box.locator('textarea').fill('You two need to calm down.');
+      fail = { status: 423, body: { detail: 'Locked' } };
+      await box.locator('.cbox-send').click();
+      await box.locator('.cbox-err:not(:empty)').waitFor();
+      assert.ok((await box.locator('.cbox-err').textContent()).includes('locked by moderators'));
+      assert.equal(await page.locator('.cm.is-pending').count(), 0);
+      assert.equal(await box.locator('textarea').inputValue(), 'You two need to calm down.');
+    });
+    await check('429 and 404 messages are surfaced inline', async () => {
+      const box = page.locator('#c2 > .cm-main > .cbox-reply');
+      fail = { status: 429, body: { detail: 'Slow down: 8 comments a minute at most.' } };
+      await box.locator('.cbox-send').click();
+      await page.waitForFunction(() => document.querySelector('#c2 > .cm-main > .cbox-reply .cbox-err')?.textContent === 'Slow down: 8 comments a minute at most.');
+      fail = { status: 404, body: { detail: 'Not Found' } };
+      await box.locator('.cbox-send').click();
+      await page.waitForFunction(() => document.querySelector('#c2 > .cm-main > .cbox-reply .cbox-err')?.textContent === 'This thread no longer exists.');
+      await page.screenshot({ path: join(SHOTS, 'f2-reply-error-1440-light.png') });
+      await box.locator('.cbox-cancel').click();
+      assert.equal(await page.locator('.cbox-reply').count(), 0);
+    });
+    await check('handle can be changed in the comment box (validated, saved, sent)', async () => {
+      await page.locator('#add-comment').click();
+      const box = page.locator('#comment-box-slot .cbox');
+      await box.locator('.cbox-change').click();
+      await box.locator('.cbox-handle').fill('x y');
+      await box.locator('.cbox-change').click();
+      assert.ok((await box.locator('.cbox-err').textContent()).includes('3 to 20'));
+      await box.locator('.cbox-handle').fill('mumbai_mom');
+      await box.locator('.cbox-change').click();
+      assert.equal(await box.locator('.cbox-who-name').textContent(), 'u/mumbai_mom');
+      await box.locator('textarea').fill('Seconding this.');
+      const before = st.comments.length;
+      await box.locator('.cbox-send').click();
+      for (let i = 0; i < 50 && st.comments.length === before; i++) await page.waitForTimeout(20);
+      await page.waitForFunction(() => document.querySelector('#comment-box-slot textarea')?.value === '');
+      assert.equal(st.comments.at(-1).body.user_name, 'mumbai_mom');
+      assert.equal(await page.evaluate(() => localStorage.getItem('ar:handle')), 'mumbai_mom');
+    });
+    await check('no horizontal scroll 1440 thread with interactions', () => noHScroll(page, '1440 f2'));
+    await ctx.close();
+  }
+
+  // ---------------- F2: replying on a finished thread re-opens the stream for revive replies (768 light)
+  {
+    const ctx = await newCtx({ viewport: { width: 768, height: 1024 }, colorScheme: 'light' });
+    const page = await ctx.newPage();
+    track(page);
+    const st = await mockApi(page, { streams: [
+      () => ({ body: sse([['snapshot', thread('done', V2_COMMENTS)]]) }),
+      () => ({ body: sse([['snapshot', thread('running', [...V2_COMMENTS, { id: 500, author_type: 'user', author_name: HANDLE, bot_id: null, parent_id: 15, root_id: 15, depth: 1, text: 'Same question here.', score: 1, created_at: ago(0) }])],
+        ['comment', { id: 510, bot_id: 2, author_type: 'bot', parent_id: 500, root_id: 15, depth: 2, text: 'Think of it as the price banks pay for money.', score: 1, created_at: ago(0) }]]) }),
+      () => new Promise(() => {}),
+    ] });
+    await page.goto(`${BASE}?t=${THREAD_ID}&${Q}`);
+    await page.waitForSelector('#c15');
+    await check('a reply on a done thread opens a new stream and the bot reply arrives under it', async () => {
+      await page.waitForTimeout(300);
+      assert.equal(st.streamCalls, 1);
+      await page.locator('#c15 > .cm-main > .cm-actions .reply-btn').click();
+      await page.locator('#c15 .cbox-reply textarea').fill('Same question here.');
+      await page.locator('#c15 .cbox-reply .cbox-send').click();
+      await page.locator('#c510').waitFor();
+      assert.equal(st.streamCalls, 2);
+      assert.equal(await page.locator('#c500').count(), 1, 'no duplicate after the snapshot');
+      assert.equal(await page.locator('#c500 > .cm-main > .cm-children > #c510').count(), 1);
+    });
+    await ctx.close();
+  }
+
+  // ---------------- F2: poll results (live) + AMA HOST badge (768 dark)
+  {
+    const ctx = await newCtx({ viewport: { width: 768, height: 1024 }, colorScheme: 'dark' });
+    const page = await ctx.newPage();
+    track(page);
+    const g = deferred();
+    const pollThread = { ...thread('running', V2_COMMENTS), post_type: 'poll', title: POLL.question, body: null, article: null, poll: POLL };
+    await mockApi(page, { streams: [
+      () => ({ body: sse([['snapshot', pollThread]]) }),
+      async () => { await g.p; return { body: sse([['post', { score: 60, poll: { ...POLL, options: POLL.options.map((o, i) => (i === 0 ? { ...o, votes: 9 } : o)), total: 16 } }]]) }; },
+      () => new Promise(() => {}),
+    ] });
+    await page.goto(`${BASE}?t=${THREAD_ID}&${Q}`);
+    await check('poll post shows a results bar per option with percentages and the total', async () => {
+      await page.locator('#poll').waitFor();
+      assert.deepEqual(await page.locator('#poll .poll-text').allTextContents(), ['Delhi', 'Kolkata', 'Indore', 'Mumbai']);
+      assert.deepEqual(await page.locator('#poll .poll-pct').allTextContents(), ['30%', '50%', '10%', '10%']);
+      assert.equal(await page.locator('#poll .poll-total').textContent(), '10 votes');
+      assert.equal(await page.locator('#poll .poll-row.is-lead .poll-text').textContent(), 'Kolkata');
+      assert.equal(await page.locator('#poll button').count(), 0, 'no voting on options in v2');
+      await page.evaluate(() => document.fonts.ready);
+      await page.screenshot({ path: join(SHOTS, 'f2-poll-768-dark.png') });
+    });
+    await check('SSE post event updates the poll live', async () => {
+      g.resolve();
+      await page.waitForFunction(() => document.querySelector('#poll .poll-total')?.textContent === '16 votes');
+      assert.deepEqual(await page.locator('#poll .poll-pct').allTextContents(), ['56%', '31%', '6%', '6%']);
+      assert.equal(await page.locator('#poll .poll-row.is-lead .poll-text').textContent(), 'Delhi');
+      assert.equal(await page.locator('.post-full .vote-col .score').textContent(), '60');
+    });
+    await ctx.close();
+
+    const ctx2 = await newCtx({ viewport: { width: 360, height: 740 }, colorScheme: 'light', deviceScaleFactor: 2 });
+    const p2 = await ctx2.newPage();
+    track(p2);
+    const ama = { ...thread('running', V2_COMMENTS), post_type: 'ama', title: "I'm a 41yo economics lecturer in Kolkata. AMA", article: null, body: 'Ask me about inflation.', op: { type: 'bot', bot_id: 2, name: 'NotAnEconomist' }, ama_host_bot_id: 2,
+      bots: BOTS.map(b => ({ ...b, is_op: b.id === 2, is_host: b.id === 2 })) };
+    await mockApi(p2, { streams: [() => ({ body: sse([['snapshot', ama]]) }), () => new Promise(() => {})] });
+    await p2.goto(`${BASE}?t=${THREAD_ID}&${Q}`);
+    await check('AMA: the host bot gets OP and HOST badges; the AMA flair shows', async () => {
+      await p2.waitForSelector('#c2');
+      const head = p2.locator('#c2 > .cm-main > .cm-head');
+      assert.deepEqual(await head.locator('.role-badge').allTextContents(), ['OP', 'HOST']);
+      assert.equal(await p2.locator('#c1 > .cm-main > .cm-head .role-badge').count(), 0);
+      assert.equal(await p2.locator('.post-full .type-flair').textContent(), 'AMA');
+      await noHScroll(p2, '360 ama');
+    });
+    await check('mobile: inline reply box fits without horizontal scroll', async () => {
+      await p2.locator('#c2 > .cm-main > .cm-actions .reply-btn').click();
+      await p2.locator('#c2 .cbox-reply textarea').fill('What do you tell students about EMIs?');
+      await noHScroll(p2, '360 reply');
+      await p2.locator('#c2 .cbox-reply').scrollIntoViewIfNeeded();
+      await p2.evaluate(() => document.fonts.ready);
+      await p2.screenshot({ path: join(SHOTS, 'f2-reply-360-light.png') });
+    });
+    await ctx2.close();
+
+    const ctx3 = await newCtx({ viewport: { width: 1440, height: 900 }, colorScheme: 'light' });
+    const p3 = await ctx3.newPage();
+    track(p3);
+    const st3 = await mockApi(p3, { hosts: ['plumber', 'nurse', 'stand-up comic'] });
+    await p3.goto(`${BASE}?new=1&type=ama&${Q}`);
+    await check('AMA host chips come from GET /reddit/hosts when available', async () => {
+      await p3.waitForFunction(() => document.querySelector('.host-chip[data-host="stand-up comic"]'));
+      assert.deepEqual(await p3.locator('.host-chip').evaluateAll(cs => cs.map(c => c.dataset.host)), ['', 'plumber', 'nurse', 'stand-up comic']);
+      assert.equal(await p3.locator('#ama-more').count(), 0);
+      assert.equal(st3.hostsCalls, 1);
+    });
+    await ctx3.close();
   }
 
   // ---------------- composer: today's paper pick list, infinite scroll, excerpt, bot post (360x740)
@@ -1257,7 +1565,8 @@ try {
       const ctx = await newCtx({ viewport: { width: w, height: hgt }, colorScheme: scheme, deviceScaleFactor: w < 1000 ? 2 : 1 });
       const page = await ctx.newPage();
       track(page);
-      await mockApi(page, { streams: [() => ({ body: sse([['snapshot', thread('running', V2_COMMENTS)], ['comment', LIVE_16], ['comment', LIVE_17], ['status', { status: 'running', comment_count: 17 }]]) }), async () => new Promise(() => {})] });
+      await mockApi(page, { streams: [() => ({ body: sse([['snapshot', thread('running', RICH)], ['comment', LIVE_16], ['comment', LIVE_17], ['status', { status: 'running', comment_count: 17 }]]) }), async () => new Promise(() => {})] });
+      await page.addInitScript(id => { try { localStorage.setItem(`ar:votes:${id}`, '{"post":1,"2":1,"1":-1}'); } catch {} }, THREAD_ID);
       await page.addInitScript(() => { try { localStorage.setItem('ar:votes:t002', '{"post":1}'); } catch {} });
       const tag = `${w}-${scheme}`;
 
@@ -1296,6 +1605,19 @@ try {
       await check(`no horizontal scroll ${w}x${hgt} ${scheme} thread (depth 6 open)`, () => noHScroll(page, `${tag} thread`));
       await page.screenshot({ path: join(SHOTS, `thread-${tag}.png`) });
       await page.screenshot({ path: join(SHOTS, `thread-${tag}-full.png`), fullPage: true });
+      await page.locator('#add-comment').click();
+      await page.locator('#comment-box-slot textarea').fill('Honestly the RBI is just reading the same tea leaves as the rest of us.');
+      await page.locator('#c15 > .cm-main > .cm-actions .reply-btn').click();
+      await page.locator('#c15 .cbox-reply textarea').fill('Think of it as the rate banks pay to borrow overnight.');
+      await page.evaluate(() => document.activeElement?.blur?.());
+      await check(`no horizontal scroll ${w}x${hgt} ${scheme} thread with comment + reply boxes`, () => noHScroll(page, `${tag} boxes`));
+      await page.locator('#comment-box-slot').scrollIntoViewIfNeeded();
+      await page.screenshot({ path: join(SHOTS, `thread-boxes-${tag}.png`) });
+      await page.locator('#c15').scrollIntoViewIfNeeded();
+      await page.screenshot({ path: join(SHOTS, `thread-reply-${tag}.png`) });
+      await page.locator('#c2').scrollIntoViewIfNeeded();
+      await page.evaluate(() => window.scrollBy(0, -60));
+      await page.screenshot({ path: join(SHOTS, `thread-texture-${tag}.png`) });
       await page.locator('#c2 > .cm-main > .cm-head .uname-btn').click();
       await page.locator('.pf-dialog').waitFor();
       await page.waitForTimeout(350);
