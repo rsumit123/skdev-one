@@ -133,6 +133,7 @@ function opLine(t) {
   if (op?.type === 'bot') {
     const bot = S.bots.get(op.bot_id);
     if (bot) return [h('span', { class: 'meta-by' }, ' • Posted by ', pfOpener(bot, 'op', 'uname uname-btn meta-user', `u/${bot.username}`)), flair(bot)];
+    if (t.status !== 'casting' && t.status !== 'running') return [h('span', { class: 'meta-by' }, ' • Posted by ', h('span', { class: 'meta-user', text: 'a bot OP' }))];
     // While casting the OP is not known yet (bot_id 0, empty roster).
     return [h('span', { class: 'meta-by' }, ' • Posted by ', h('span', { class: 'meta-user meta-pending', text: 'a redditor…' }))];
   }

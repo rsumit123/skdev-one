@@ -643,6 +643,21 @@ try {
     await ctx.close();
   }
 
+  // ---------------- done thread, bot OP not in roster -> plain "a bot OP", not a pending placeholder
+  {
+    const ctx = await newCtx({ viewport: { width: 768, height: 1024 } });
+    const page = await ctx.newPage();
+    track(page);
+    await mockApi(page, { streams: [() => ({ body: sse([['snapshot', { ...thread('done', BASE_COMMENTS), op: { type: 'bot', bot_id: 99 } }]]) })] });
+    await page.goto(`${BASE}?t=${THREAD_ID}&${Q}`);
+    await check('done thread with an unknown OP bot shows "Posted by a bot OP", not a loading placeholder', async () => {
+      await page.waitForSelector('.post-full .post-title-text');
+      assert.ok((await page.locator('.post-full .post-meta').textContent()).includes('Posted by a bot OP'));
+      assert.equal(await page.locator('.post-full .meta-pending').count(), 0);
+    });
+    await ctx.close();
+  }
+
   // ---------------- composer: today's paper pick list, infinite scroll, excerpt, bot post (360x740)
   {
     const ctx = await newCtx({ viewport: { width: 360, height: 740 }, colorScheme: 'light', deviceScaleFactor: 2 });

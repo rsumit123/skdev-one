@@ -9,7 +9,7 @@ import { getVote, setVote } from '/agent-reddit/local.js';
 const groups = new Map();
 const keyOf = (threadId, target) => `${threadId}|${target}`;
 
-export function voteWidget({ threadId, target = 'post', score = 0, cls = '' }) {
+export function voteWidget({ threadId, target = 'post', score = 0, cls = '', onScore = null }) {
   const key = keyOf(threadId, target);
   const el = h('div', { class: `vote vote-btns ${cls}`.trim(), 'data-vote': key });
   const up = h('button', { class: 'vote-btn vote-up', type: 'button', 'aria-label': 'Upvote', 'aria-pressed': 'false', on: { click: e => { e.preventDefault(); e.stopPropagation(); cast(1); } } }, ICONS.up());
@@ -47,7 +47,7 @@ export function voteWidget({ threadId, target = 'post', score = 0, cls = '' }) {
     try {
       const res = await api(`/reddit/threads/${encodeURIComponent(threadId)}/vote`, { method: 'POST', body: JSON.stringify({ target, dir }) });
       if (seq !== g.seq) return;
-      if (Number.isFinite(res?.score)) { g.score = res.score; paintAll(); }
+      if (Number.isFinite(res?.score)) { g.score = res.score; paintAll(); onScore?.(res.score); }
     } catch {
       if (seq !== g.seq) return;
       g.score = before;
