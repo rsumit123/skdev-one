@@ -696,7 +696,7 @@ function paperCard(item) {
   const meta = [h('span', { class: 'meta-src', text: item.source || 'The Indian Express' })];
   if (section) meta.push(sep(), pill('sec-pill', section[0].toUpperCase() + section.slice(1), SECTION_COLOR[section] || '#787c7e'));
   if (KIND_COLOR[kind]) meta.push(pill('kind-pill', kind[0].toUpperCase() + kind.slice(1), KIND_COLOR[kind]));
-  if (Number.isInteger(item.page)) meta.push(sep(), h('span', { class: 'meta-page', text: `p. ${item.page}` }));
+  if (Number.isInteger(item.page) && item.page > 0) meta.push(sep(), h('span', { class: 'meta-page', text: `p. ${item.page}` }));
   if (when) meta.push(sep(), h('span', { text: when }));
   const byline = [item.byline, item.dateline].filter(v => typeof v === 'string' && v.trim()).map(v => v.trim());
 
