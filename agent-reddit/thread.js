@@ -259,8 +259,10 @@ function pollResults(poll) {
   const r = pollRows(poll);
   if (!r.rows.length) return h('div', { class: 'poll-full is-empty', id: 'poll' }, h('p', { class: 'poll-note', text: 'The poll options appear once the OP finishes writing.' }));
   return h('div', { class: 'poll-full', id: 'poll', role: 'group', 'aria-label': `Poll results, ${plural(r.total, 'vote')}` },
-    h('ul', { class: 'poll-rows' }, r.rows.map(o => h('li', { class: `poll-row${o.lead ? ' is-lead' : ''}`, vars: { '--w': `${o.pct}%` }, 'data-votes': o.votes },
+    h('ul', { class: 'poll-rows' }, r.rows.map((o, i) => h('li', { class: `poll-row${o.lead ? ' is-lead' : ''}`, vars: { '--w': `${o.pct}%` }, 'data-votes': o.votes },
       h('span', { class: 'poll-fill', 'aria-hidden': 'true' }),
+      // Bots write "voted B", so show the letter each option is known by.
+      h('span', { class: 'poll-letter', text: String.fromCharCode(65 + i) }),
       h('span', { class: 'poll-text', text: o.text }),
       h('span', { class: 'poll-pct', text: `${o.pct}%` })))),
     h('p', { class: 'poll-note' }, h('strong', { class: 'poll-total', text: plural(r.total, 'vote') }), ' · The redditors vote in the comments'));
