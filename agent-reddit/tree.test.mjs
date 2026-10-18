@@ -5,6 +5,8 @@ import {
   upsertComment, applyVote, formatScore, providerColor, avatarSeed,
   mergeItems, nextOffset, paperSource, paperDate,
   botStats, ancestorIds, profileLine, preview,
+  POST_TYPES, typeInfo, timeAgo, isLive, safeHttpUrl, validHandle, guestHandle,
+  nextVote, scoreAfterVote, pollSummary, splitSticky, articleOf, validateCreate, buildCreateBody,
 } from './tree.js';
 
 const c = (id, parent_id, score = 1, extra = {}) => ({
@@ -239,4 +241,156 @@ test('preview collapses whitespace and cuts on a word boundary', () => {
   assert.ok(p.length <= 140 && p.endsWith('…') && !p.includes('  '));
   assert.equal(preview('x'.repeat(200), 10), 'xxxxxxxxx…');
   assert.equal(preview(null), '');
+});
+
+// ---------------------------------------------------------------- v2
+
+const KEYS = ['post_type', 'author', 'title', 'body', 'idea', 'article', 'poll_options', 'ama_host', 'user_name', 'bots', 'thread_limit', 'max_comments'];
+const base = (extra = {}) => ({
+  type: 'news', author: 'bot', source: 'paper', picked: null, paste: { headline: '', link: '', text: '' },
+  title: '', body: '', idea: '', options: ['', ''], amaHost: null, handle: 'guest_0042',
+  crowd: 'medium', length: 'normal', limit: 6, ...extra,
+});
+const ART = { headline: 'RBI holds rates', body: 'Full text', link: null, source: 'The Indian Express (print, p. 2)' };
+
+test('typeInfo labels and fallback', () => {
+  assert.equal(typeInfo('opinion').label, 'Unpopular opinion');
+  assert.equal(typeInfo('ama').label, 'AMA');
+  assert.equal(typeInfo('bogus'), POST_TYPES.news);
+  assert.deepEqual(Object.keys(POST_TYPES), ['news', 'ask', 'opinion', 'poll', 'ama']);
+});
+
+test('timeAgo long labels', () => {
+  const now = Date.parse('2026-10-18T12:00:00Z');
+  const at = s => new Date(now - s * 1000).toISOString();
+  assert.equal(timeAgo(at(5), now), 'just now');
+  assert.equal(timeAgo(at(60), now), '1 minute ago');
+  assert.equal(timeAgo(at(150), now), '2 minutes ago');
+  assert.equal(timeAgo(at(3600 * 3), now), '3 hours ago');
+  assert.equal(timeAgo(at(86400), now), '1 day ago');
+  assert.equal(timeAgo(at(86400 * 65), now), '2 months ago');
+  assert.equal(timeAgo(at(86400 * 800), now), '2 years ago');
+  assert.equal(timeAgo(at(-30), now), 'just now');
+  assert.equal(timeAgo(null, now), '');
+  assert.equal(timeAgo('nope', now), '');
+});
+
+test('isLive and safeHttpUrl', () => {
+  assert.ok(isLive('casting') && isLive('running'));
+  assert.ok(!isLive('done') && !isLive('error') && !isLive(undefined));
+  assert.equal(safeHttpUrl('https://x.com/a'), 'https://x.com/a');
+  assert.equal(safeHttpUrl('javascript:alert(1)'), null);
+  assert.equal(safeHttpUrl('x.com'), null);
+});
+
+test('handles: validation and guest default', () => {
+  assert.ok(validHandle('guest_0042') && validHandle('abc') && validHandle('A'.repeat(20)));
+  assert.ok(!validHandle('ab') && !validHandle('A'.repeat(21)) && !validHandle('has space') && !validHandle('dash-y') && !validHandle(null));
+  assert.equal(guestHandle(() => 0.0042), 'guest_0042');
+  assert.equal(guestHandle(() => 0.99999), 'guest_9999');
+  assert.match(guestHandle(), /^guest_\d{4}$/);
+});
+
+test('nextVote toggles and scoreAfterVote adjusts', () => {
+  assert.equal(nextVote(0, 1), 1);
+  assert.equal(nextVote(1, 1), 0);
+  assert.equal(nextVote(1, -1), -1);
+  assert.equal(nextVote(-1, -1), 0);
+  assert.equal(scoreAfterVote(10, 0, 1), 11);
+  assert.equal(scoreAfterVote(10, 1, -1), 8);
+  assert.equal(scoreAfterVote(10, -1, 0), 11);
+  assert.equal(scoreAfterVote(undefined, 0, 1), 1);
+});
+
+test('pollSummary percentages, total and leader', () => {
+  const s = pollSummary({ question: 'Q?', options: [{ text: 'A', votes: 1 }, { text: 'B', votes: 3 }, { text: 'C', votes: 0 }], total: 4 });
+  assert.deepEqual(s.options.map(o => o.pct), [25, 75, 0]);
+  assert.equal(s.leader.text, 'B');
+  assert.equal(s.total, 4);
+  const empty = pollSummary({ question: 'Q', options: [{ text: 'A', votes: 0 }], total: 0 });
+  assert.equal(empty.leader, null);
+  assert.deepEqual(empty.options.map(o => o.pct), [0]);
+  assert.equal(pollSummary(null).options.length, 0);
+  assert.equal(pollSummary({ options: [{ text: 'A', votes: 2 }], total: 'x' }).total, 2);
+});
+
+test('splitSticky pulls stickied automod roots only', () => {
+  const roots = [{ id: 1 }, { id: 2, stickied: true, author_type: 'automod' }, { id: 3, stickied: true, author_type: 'bot' }];
+  const { sticky, rest } = splitSticky(roots);
+  assert.deepEqual(sticky.map(r => r.id), [2]);
+  assert.deepEqual(rest.map(r => r.id), [1, 3]);
+});
+
+test('articleOf: picked story or pasted fields', () => {
+  assert.equal(articleOf(base({ picked: ART })), ART);
+  assert.equal(articleOf(base({ source: 'paste' })), null);
+  assert.deepEqual(articleOf(base({ source: 'paste', paste: { headline: '  Potholes  ', link: 'javascript:x', text: '' } })),
+    { headline: 'Potholes', body: null, link: null, source: null });
+  assert.deepEqual(articleOf(base({ source: 'paste', paste: { headline: 'H', link: 'https://e.com/a', text: ' txt ' } })),
+    { headline: 'H', body: 'txt', link: 'https://e.com/a', source: null });
+});
+
+test('validateCreate: news needs a story or a pasted headline; link must be http(s)', () => {
+  assert.deepEqual(Object.keys(validateCreate(base())), ['story']);
+  assert.deepEqual(validateCreate(base({ picked: ART })), {});
+  assert.deepEqual(Object.keys(validateCreate(base({ source: 'paste', paste: { headline: 'ab', link: 'ftp://x', text: '' } }))).sort(), ['headline', 'link']);
+  assert.deepEqual(validateCreate(base({ source: 'paste', paste: { headline: 'Real headline', link: '', text: '' } })), {});
+});
+
+test('validateCreate: user posts need title, handle; polls need 2-6 options', () => {
+  assert.deepEqual(Object.keys(validateCreate(base({ type: 'ask', author: 'user', title: 'hi' }))), ['title']);
+  assert.deepEqual(Object.keys(validateCreate(base({ type: 'ask', author: 'user', title: 'Why?', handle: 'x y' }))), ['handle']);
+  assert.deepEqual(Object.keys(validateCreate(base({ type: 'poll', author: 'user', title: 'Best city?', options: ['Pune', ' '] }))), ['options']);
+  assert.deepEqual(validateCreate(base({ type: 'poll', author: 'user', title: 'Best city?', options: ['Pune', 'Kochi', ''] })), {});
+  assert.ok(validateCreate(base({ type: 'poll', author: 'user', title: 'Q?', options: Array(7).fill('x') })).options);
+  assert.ok(validateCreate(base({ type: 'poll', author: 'user', title: 'Q?', options: ['a', 'b'.repeat(81)] })).options);
+  assert.ok(validateCreate(base({ type: 'opinion', author: 'user', title: 'Okay title', body: 'x'.repeat(6001) })).body);
+});
+
+test('validateCreate: bot posts need an idea except news and AMA; limit range', () => {
+  assert.deepEqual(Object.keys(validateCreate(base({ type: 'ask' }))), ['idea']);
+  assert.deepEqual(Object.keys(validateCreate(base({ type: 'poll', idea: 'no' }))), ['idea']);
+  assert.deepEqual(validateCreate(base({ type: 'opinion', idea: 'Dosa beats idli' })), {});
+  assert.deepEqual(validateCreate(base({ type: 'ama' })), {});
+  assert.deepEqual(Object.keys(validateCreate(base({ type: 'ama', idea: 'x' }))), ['idea']);
+  assert.deepEqual(validateCreate(base({ type: 'ama', handle: 'bad handle' })), {}, 'handle only matters when the user writes');
+  assert.deepEqual(Object.keys(validateCreate(base({ picked: ART, limit: 21 }))), ['limit']);
+  assert.deepEqual(Object.keys(validateCreate(base({ picked: ART, limit: 4 }))), ['limit']);
+});
+
+test('buildCreateBody: exact key set for every type x author', () => {
+  for (const type of Object.keys(POST_TYPES)) for (const author of ['user', 'bot']) {
+    const b = buildCreateBody(base({ type, author, picked: ART, title: 'T title', idea: 'an idea', options: ['a', 'b'] }));
+    assert.deepEqual(Object.keys(b), KEYS, `${type}/${author}`);
+    assert.equal(b.post_type, type);
+    assert.equal(b.author, author);
+  }
+});
+
+test('buildCreateBody: news by bot and by user', () => {
+  assert.deepEqual(buildCreateBody(base({ picked: ART })), {
+    post_type: 'news', author: 'bot', title: null, body: null, idea: null, article: ART, poll_options: null, ama_host: null,
+    user_name: 'guest_0042', bots: 5, thread_limit: 6, max_comments: 40,
+  });
+  assert.deepEqual(buildCreateBody(base({ author: 'user', source: 'paste', paste: { headline: 'Potholes again', link: 'https://e.com/p', text: '' }, body: ' my take ', crowd: 'large', length: 'long', limit: 12 })), {
+    post_type: 'news', author: 'user', title: 'Potholes again', body: 'my take', idea: null,
+    article: { headline: 'Potholes again', body: null, link: 'https://e.com/p', source: null }, poll_options: null, ama_host: null,
+    user_name: 'guest_0042', bots: 8, thread_limit: 12, max_comments: 80,
+  });
+  assert.equal(buildCreateBody(base({ picked: ART, idea: '  focus on EMIs ' })).idea, 'focus on EMIs');
+});
+
+test('buildCreateBody: ask, opinion, poll, ama', () => {
+  const ask = buildCreateBody(base({ type: 'ask', author: 'user', title: ' Why is rent so high? ', body: '', crowd: 'small', length: 'quick' }));
+  assert.deepEqual({ t: ask.title, b: ask.body, a: ask.article, i: ask.idea, bots: ask.bots, max: ask.max_comments }, { t: 'Why is rent so high?', b: null, a: null, i: null, bots: 3, max: 20 });
+  const op = buildCreateBody(base({ type: 'opinion', idea: 'Dosa beats idli', title: 'ignored' }));
+  assert.deepEqual({ t: op.title, i: op.idea }, { t: null, i: 'Dosa beats idli' });
+  const poll = buildCreateBody(base({ type: 'poll', author: 'user', title: 'Best city?', options: [' Pune ', '', 'Kochi', 'Indore'] }));
+  assert.deepEqual(poll.poll_options, ['Pune', 'Kochi', 'Indore']);
+  assert.equal(buildCreateBody(base({ type: 'poll', idea: 'cities', options: ['a', 'b'] })).poll_options, null);
+  const ama = buildCreateBody(base({ type: 'ama', amaHost: 'plumber' }));
+  assert.deepEqual({ h: ama.ama_host, i: ama.idea, t: ama.title }, { h: 'plumber', i: null, t: null });
+  const amaU = buildCreateBody(base({ type: 'ama', author: 'user', amaHost: null, title: "I'm a nurse, AMA", body: 'Night shifts.' }));
+  assert.deepEqual({ h: amaU.ama_host, t: amaU.title, b: amaU.body }, { h: null, t: "I'm a nurse, AMA", b: 'Night shifts.' });
+  assert.equal(buildCreateBody(base({ type: 'ask', author: 'user', title: 'x?', handle: 'bad handle' })).user_name, null);
 });
