@@ -157,7 +157,9 @@ function renderPicker() {
   h('span', { class: 'sub-opt-text' },
     h('strong', { class: 'sub-opt-name', text: s.name }),
     h('span', { class: 'sub-opt-desc', text: s.description })))));
-  box.querySelector('[aria-checked="true"]')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  // Bring the picked card into the row's view; only the row scrolls, never the page.
+  const el = box.querySelector('[aria-checked="true"]');
+  if (el && box.scrollWidth > box.clientWidth) box.scrollLeft = Math.max(0, el.offsetLeft - box.offsetLeft - 12);
   paintErrors();
 }
 
