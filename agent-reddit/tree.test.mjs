@@ -256,8 +256,10 @@ const ART = { headline: 'RBI holds rates', body: 'Full text', link: null, source
 test('typeInfo labels and fallback', () => {
   assert.equal(typeInfo('opinion').label, 'Unpopular opinion');
   assert.equal(typeInfo('ama').label, 'AMA');
-  assert.equal(typeInfo('bogus'), POST_TYPES.news);
-  assert.deepEqual(Object.keys(POST_TYPES), ['news', 'ask', 'opinion', 'poll', 'ama']);
+  assert.equal(typeInfo(undefined), POST_TYPES.news);
+  assert.equal(typeInfo('Bad Type!'), POST_TYPES.news, 'junk is still a news post');
+  assert.deepEqual(typeInfo('bogus'), { label: 'Bogus', color: '#787c7e', generic: true }, 'a well-formed unknown type gets a neutral pill, not News');
+  assert.deepEqual(Object.keys(POST_TYPES), ['news', 'ask', 'opinion', 'poll', 'ama', 'joke', 'confession']);
 });
 
 test('timeAgo long labels', () => {
@@ -569,8 +571,8 @@ const API_SUBS = [
   { slug: 'askindia', name: 'r/AskIndia', title: 'Ask India', description: 'Ask d', post_type: 'ask', color: '#1C7ED6', icon: '🙋', threads: 0, live: 0 },
 ];
 
-test('registry: five subs in order, 1:1 with post types', () => {
-  assert.deepEqual(SUBS.map(s => s.slug), ['indianews', 'askindia', 'unpopularindia', 'indiapolls', 'indiaama']);
+test('registry: seven subs in order, 1:1 with post types', () => {
+  assert.deepEqual(SUBS.map(s => s.slug), ['indianews', 'askindia', 'unpopularindia', 'indiapolls', 'indiaama', 'indiajokes', 'indiaconfessions']);
   assert.deepEqual(SUBS.map(s => s.post_type), Object.keys(POST_TYPES));
   for (const s of SUBS) assert.match(s.color, /^#[0-9A-F]{6}$/i);
 });
@@ -672,7 +674,7 @@ test('pageSection: appends a page in place, dedupes, stops at the end', () => {
 
 test('emptySubs: registry subs without a section, in order', () => {
   const secs = sectionsFrom({ sections: [{ sub: API_SUBS[0], threads: [card('a')], total: 1 }] });
-  assert.deepEqual(emptySubs(SUBS, secs).map(s => s.slug), ['askindia', 'unpopularindia', 'indiapolls', 'indiaama']);
+  assert.deepEqual(emptySubs(SUBS, secs).map(s => s.slug), ['askindia', 'unpopularindia', 'indiapolls', 'indiaama', 'indiajokes', 'indiaconfessions']);
   assert.deepEqual(emptySubs(normalizeSubs(API_SUBS), secs).map(s => s.slug), ['askindia']);
   assert.deepEqual(emptySubs(normalizeSubs([{ ...API_SUBS[1], threads: 4 }]), []).map(s => s.slug), [], 'a sub with posts never gets the tile');
   assert.deepEqual(emptySubs(null, []).map(s => s.slug), SUBS.map(s => s.slug));
@@ -690,4 +692,94 @@ test('buildCreateBody: sub from the picker, else the post type\'s sub', () => {
   assert.equal(buildCreateBody(base({ type: 'poll', idea: 'x', sub: 'indiapolls' })).sub, 'indiapolls');
   assert.equal(buildCreateBody(base({ type: 'poll', idea: 'x', sub: 'Bad Slug' })).sub, 'indiapolls');
   assert.equal(buildCreateBody(base({ type: 'ama', sub: 'askindia' })).sub, 'askindia', 'sent as picked so the server can 422');
+});
+
+// ---------------------------------------------------------------- v3.1: jokes and confessions
+import { knownType, displayType, postable, CONFESSION_RANGE } from './tree.js';
+
+test('v3.1 registry: r/IndiaJokes and r/IndiaConfessions after r/IndiaAMA, with the contract copy', () => {
+  const j = SUBS.find(s => s.slug === 'indiajokes');
+  const c = SUBS.find(s => s.slug === 'indiaconfessions');
+  assert.deepEqual([j.name, j.post_type, j.icon, j.color.toLowerCase(), j.description],
+    ['r/IndiaJokes', 'joke', '😂', '#f5a623', 'Desi humour: one-liners, puns, shitposts and groan-worthy dad jokes']);
+  assert.deepEqual([c.name, c.post_type, c.icon, c.color.toLowerCase(), c.description],
+    ['r/IndiaConfessions', 'confession', '🤫', '#6b5b95', 'Small, harmless confessions. Say it here, no names']);
+  assert.equal(SUBS.length, 7);
+  assert.deepEqual([typeInfo('joke').label, typeInfo('confession').label], ['Joke', 'Confession']);
+  for (const t of ['joke', 'confession']) assert.match(typeInfo(t).color, /^#[0-9a-f]{6}$/i);
+});
+
+test('v3.1 subForType / typeForSub for the new types, also before /subs answers', () => {
+  assert.equal(subForType('joke'), 'indiajokes');
+  assert.equal(subForType('confession'), 'indiaconfessions');
+  assert.equal(typeForSub('indiajokes'), 'joke');
+  assert.equal(typeForSub('indiaconfessions'), 'confession');
+  // An older /subs answer without the new subs: the built-in registry fills in.
+  assert.equal(subForType('joke', API_SUBS), 'indiajokes');
+  assert.equal(typeForSub('indiaconfessions', API_SUBS), 'confession');
+  assert.equal(subInfo('indiajokes', API_SUBS).icon, '😂');
+  assert.equal(subOf({ post_type: 'confession' }), 'indiaconfessions', 'old rows without sub');
+  assert.equal(normalizeSub({ slug: 'indiajokes' }).post_type, 'joke', 'a sparse API row falls back to the built-in entry');
+});
+
+test('v3.1 unknown future subs/types degrade to a generic look instead of breaking', () => {
+  const s = normalizeSub({ slug: 'indiahaiku', post_type: 'haiku', name: 'IndiaHaiku' });
+  assert.deepEqual({ n: s.name, t: s.post_type, c: s.color, i: s.icon }, { n: 'r/IndiaHaiku', t: 'haiku', c: '#0079d3', i: '💬' });
+  assert.equal(typeForSub('indiahaiku', [s]), null, 'the composer never offers a type it has no form for');
+  assert.equal(postable(s), false);
+  assert.equal(postable(SUBS[5]), true);
+  assert.equal(postable(null), false);
+  assert.equal(normalizeSub({ slug: 'weird', post_type: 'Not A Type' }), null, 'junk post types still drop the sub');
+  assert.deepEqual(normalizeSubs([{ slug: 'indiahaiku', post_type: 'haiku' }, API_SUBS[0]]).map(x => x.slug), ['indiahaiku', 'indianews']);
+  assert.equal(displayType('haiku'), 'haiku');
+  assert.equal(displayType('joke'), 'joke');
+  assert.equal(displayType(undefined), 'news');
+  assert.equal(displayType('<b>'), 'news');
+  assert.ok(knownType('confession') && !knownType('haiku') && !knownType('toString'));
+  assert.equal(subOf({ post_type: 'haiku' }), 'indianews', 'an unknown type without a sub lands in r/IndiaNews like before');
+});
+
+test('v3.1 validateCreate: joke by user needs the joke; punchline optional; bot theme optional', () => {
+  assert.deepEqual(validateCreate(base({ type: 'joke', author: 'user', title: '' })), { title: 'Write the joke (at least 3 characters).' });
+  assert.deepEqual(validateCreate(base({ type: 'joke', author: 'user', title: 'Why did the auto driver cross the road?' })), {});
+  assert.deepEqual(validateCreate(base({ type: 'joke', author: 'user', title: 'Setup', body: 'Punchline' })), {});
+  assert.ok(validateCreate(base({ type: 'joke', author: 'user', title: 'x'.repeat(301) })).title);
+  assert.deepEqual(validateCreate(base({ type: 'joke' })), {}, 'bot: no theme is fine (a random one)');
+  assert.deepEqual(Object.keys(validateCreate(base({ type: 'joke', idea: 'x' }))), ['idea'], 'a theme, if given, is 3+ characters');
+  assert.deepEqual(validateCreate(base({ type: 'joke', idea: 'Indian wedding WhatsApp groups' })), {});
+});
+
+test('v3.1 validateCreate: confession by user is 20..2000 characters, title optional', () => {
+  const [lo, hi] = CONFESSION_RANGE;
+  assert.deepEqual([lo, hi], [20, 2000]);
+  assert.deepEqual(validateCreate(base({ type: 'confession', author: 'user' })), { body: 'Write your confession (at least 20 characters).' });
+  assert.deepEqual(validateCreate(base({ type: 'confession', author: 'user', body: 'too short' })), { body: 'A bit more, please: at least 20 characters (9 so far).' });
+  assert.deepEqual(validateCreate(base({ type: 'confession', author: 'user', body: `  ${'x'.repeat(19)}  ` })).body, 'A bit more, please: at least 20 characters (19 so far).', 'trimmed');
+  assert.deepEqual(validateCreate(base({ type: 'confession', author: 'user', body: 'x'.repeat(20) })), {});
+  assert.deepEqual(validateCreate(base({ type: 'confession', author: 'user', body: 'x'.repeat(2000) })), {});
+  assert.deepEqual(validateCreate(base({ type: 'confession', author: 'user', body: 'x'.repeat(2001) })), { body: 'Keep it under 2000 characters (2001 now).' });
+  assert.deepEqual(validateCreate(base({ type: 'confession', author: 'user', body: 'x'.repeat(30), title: 'ab' })), { title: 'A title needs at least 3 characters, or leave it empty.' });
+  assert.deepEqual(validateCreate(base({ type: 'confession', author: 'user', body: 'x'.repeat(30), title: 'My confession' })), {});
+  assert.deepEqual(validateCreate(base({ type: 'confession' })), {}, 'bot: theme optional');
+  assert.deepEqual(validateCreate(base({ type: 'confession', body: 'short' })), {}, 'bot: the body field is not used');
+  assert.deepEqual(Object.keys(validateCreate(base({ type: 'confession', author: 'user', body: 'x'.repeat(30), handle: 'no way' }))), ['handle']);
+});
+
+test('v3.1 buildCreateBody: joke and confession, user and bot, exact shapes', () => {
+  const common = { idea: null, article: null, poll_options: null, ama_host: null, user_name: 'guest_0042', bots: 5, thread_limit: 6, max_comments: 40 };
+  assert.deepEqual(buildCreateBody(base({ type: 'joke', author: 'user', title: ' Why did the auto driver cross the road? ', body: ' Meter was running. ' })),
+    { post_type: 'joke', author: 'user', title: 'Why did the auto driver cross the road?', body: 'Meter was running.', ...common, sub: 'indiajokes' });
+  assert.deepEqual(buildCreateBody(base({ type: 'joke', author: 'user', title: 'One-liner', body: '' })),
+    { post_type: 'joke', author: 'user', title: 'One-liner', body: null, ...common, sub: 'indiajokes' });
+  assert.deepEqual(buildCreateBody(base({ type: 'joke', idea: ' Indian wedding WhatsApp groups ', title: 'ignored', body: 'ignored' })),
+    { post_type: 'joke', author: 'bot', title: null, body: null, ...common, idea: 'Indian wedding WhatsApp groups', sub: 'indiajokes' });
+  assert.deepEqual(buildCreateBody(base({ type: 'joke' })).idea, null, 'no theme = null, the server picks one');
+  const conf = 'I still pretend to understand cricket at office lunches.';
+  assert.deepEqual(buildCreateBody(base({ type: 'confession', author: 'user', body: `  ${conf}  `, title: '   ' })),
+    { post_type: 'confession', author: 'user', title: null, body: conf, ...common, sub: 'indiaconfessions' });
+  assert.equal(buildCreateBody(base({ type: 'confession', author: 'user', body: conf, title: ' Guilty ' })).title, 'Guilty');
+  assert.deepEqual(buildCreateBody(base({ type: 'confession', idea: 'office secrets', body: 'ignored' })),
+    { post_type: 'confession', author: 'bot', title: null, body: null, ...common, idea: 'office secrets', sub: 'indiaconfessions' });
+  assert.equal(buildCreateBody(base({ type: 'confession', author: 'user', body: 'y'.repeat(2500) })).body.length, 2000);
+  assert.equal(buildCreateBody(base({ type: 'joke', idea: 'x x x', sub: 'indiaconfessions' })).sub, 'indiaconfessions', 'sent as picked so the server can 422');
 });

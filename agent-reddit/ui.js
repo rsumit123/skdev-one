@@ -60,10 +60,16 @@ export const ICONS = {
   new: () => svg('0 0 20 20', [['path', { d: 'M10 2.5l1.7 4.6 4.8 1.7-4.8 1.7L10 15.2l-1.7-4.7-4.8-1.7 4.8-1.7z', fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5, 'stroke-linejoin': 'round' }]], 'ic'),
   top: () => svg('0 0 20 20', [stroke('M3 14.5 8 9.5l3 3 6-6M12.5 6.5H17V11', 1.7)], 'ic'),
   shield: () => svg('0 0 20 20', [['path', { d: 'M10 2 3.5 4.5v5c0 4 2.8 7 6.5 8.5 3.7-1.5 6.5-4.5 6.5-8.5v-5z', fill: 'currentColor' }], ['path', { d: 'M7 10l2.2 2.2L13.5 8', fill: 'none', stroke: '#fff', 'stroke-width': 1.7, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }]], 'ic'),
+  // v3.1: a grinning face (jokes) and a speech bubble with a hush line (confessions).
+  joke: () => svg('0 0 20 20', [['circle', { cx: 10, cy: 10, r: 7.2, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5 }], ['circle', { cx: 7.4, cy: 8, r: .95, fill: 'currentColor' }], ['circle', { cx: 12.6, cy: 8, r: .95, fill: 'currentColor' }], stroke('M6.3 11.2h7.4a3.7 3.7 0 0 1-7.4 0z', 1.5)], 'ic'),
+  confess: () => svg('0 0 20 20', [stroke('M4 4.5h12a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-6.5L6 16.5v-3H4a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1z', 1.5), stroke('M7 9h6', 1.7)], 'ic'),
+  generic: () => svg('0 0 20 20', [['rect', { x: 3.5, y: 3.5, width: 13, height: 13, rx: 3, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5 }], stroke('M7 8.5h6M7 11.5h4', 1.5)], 'ic'),
   pin: () => svg('0 0 20 20', [['path', { d: 'M12.5 2.5 17.5 7.5l-2 .8-3.2 3.2.3 3.5-1.6 1.6-3-3-3.8 3.9-.7-.7 3.9-3.8-3-3L6 8.4l3.5.3 3.2-3.2z', fill: 'currentColor' }]], 'ic'),
 };
 
-export const TYPE_ICON = { news: ICONS.news, ask: ICONS.ask, opinion: ICONS.flame, poll: ICONS.poll, ama: ICONS.mic };
+export const TYPE_ICON = { news: ICONS.news, ask: ICONS.ask, opinion: ICONS.flame, poll: ICONS.poll, ama: ICONS.mic, joke: ICONS.joke, confession: ICONS.confess };
+// Icon for any post type; unknown (newer) types get a neutral one instead of throwing.
+export const typeIcon = type => (Object.prototype.hasOwnProperty.call(TYPE_ICON, type) ? TYPE_ICON[type] : ICONS.generic)();
 
 export const safeUrl = safeHttpUrl;
 
@@ -136,7 +142,8 @@ export function modBadge() {
 
 export function typeFlair(type, cls = '') {
   const info = typeInfo(type);
-  return h('span', { class: `mpill type-flair ${cls}`.trim(), 'data-type': type in TYPE_ICON ? type : 'news', vars: { '--pc': info.color }, text: info.label });
+  const known = Object.prototype.hasOwnProperty.call(TYPE_ICON, type);
+  return h('span', { class: `mpill type-flair ${cls}`.trim(), 'data-type': known ? type : info.generic ? 'generic' : 'news', vars: { '--pc': info.color }, text: info.label });
 }
 
 export function liveBadge(status) {

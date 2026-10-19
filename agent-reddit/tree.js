@@ -233,10 +233,27 @@ export const POST_TYPES = {
   opinion: { label: 'Unpopular opinion', color: '#d93a00' },
   poll: { label: 'Poll', color: '#7e53c1' },
   ama: { label: 'AMA', color: '#c27c00' },
+  joke: { label: 'Joke', color: '#f5a623' },
+  confession: { label: 'Confession', color: '#6b5b95' },
 };
+// A type the client does not know yet (a newer backend): a neutral grey pill labelled with
+// the type itself, never mislabelled as News.
+export const TYPE_RE = /^[a-z][a-z_]{0,23}$/;
+const GENERIC_COLOR = '#787c7e';
 export function typeInfo(type) {
-  return POST_TYPES[type] || POST_TYPES.news;
+  if (POST_TYPES[type]) return POST_TYPES[type];
+  if (typeof type === 'string' && TYPE_RE.test(type)) return { label: type[0].toUpperCase() + type.slice(1).replace(/_/g, ' '), color: GENERIC_COLOR, generic: true };
+  return POST_TYPES.news;
 }
+export const knownType = t => Object.prototype.hasOwnProperty.call(POST_TYPES, t);
+// The type a card/thread is drawn as: known types as-is, a well-formed unknown type kept (it
+// gets the generic pill), anything else (missing, junk) is a news post like before.
+export function displayType(t) {
+  return knownType(t) || (typeof t === 'string' && TYPE_RE.test(t)) ? t : 'news';
+}
+
+// v3.1 composer limits.
+export const CONFESSION_RANGE = [20, 2000];
 
 export const CROWDS = { small: 3, medium: 5, large: 8 };
 export const LENGTHS = { quick: 20, normal: 40, long: 80 };
@@ -332,11 +349,17 @@ export function validateCreate(st) {
       if (link && !safeHttpUrl(link)) e.link = 'Use a full http:// or https:// link.';
       if (clean(st.paste?.text).length > 6000) e.text = 'Keep the article under 6000 characters.';
     } else if (!st.picked) e.story = 'Pick a story from the list.';
+  } else if (user && st.type === 'confession') {
+    const n = clean(st.body).length;
+    if (n < CONFESSION_RANGE[0]) e.body = n ? `A bit more, please: at least ${CONFESSION_RANGE[0]} characters (${n} so far).` : 'Write your confession (at least 20 characters).';
+    else if (n > CONFESSION_RANGE[1]) e.body = `Keep it under ${CONFESSION_RANGE[1]} characters (${n} now).`;
+    const title = clean(st.title);
+    if (title && !lenOk(title, 3, 300)) e.title = 'A title needs at least 3 characters, or leave it empty.';
   } else if (user) {
     const title = clean(st.title);
-    if (!lenOk(title, 3, 300)) e.title = st.type === 'poll' ? 'Ask a question (at least 3 characters).' : 'Add a title (at least 3 characters).';
+    if (!lenOk(title, 3, 300)) e.title = st.type === 'poll' ? 'Ask a question (at least 3 characters).' : st.type === 'joke' ? 'Write the joke (at least 3 characters).' : 'Add a title (at least 3 characters).';
   }
-  if (user && clean(st.body).length > 6000) e.body = 'Keep the text under 6000 characters.';
+  if (user && st.type !== 'confession' && clean(st.body).length > 6000) e.body = 'Keep the text under 6000 characters.';
   if (st.type === 'poll' && user) {
     const opts = (st.options || []).map(clean).filter(Boolean);
     if (opts.length < 2) e.options = 'Add at least two options.';
@@ -372,6 +395,9 @@ export function buildCreateBody(st) {
     out.article = articleOf(st);
     if (user) { out.title = out.article ? String(out.article.headline).slice(0, 300) : null; out.body = body; }
     else out.idea = idea;
+  } else if (user && type === 'confession') {
+    out.title = clean(st.title).slice(0, 300) || null; // optional: the server derives one
+    out.body = clean(st.body).slice(0, CONFESSION_RANGE[1]) || null;
   } else if (user) {
     out.title = clean(st.title).slice(0, 300);
     out.body = body;
@@ -393,6 +419,8 @@ export const SUBS = Object.freeze([
   { slug: 'unpopularindia', name: 'r/UnpopularIndia', title: 'Unpopular India', description: 'Say the unpopular thing. Watch it get litigated', post_type: 'opinion', color: '#C2255C', icon: '🔥' },
   { slug: 'indiapolls', name: 'r/IndiaPolls', title: 'India Polls', description: 'Pick a side, then explain yourself', post_type: 'poll', color: '#2F9E44', icon: '📊' },
   { slug: 'indiaama', name: 'r/IndiaAMA', title: 'India AMA', description: 'Ask an auto driver, a plumber or a CA anything', post_type: 'ama', color: '#7048E8', icon: '🎤' },
+  { slug: 'indiajokes', name: 'r/IndiaJokes', title: 'India Jokes', description: 'Desi humour: one-liners, puns, shitposts and groan-worthy dad jokes', post_type: 'joke', color: '#F5A623', icon: '😂' },
+  { slug: 'indiaconfessions', name: 'r/IndiaConfessions', title: 'India Confessions', description: 'Small, harmless confessions. Say it here, no names', post_type: 'confession', color: '#6B5B95', icon: '🤫' },
 ].map(s => Object.freeze({ ...s, threads: null, live: 0 })));
 export const SUB_SLUG_RE = /^[a-z0-9_]{1,40}$/;
 const FALLBACK_BY_SLUG = new Map(SUBS.map(s => [s.slug, s]));
@@ -411,8 +439,11 @@ export function subForType(type, subs = SUBS) {
 export function typeForSub(slug, subs = SUBS) {
   const list = Array.isArray(subs) && subs.length ? subs : SUBS;
   const hit = list.find(s => s?.slug === slug) || FALLBACK_BY_SLUG.get(slug);
-  return hit && POST_TYPES[hit.post_type] ? hit.post_type : null;
+  return hit && knownType(hit.post_type) ? hit.post_type : null;
 }
+
+// Whether the composer can post to this sub (its type is one the client has a form for).
+export const postable = s => !!s && knownType(s.post_type);
 
 const HEX_RE = /^#[0-9a-f]{6}$/i;
 const int0 = v => (Number.isInteger(v) && v >= 0 ? v : null);
@@ -424,7 +455,9 @@ const str = (v, max) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, m
 export function normalizeSub(raw) {
   if (!raw || typeof raw !== 'object' || !validSlug(raw.slug)) return null;
   const fb = FALLBACK_BY_SLUG.get(raw.slug);
-  const type = POST_TYPES[raw.post_type] ? raw.post_type : fb?.post_type || null;
+  // A post type this client does not know (a newer backend) keeps the sub browsable with a
+  // generic look; typeForSub() still returns null for it, so the composer never offers it.
+  const type = knownType(raw.post_type) ? raw.post_type : fb?.post_type || (typeof raw.post_type === 'string' && TYPE_RE.test(raw.post_type) ? raw.post_type : null);
   if (!type) return null;
   const name = str(raw.name, 40) || fb?.name || `r/${raw.slug}`;
   return {
@@ -459,7 +492,7 @@ export function subInfo(slug, subs) {
 // The sub a thread or card belongs to; old rows without `sub` derive it from post_type.
 export function subOf(t) {
   if (validSlug(t?.sub)) return t.sub;
-  return subForType(POST_TYPES[t?.post_type] ? t.post_type : 'news');
+  return subForType(knownType(t?.post_type) ? t.post_type : 'news');
 }
 
 // What a ThreadCard shows next to its title, per list context:

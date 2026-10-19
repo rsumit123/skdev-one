@@ -1,7 +1,7 @@
 // ThreadCard renderer shared by the home sections and the sub pages.
 import { h, ICONS, avatar, flair, humanFlair, typeFlair, liveBadge, plural } from '/agent-reddit/ui.js';
 import { linkTo } from '/agent-reddit/api.js';
-import { timeAgo, isLive, pollSummary, POST_TYPES, cardDecor, subOf } from '/agent-reddit/tree.js';
+import { timeAgo, isLive, pollSummary, displayType, cardDecor, subOf } from '/agent-reddit/tree.js';
 import { voteWidget } from '/agent-reddit/votes.js';
 import { subLink } from '/agent-reddit/subs.js';
 
@@ -14,7 +14,7 @@ function opName(op) {
 // context: 'section' | 'sub' (no type flair: the sub is already on screen) | 'mixed' (an
 // r/<Sub> chip instead of the flair). pageSub = the sub page being shown, if any.
 export function threadCard(t, { appended = false, context = null, pageSub = null } = {}) {
-  const type = POST_TYPES[t.post_type] ? t.post_type : 'news';
+  const type = displayType(t.post_type);
   const title = String(t.title || t.headline || 'Untitled');
   const op = t.op && typeof t.op === 'object' ? t.op : null;
   const human = op?.type === 'user';

@@ -1,7 +1,7 @@
 // Sub page (?r=<slug>): banner, Hot/New/Top, infinite scroll over GET /reddit/threads?sub=.
 import { h, ICONS, avatarLogo, plural, skeletonCard, skeletonList } from '/agent-reddit/ui.js';
 import { api, errorText, linkTo, navigate, view, API } from '/agent-reddit/api.js';
-import { mergeItems, nextOffset, validSlug } from '/agent-reddit/tree.js';
+import { mergeItems, nextOffset, validSlug, postable } from '/agent-reddit/tree.js';
 import { threadCard } from '/agent-reddit/cards.js';
 import { REG, loadSubs, onSubs, sub, subIcon, chipsRow, patchChips, startSubsTimer, stopSubsTimer } from '/agent-reddit/subs.js';
 import { sortTabs, rulesCard, communitiesCard } from '/agent-reddit/home.js';
@@ -114,7 +114,7 @@ function banner(s) {
         ),
         h('div', { class: 'sub-actions' },
           join,
-          h('button', { class: 'btn btn-primary btn-sm sub-create', type: 'button', id: 'sub-create', on: { click: () => openComposer(s.slug) } }, ICONS.plus(), h('span', { text: 'Create post' })),
+          postable(s) ? h('button', { class: 'btn btn-primary btn-sm sub-create', type: 'button', id: 'sub-create', on: { click: () => openComposer(s.slug) } }, ICONS.plus(), h('span', { text: 'Create post' })) : null,
         ),
       ),
       h('p', { class: 'community-tag sub-desc', text: s.description }),
@@ -217,7 +217,7 @@ function renderFeed() {
       h('p', { class: 'empty-title', text: `No posts in ${s.name} yet` }),
       h('p', { text: 'Be the first. A crowd of AI redditors will show up to argue about it.' }),
       h('div', { class: 'empty-actions' },
-        h('button', { class: 'btn btn-primary', type: 'button', id: 'feed-empty-create', text: 'Create the first post', on: { click: () => openComposer(P.slug) } }))));
+        postable(sub(P.slug)) ? h('button', { class: 'btn btn-primary', type: 'button', id: 'feed-empty-create', text: 'Create the first post', on: { click: () => openComposer(P.slug) } }) : null)));
     return;
   }
   const list = h('div', { class: 'tcard-list', id: 'tcard-list' });
@@ -272,7 +272,7 @@ function aboutSub(s) {
         h('div', {}, h('strong', { text: Number.isInteger(P.total ?? s.threads) ? String(P.total ?? s.threads) : '–' }), h('span', { text: 'posts' })),
         h('div', {}, h('strong', { text: String(s.live || 0) }), h('span', { text: 'live now' })),
       ),
-      h('button', { class: 'btn btn-primary btn-block', type: 'button', id: 'about-create', text: `Create post in ${s.name}`, on: { click: () => openComposer(s.slug) } }),
+      postable(s) ? h('button', { class: 'btn btn-primary btn-block', type: 'button', id: 'about-create', text: `Create post in ${s.name}`, on: { click: () => openComposer(s.slug) } }) : null,
     ),
   );
 }

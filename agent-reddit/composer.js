@@ -9,7 +9,7 @@ import { api, errorText, hrefFor, navigate, view, API } from '/agent-reddit/api.
 import {
   mergeItems, nextOffset, paperSource, paperDate, relTime, POST_TYPES, typeInfo,
   CROWDS, LENGTHS, LIMIT_RANGE, DEFAULT_LIMIT, validateCreate, buildCreateBody, validHandle,
-  validSlug, subForType, typeForSub,
+  validSlug, subForType, typeForSub, CONFESSION_RANGE,
 } from '/agent-reddit/tree.js';
 import { REG, loadSubs, onSubs, sub as subOfSlug, subIcon } from '/agent-reddit/subs.js';
 import { getHandle, setHandle } from '/agent-reddit/local.js';
@@ -22,7 +22,10 @@ const TYPE_HINT = {
   opinion: 'Post an unpopular opinion and watch the redditors pile on (or agree).',
   poll: 'Ask a question with 2 to 6 options. Every redditor votes, then explains why.',
   ama: 'One redditor hosts an Ask Me Anything. The others ask questions, the host answers.',
+  joke: 'Tell a joke. The redditors groan, rate it and try to top it.',
+  confession: 'Confess something small and harmless. The redditors relate, tease gently and confess back.',
 };
+export const HELPLINE = 'If you are struggling, Tele-MANAS 14416 is free, 24x7';
 // Must match the backend archetype occupations (app/reddit/archetypes.py).
 export const AMA_HOSTS = [
   'software engineer', 'startup founder', 'plumber', 'electrician', 'kirana shop owner', 'tea stall owner',
@@ -105,8 +108,11 @@ export function showComposer({ r, type, src } = {}) {
     ),
     h('section', { class: 'card compose-card', 'aria-labelledby': 'compose-h' },
       h('div', { class: 'field sub-field', id: 'sub-field' },
-        h('span', { class: 'field-label sub-pick-label', id: 'sub-pick-label', text: 'Post to' }),
-        h('div', { class: 'sub-pick', id: 'sub-pick', role: 'radiogroup', 'aria-labelledby': 'sub-pick-label', 'aria-describedby': 'err-sub', 'data-field': 'sub' }),
+        h('div', { class: 'sub-pick-head' },
+          h('span', { class: 'field-label sub-pick-label', id: 'sub-pick-label', text: 'Post to' }),
+          h('span', { class: 'sub-pick-n', id: 'sub-pick-n', 'aria-hidden': 'true' })),
+        h('div', { class: 'sub-pick', id: 'sub-pick', role: 'radiogroup', 'aria-labelledby': 'sub-pick-label', 'aria-describedby': 'err-sub', 'data-field': 'sub',
+          on: { scroll: e => markPickEnd(e.currentTarget) } }),
         errEl('sub')),
       h('p', { class: 'type-hint', id: 'type-hint' }),
       h('div', { class: 'compose-body', id: 'compose-body' }),
@@ -160,7 +166,17 @@ function renderPicker() {
   // Bring the picked card into the row's view; only the row scrolls, never the page.
   const el = box.querySelector('[aria-checked="true"]');
   if (el && box.scrollWidth > box.clientWidth) box.scrollLeft = Math.max(0, el.offsetLeft - box.offsetLeft - 12);
+  const n = document.getElementById('sub-pick-n');
+  if (n) n.replaceChildren(`${subs.length} communities`, h('span', { class: 'sub-pick-swipe', text: ' · swipe →' }));
+  markPickEnd(box);
   paintErrors();
+}
+
+// The fade on the right edge of the phone picker row says "more this way"; gone at the end.
+function markPickEnd(box) {
+  const end = box.scrollWidth - box.clientWidth - box.scrollLeft <= 4;
+  box.classList.toggle('at-end', end);
+  document.querySelector('.sub-pick-swipe')?.toggleAttribute('hidden', end);
 }
 
 function setSub(slug) {
@@ -195,11 +211,13 @@ function renderBody() {
   const box = document.getElementById('compose-body');
   if (!box) return;
   disconnect();
-  document.getElementById('type-hint').textContent = TYPE_HINT[C.type];
+  document.getElementById('type-hint').textContent = TYPE_HINT[C.type] || '';
   const parts = [whoControl()];
   if (C.type === 'news') parts.push(newsFields());
   else if (C.type === 'poll') parts.push(pollFields());
   else if (C.type === 'ama') parts.push(amaFields());
+  else if (C.type === 'joke') parts.push(jokeFields());
+  else if (C.type === 'confession') parts.push(confessionFields());
   else parts.push(textFields());
   parts.push(crowdFields(), advancedFields());
   if (C.author === 'user') parts.push(handleField());
@@ -213,9 +231,9 @@ function whoControl() {
     class: 'who-opt', type: 'button', role: 'radio', id: `who-${a}`, 'aria-checked': String(C.author === a),
     on: { click: () => setAuthor(a) },
   }, h('span', { class: 'who-radio', 'aria-hidden': 'true' }), h('span', { class: 'who-text' }, h('strong', { text: title }), h('span', { text: sub })));
-  const botSub = { news: 'A bot posts it and adds its take', ask: 'Give an idea, a bot asks it', opinion: 'Give an idea, a bot argues it', poll: 'Give an idea, a bot writes the poll', ama: 'The host bot writes its own intro' }[C.type];
+  const botSub = { news: 'A bot posts it and adds its take', ask: 'Give an idea, a bot asks it', opinion: 'Give an idea, a bot argues it', poll: 'Give an idea, a bot writes the poll', ama: 'The host bot writes its own intro', joke: 'A bot tells one, on a theme if you like', confession: 'A bot confesses something small' }[C.type];
   const me = `u/${C.handle || 'you'}`;
-  const userSub = { news: `You post it as ${me}`, ask: `You ask, as ${me}`, opinion: `Your take, as ${me}`, poll: 'Your question and options', ama: 'You write the AMA intro' }[C.type];
+  const userSub = { news: `You post it as ${me}`, ask: `You ask, as ${me}`, opinion: `Your take, as ${me}`, poll: 'Your question and options', ama: 'You write the AMA intro', joke: `Your joke, as ${me}`, confession: `Your confession, as ${me}` }[C.type];
   return h('div', { class: 'field' },
     h('span', { class: 'field-label', id: 'who-label', text: 'Who writes the post?' }),
     h('div', { class: 'who', role: 'radiogroup', 'aria-labelledby': 'who-label' },
@@ -226,19 +244,29 @@ function errEl(key) {
   return h('span', { class: 'field-err', id: `err-${key}`, 'data-err': key, role: 'alert' });
 }
 
-function textInput(key, { label, placeholder, max, optional, multiline, rows = 4, value, onInput, hint }) {
+// min: a soft lower bound shown by the counter (confessions); soft: no maxlength attribute,
+// the counter and inline validation say when it is too long instead of cutting the text.
+function textInput(key, { label, placeholder, max, min, soft, optional, multiline, rows = 4, value, onInput, hint }) {
   const id = `f-${key}`;
-  const count = h('span', { class: 'counter', text: max ? `${String(value || '').length}/${max}` : '' });
+  const count = h('span', { class: 'counter', id: `count-${key}`, text: max ? `${String(value || '').length}/${max}` : '' });
+  const paintCount = v => {
+    if (!max) return;
+    const n = v.trim().length;
+    count.textContent = `${soft ? n : v.length}/${max}`;
+    count.classList.toggle('is-under', !!min && n > 0 && n < min);
+    count.classList.toggle('is-over', n > max);
+  };
+  paintCount(String(value || ''));
   const props = {
-    id, maxlength: max || null, placeholder, autocomplete: 'off', 'aria-describedby': `err-${key}`, 'data-field': key,
-    on: { input: e => { onInput(e.target.value); if (max) count.textContent = `${e.target.value.length}/${max}`; C.serverErr = ''; validate(); } },
+    id, maxlength: soft ? null : max || null, placeholder, autocomplete: 'off', 'aria-describedby': hint ? `err-${key} hint-${key}` : `err-${key}`, 'data-field': key,
+    on: { input: e => { onInput(e.target.value); paintCount(e.target.value); C.serverErr = ''; validate(); } },
   };
   const ctl = multiline ? h('textarea', { ...props, rows }) : h('input', { ...props, type: key === 'link' ? 'url' : 'text', inputmode: key === 'link' ? 'url' : null, value: value || '' });
   if (multiline) ctl.value = value || '';
   return h('label', { class: 'field', for: id },
     h('span', { class: 'field-label' }, label, optional ? h('span', { class: 'opt', text: ' (optional)' }) : null, max && multiline ? count : null),
     ctl,
-    hint ? h('span', { class: 'field-hint', text: hint }) : null,
+    hint ? h('span', { class: 'field-hint', id: `hint-${key}`, text: hint }) : null,
     errEl(key));
 }
 
@@ -247,6 +275,8 @@ const titleHolder = {
   opinion: 'Unpopular opinion: ...',
   poll: 'Ask a question, e.g. Which Indian city has the best street food?',
   ama: "e.g. I'm a nurse on night shifts in Pune. Ask me anything!",
+  joke: 'Why did the auto driver cross the road? ...',
+  confession: 'Confession: ...',
 };
 const ideaHolder = {
   news: 'e.g. focus on what it means for renters',
@@ -254,13 +284,21 @@ const ideaHolder = {
   opinion: 'e.g. filter coffee is overrated',
   poll: 'e.g. the best Indian breakfast',
   ama: 'e.g. talk about the worst night shift ever',
+  joke: 'e.g. Indian wedding WhatsApp groups',
+  confession: 'e.g. office secrets, or petty habits at home',
 };
 
+const IDEA_HINT = {
+  news: 'The bot posts the story with a short submission statement.',
+  joke: 'Leave it empty for a random theme. The bot OP writes the joke itself.',
+  confession: 'Leave it empty for a random theme. The bot OP keeps it small and harmless.',
+};
 function ideaField(optional) {
+  const themed = C.type === 'joke' || C.type === 'confession';
   return textInput('idea', {
-    label: C.type === 'news' ? 'Angle for the bot OP' : 'Your one-line idea', optional, max: 300, placeholder: ideaHolder[C.type],
+    label: C.type === 'news' ? 'Angle for the bot OP' : themed ? 'Theme' : 'Your one-line idea', optional, max: 300, placeholder: ideaHolder[C.type],
     value: C.idea, onInput: v => { C.idea = v; },
-    hint: C.type === 'news' ? 'The bot posts the story with a short submission statement.' : 'A bot OP turns it into a Reddit-style post in its own voice.',
+    hint: IDEA_HINT[C.type] || 'A bot OP turns it into a Reddit-style post in its own voice.',
   });
 }
 
@@ -273,6 +311,33 @@ function textFields() {
   return h('div', { class: 'fields' },
     textInput('title', { label: 'Title', max: 300, placeholder: titleHolder[C.type], value: C.title, onInput: v => { C.title = v; } }),
     bodyField());
+}
+
+function jokeFields() {
+  if (C.author === 'bot') return h('div', { class: 'fields' }, ideaField(true));
+  return h('div', { class: 'fields' },
+    textInput('title', { label: 'Joke', max: 300, placeholder: titleHolder.joke, value: C.title, onInput: v => { C.title = v; },
+      hint: 'The setup, or the whole one-liner. No "Joke:" prefix needed.' }),
+    textInput('body', { label: 'Punchline', optional: true, max: 6000, multiline: true, rows: 3, placeholder: '...because the meter was already running.', value: C.body, onInput: v => { C.body = v; } }));
+}
+
+// One quiet line on both confession forms; the thread's AutoMod sticky repeats it.
+function helplineNote() {
+  return h('p', { class: 'helpline-note', id: 'helpline-note', role: 'note' },
+    h('span', { class: 'helpline-ic', 'aria-hidden': 'true', text: '🤫' }),
+    h('span', {}, 'Keep it anonymous: no real names, nothing that harms anyone. ', h('strong', { text: HELPLINE }), '.'));
+}
+
+function confessionFields() {
+  if (C.author === 'bot') return h('div', { class: 'fields' }, helplineNote(), ideaField(true));
+  const [lo, hi] = CONFESSION_RANGE;
+  return h('div', { class: 'fields' },
+    helplineNote(),
+    textInput('body', { label: 'Your confession (anonymous, no real names)', max: hi, min: lo, soft: true, multiline: true, rows: 6,
+      placeholder: 'e.g. I have been pretending to understand cricket for 11 years to fit in at office lunches.', value: C.body, onInput: v => { C.body = v; },
+      hint: `${lo} to ${hi} characters.` }),
+    textInput('title', { label: 'Title', optional: true, max: 300, placeholder: titleHolder.confession, value: C.title, onInput: v => { C.title = v; },
+      hint: 'Leave it empty and we title it from your first line.' }));
 }
 
 function pollFields() {
@@ -826,7 +891,7 @@ function resetDraft() {
 
 function tipsCard() {
   const tips = [
-    ['Pick a community', 'r/IndiaNews for a story, r/AskIndia for a question, r/UnpopularIndia for a hot take, r/IndiaPolls to make them vote, r/IndiaAMA to interview one of them.'],
+    ['Pick a community', 'r/IndiaNews for a story, r/AskIndia for a question, r/UnpopularIndia for a hot take, r/IndiaPolls to make them vote, r/IndiaAMA to interview one of them, r/IndiaJokes for a groaner, r/IndiaConfessions to get something small off your chest.'],
     ['You or a bot', 'Write it yourself (you get a HUMAN flair) or give a bot OP a one-line idea.'],
     ['Crowd and length', 'More bots means more arguments. Long threads take a few minutes to play out.'],
   ];

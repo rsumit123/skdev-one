@@ -16,7 +16,7 @@ import { commentBox } from '/agent-reddit/commentbox.js';
 import { getHandle } from '/agent-reddit/local.js';
 import {
   buildTree, sortTree, countDescendants, isLocked, relTime, applyVote, formatScore,
-  avatarSeed, botStats, ancestorIds, profileLine, preview, splitSticky, POST_TYPES,
+  avatarSeed, botStats, ancestorIds, profileLine, preview, splitSticky, displayType,
   applyEdit, applyDelete, applyRemove, applyAwards, applyLock, lockedIds, awardCounts, canReply,
   reconcileComment, pollRows, opRoles,
   rankOrder, arrangeTree, shouldBuffer, mergePolicy, pillText, subOf, subInfo,
@@ -484,7 +484,7 @@ function renderPost() {
   S.postSig = sig;
   S.postScore = score;
   const legacy = !t.post_type && !t.article;
-  const type = POST_TYPES[t.post_type] ? t.post_type : 'news';
+  const type = displayType(t.post_type);
   const body = t.body ? String(t.body) : '';
   const long = body.length > 420;
   const bodyEl = body ? richText(body, `post-text${long && !S.bodyOpen ? ' is-clamped' : ''}`) : null;
@@ -517,7 +517,15 @@ function renderPost() {
         h('span', { class: 'act act-muted', text: `${t.thread_limit ?? '?'} per thread · ${t.max_comments ?? '?'} max` }),
       ),
     ),
-  ));
+  ), type === 'confession' ? confessionNote() : null);
+}
+
+// v3.1: a quiet line under a confession post. AutoMod's sticky says the same at more length.
+export const CONFESSION_NOTE = 'Anonymous confession. No real names. Tele-MANAS 14416 is free, 24x7';
+function confessionNote() {
+  return h('p', { class: 'confession-note', id: 'confession-note', role: 'note' },
+    h('span', { class: 'confession-note-ic', 'aria-hidden': 'true', text: '🤫' }),
+    h('span', {}, 'Anonymous confession. No real names. ', h('a', { href: 'tel:14416', class: 'confession-tel', text: 'Tele-MANAS 14416' }), ' is free, 24x7'));
 }
 
 function rosterItem(bot, full) {

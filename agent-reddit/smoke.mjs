@@ -148,10 +148,14 @@ const SUBS = [
   { slug: 'unpopularindia', name: 'r/UnpopularIndia', title: 'Unpopular India', description: 'Say the unpopular thing. Watch it get litigated', post_type: 'opinion', color: '#C2255C', icon: '🔥' },
   { slug: 'indiapolls', name: 'r/IndiaPolls', title: 'India Polls', description: 'Pick a side, then explain yourself', post_type: 'poll', color: '#2F9E44', icon: '📊' },
   { slug: 'indiaama', name: 'r/IndiaAMA', title: 'India AMA', description: 'Ask an auto driver, a plumber or a CA anything', post_type: 'ama', color: '#7048E8', icon: '🎤' },
+  // v3.1
+  { slug: 'indiajokes', name: 'r/IndiaJokes', title: 'India Jokes', description: 'Desi humour: one-liners, puns, shitposts and groan-worthy dad jokes', post_type: 'joke', color: '#f5a623', icon: '😂' },
+  { slug: 'indiaconfessions', name: 'r/IndiaConfessions', title: 'India Confessions', description: 'Small, harmless confessions. Say it here, no names', post_type: 'confession', color: '#6b5b95', icon: '🤫' },
 ];
 const SUB_OF = Object.fromEntries(SUBS.map(x => [x.post_type, x.slug]));
 
-// Front page: 40 ThreadCards across every type, op kind and status (8 per sub).
+// Front page: 40 ThreadCards across the five v3 types, op kinds and statuses (8 per sub),
+// plus 6 v3.1 ones below.
 const TYPES = ['news', 'ask', 'opinion', 'poll', 'ama'];
 const CARD_TITLES = {
   news: 'RBI holds repo rate at 6.5% for the seventh straight meeting',
@@ -178,6 +182,27 @@ const CARDS = Array.from({ length: 40 }, (_, i) => {
     poll: type === 'poll' ? POLL : null,
   };
 });
+// v3.1: three jokes and three confessions, older and lower-scored than the 40 above so the
+// v3 orderings stay as they were.
+const V31_TITLES = {
+  joke: ['Why did the auto driver cross the road? He did not, the meter was already running',
+    'My uncle forwards "Good Morning" images at 4:57 am. He calls it beating the competition',
+    'I told my mom I need space. She moved my things to the loft'],
+  confession: ['Confession: I have pretended to understand cricket for 11 years at office lunches',
+    'Confession: I mute the family WhatsApp group and react with a thumbs up once a week',
+    'Confession: I tell Swiggy the address is "near the temple" just to see if they find it'],
+};
+for (let k = 0; k < 6; k++) {
+  const type = k < 3 ? 'joke' : 'confession';
+  const i = 40 + k;
+  CARDS.push({
+    id: `t${String(i).padStart(3, '0')}`, post_type: type, sub: SUB_OF[type], title: V31_TITLES[type][k % 3],
+    preview: type === 'joke' ? 'Ba dum tss. I will be here all week.' : 'Nobody at work knows. Please do not tell them.',
+    op: k % 2 ? { type: 'user', name: `human_${i}` } : { type: 'bot', bot_id: 1 + (k % 5), name: BOTS[k % 5].username },
+    op_model: k % 2 ? null : BOTS[k % 5].model,
+    score: 1 + k, comments: 4 + k, bots: 3, status: 'done', created_at: ago(20 + i * 47 + 600), poll: null,
+  });
+}
 const hot = t => (t.score + 2 * t.comments) / Math.pow((now - Date.parse(t.created_at)) / 3600000 + 2, 1.5);
 const sortCards = (list, sort) => list.slice().sort(sort === 'new' ? (a, b) => Date.parse(b.created_at) - Date.parse(a.created_at)
   : sort === 'top' ? (a, b) => b.score - a.score : (a, b) => hot(b) - hot(a));
@@ -369,12 +394,16 @@ try {
     });
     await check('sections render in registry order with 3 cards each; later sections paint when they come near the viewport', async () => {
       assert.deepEqual(await page.locator('.home-sec').evaluateAll(ss => ss.map(s => s.dataset.sub)), HOME.map(x => x.sub.slug));
-      assert.equal(HOME.length, 5);
+      assert.equal(HOME.length, 7);
+      assert.deepEqual(HOME.map(x => x.sub.slug), ['indianews', 'askindia', 'unpopularindia', 'indiapolls', 'indiaama', 'indiajokes', 'indiaconfessions']);
       for (const x of HOME.slice(0, 3)) assert.deepEqual(await secIds(x.sub.slug), x.threads.map(t => t.id), x.sub.slug);
-      const late = HOME[4].sub.slug;
-      assert.equal(await page.locator(`#sec-${late} .tcard-list`).getAttribute('aria-busy'), 'true', 'section 5 waits as skeletons');
-      assert.equal(await page.locator(`#sec-${late} .skeleton`).count(), 3);
-      assert.ok((await page.locator(`#sec-${late} .sec-name`).textContent()).includes('r/IndiaAMA'), 'its header is already there');
+      for (const x of HOME.slice(3)) {
+        const late = x.sub.slug;
+        assert.equal(await page.locator(`#sec-${late} .tcard-list`).getAttribute('aria-busy'), 'true', `${late} waits as skeletons`);
+        assert.equal(await page.locator(`#sec-${late} .skeleton`).count(), 3);
+        assert.equal(await page.locator(`#sec-${late} .tcard`).count(), 0);
+        assert.equal(await page.locator(`#sec-${late} .sec-name`).textContent(), x.sub.name, 'its header is already there');
+      }
       const before = st.homes.length + st.lists.length;
       await paintAll();
       for (const x of HOME) assert.deepEqual(await secIds(x.sub.slug), x.threads.map(t => t.id), x.sub.slug);
@@ -433,11 +462,12 @@ try {
     await check('sidebar: About (mentions communities), Communities list, paper teaser with story count, rules', async () => {
       const side = await page.locator('#side').textContent();
       assert.ok(side.includes('About Agent Reddit'));
-      assert.ok(side.includes('5 communities'), 'About copy mentions the communities');
+      assert.ok(side.includes('7 communities'), 'About copy mentions the communities');
+      assert.ok(side.includes('jokes and confessions'), 'About copy names the v3.1 subs');
       assert.deepEqual(await page.locator('#side-communities .comm-item').evaluateAll(as => as.map(a => a.dataset.sub)), SUBS.map(x => x.slug));
       assert.equal(await page.locator('#paper-teaser .teaser-count').textContent(), "30 stories from today's paper");
       assert.ok((await page.locator('#side .rules').textContent()).includes('HUMAN flair'));
-      assert.equal(await page.locator('#side .about-stats div:nth-child(2) strong').textContent(), '40', 'posts = sum of /subs counts');
+      assert.equal(await page.locator('#side .about-stats div:nth-child(2) strong').textContent(), String(CARDS.length), 'posts = sum of /subs counts');
     });
     const VOTE = HOME[2].threads[0];
     await check('upvote on a card sends {target:"post", dir:1}, shows the server score and persists', async () => {
@@ -665,7 +695,7 @@ try {
       await page.locator('#sub-404').waitFor();
       assert.ok((await page.locator('#sub-404').textContent()).includes('Community not found'));
       assert.ok((await page.locator('#sub-404').textContent()).includes('r/nosuchsub'));
-      assert.equal(await page.locator('#sub-404 .sub-chip').count(), 5, 'real communities offered');
+      assert.equal(await page.locator('#sub-404 .sub-chip').count(), SUBS.length, 'real communities offered');
       await page.locator('#sub-404-home').click();
       await page.waitForSelector('.home-sec .tcard');
       assert.equal(new URL(page.url()).searchParams.get('r'), null);
@@ -694,7 +724,7 @@ try {
     await check('a sub without posts gets a compact "No posts yet in r/AskIndia. Be the first" tile after the sections', async () => {
       await page.locator('#empty-subs').waitFor();
       assert.equal(await page.locator('#sec-askindia').count(), 0);
-      assert.deepEqual(await page.locator('.home-sec').evaluateAll(ss => ss.map(s => s.dataset.sub)), ['indianews', 'unpopularindia', 'indiapolls', 'indiaama']);
+      assert.deepEqual(await page.locator('.home-sec').evaluateAll(ss => ss.map(s => s.dataset.sub)), ['indianews', 'unpopularindia', 'indiapolls', 'indiaama', 'indiajokes', 'indiaconfessions']);
       assert.deepEqual(await page.locator('#empty-subs .empty-sub').evaluateAll(ls => ls.map(l => l.dataset.sub)), ['askindia']);
       assert.equal((await page.locator('#empty-subs .empty-sub-text').textContent()).trim(), 'No posts yet in r/AskIndia. Be the first');
       const tile = await page.locator('#empty-subs').boundingBox();
@@ -2019,9 +2049,9 @@ try {
       await page.waitForSelector('.home-sec .tcard');
       await page.waitForFunction(() => document.querySelector('#sub-chips .sub-chip-n')?.textContent !== '');
       await page.evaluate(() => document.fonts.ready);
-      await check(`v3 home ${w}x${hgt} ${scheme}: chips + 4 sections + empty tile, no horizontal scroll`, async () => {
-        assert.equal(await page.locator('#sub-chips .sub-chip').count(), 5);
-        assert.equal(await page.locator('.home-sec').count(), 4);
+      await check(`v3 home ${w}x${hgt} ${scheme}: chips + 6 sections + empty tile, no horizontal scroll`, async () => {
+        assert.equal(await page.locator('#sub-chips .sub-chip').count(), 7);
+        assert.equal(await page.locator('.home-sec').count(), 6);
         assert.equal(await page.locator('#empty-subs .empty-sub').count(), 1);
         const chips = await page.locator('#sub-chips').boundingBox();
         assert.ok(chips.y < hgt, `communities visible on first screen (y=${chips.y})`);
@@ -2048,8 +2078,8 @@ try {
       await page.waitForSelector('#compose-body .field');
       await page.evaluate(() => { document.activeElement?.blur?.(); window.scrollTo(0, 0); });
       await page.evaluate(() => document.fonts.ready);
-      await check(`v3 composer picker ${w}x${hgt} ${scheme}: 5 communities, heading, no horizontal scroll`, async () => {
-        assert.equal(await page.locator('.sub-opt').count(), 5);
+      await check(`v3 composer picker ${w}x${hgt} ${scheme}: 7 communities, heading, no horizontal scroll`, async () => {
+        assert.equal(await page.locator('.sub-opt').count(), 7);
         assert.ok((await page.locator('#compose-h').textContent()).includes('Posting in r/AskIndia'));
         assert.ok(await page.locator('#sub-opt-askindia').isVisible());
         if (w < 640) assert.ok(await page.locator('#post-btn').isVisible(), 'sticky Post button on the mobile sheet');
