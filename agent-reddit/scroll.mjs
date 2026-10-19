@@ -301,6 +301,16 @@ export async function scrollSuite({ browser, BASE, check, shots }) {
       await page.locator('#c209').waitFor();
       await settle(page);
     });
+    await check(`calm ${tag}: an open profile card buffers new comments`, async () => {
+      await page.locator('#c67 > .cm-main > .cm-head .uname-btn').click();
+      await page.locator('.pf-dialog').waitFor();
+      await emit(page, 'comment', next(211, 67, 1));
+      assert.equal(await page.locator('#c211').count(), 0);
+      await page.keyboard.press('Escape');
+      await page.locator('#live-pill').click();
+      await page.locator('#c211').waitFor();
+      await settle(page);
+    });
     await check(`calm ${tag}: no horizontal scroll`, () => noHScroll(page, tag));
     assert.deepEqual(errs, [], `${tag} page errors`);
     await ctx.close();
