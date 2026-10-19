@@ -233,7 +233,7 @@ function whoControl() {
   }, h('span', { class: 'who-radio', 'aria-hidden': 'true' }), h('span', { class: 'who-text' }, h('strong', { text: title }), h('span', { text: sub })));
   const botSub = { news: 'A bot posts it and adds its take', ask: 'Give an idea, a bot asks it', opinion: 'Give an idea, a bot argues it', poll: 'Give an idea, a bot writes the poll', ama: 'The host bot writes its own intro', joke: 'A bot tells one, on a theme if you like', confession: 'A bot confesses something small' }[C.type];
   const me = `u/${C.handle || 'you'}`;
-  const userSub = { news: `You post it as ${me}`, ask: `You ask, as ${me}`, opinion: `Your take, as ${me}`, poll: 'Your question and options', ama: 'You write the AMA intro', joke: `Your joke, as ${me}`, confession: `Your confession, as ${me}` }[C.type];
+  const userSub = { news: `You post it as ${me}`, ask: `You ask, as ${me}`, opinion: `Your take, as ${me}`, poll: 'Your question and options', ama: 'You write the AMA intro', joke: `Your joke, as ${me}`, confession: `Only ${me} shows, never your name` }[C.type];
   return h('div', { class: 'field' },
     h('span', { class: 'field-label', id: 'who-label', text: 'Who writes the post?' }),
     h('div', { class: 'who', role: 'radiogroup', 'aria-labelledby': 'who-label' },

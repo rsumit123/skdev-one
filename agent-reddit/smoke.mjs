@@ -210,11 +210,11 @@ const SORTED = { hot: sortCards(CARDS, 'hot'), new: sortCards(CARDS, 'new'), top
 const subOfCard = t => t.sub || SUB_OF[t.post_type] || 'indianews';
 const isLiveCard = t => t.status === 'running' || t.status === 'casting';
 // What the mock /reddit/home returns for a card set: registry order, empty subs omitted.
-const homeSections = (cards, sort = 'hot', per = 3) => SUBS.map(x => {
+const homeSections = (cards, sort = 'hot', per = 3, subs = SUBS) => subs.map(x => {
   const rows = sortCards(cards.filter(t => subOfCard(t) === x.slug), sort);
   return rows.length ? { sub: { ...x, threads: rows.length, live: rows.filter(isLiveCard).length }, threads: rows.slice(0, per), total: rows.length } : null;
 }).filter(Boolean);
-const subsFor = cards => SUBS.map(x => { const rows = cards.filter(t => subOfCard(t) === x.slug); return { ...x, threads: rows.length, live: rows.filter(isLiveCard).length }; });
+const subsFor = (cards, subs = SUBS) => subs.map(x => { const rows = cards.filter(t => subOfCard(t) === x.slug); return { ...x, threads: rows.length, live: rows.filter(isLiveCard).length }; });
 
 const sse = events => 'retry: 200\n\n' + events.map(([ev, data]) => (ev === ':' ? ': ping\n\n' : `event: ${ev}\ndata: ${JSON.stringify(data)}\n\n`)).join('');
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': 'GET,POST,OPTIONS' };
@@ -227,7 +227,8 @@ function deferred() { let resolve; const p = new Promise(r => { resolve = r; });
 // `subsList` overrides the /subs answer (a function of the call number).
 async function mockApi(page, { streams = [doneStream], threadGet = () => ({ status: 200, body: thread('running', V2_COMMENTS) }), down = false,
   papers = PAPERS, paperItems = PAPER, liveItems = NEWS, newsHook = null, cards = CARDS, listHook = null, createHook = null, newId = THREAD_ID,
-  commentHook = null, hosts = null, homeHook = null, subsList = null } = {}) {
+  commentHook = null, hosts = null, homeHook = null, subsList = null, extraSubs = [] } = {}) {
+  const ALL = [...SUBS, ...extraSubs]; // v3.1: subs this client may not know yet
   const st = { streamCalls: 0, posts: [], news: [], lists: [], homes: [], subsCalls: 0, votes: [], surprises: 0, comments: [], hostsCalls: 0 };
   await page.route(`${MOCK}/**`, async route => {
     const req = route.request();
@@ -237,13 +238,13 @@ async function mockApi(page, { streams = [doneStream], threadGet = () => ({ stat
     const json = (status, body) => route.fulfill({ status, headers: CORS, contentType: 'application/json', body: JSON.stringify(body) });
     const p = url.pathname;
     if (p === '/reddit/papers') return json(200, papers);
-    if (p === '/reddit/subs') { const n = st.subsCalls++; return json(200, { subs: subsList ? subsList(n) : subsFor(cards) }); }
+    if (p === '/reddit/subs') { const n = st.subsCalls++; return json(200, { subs: subsList ? subsList(n) : subsFor(cards, ALL) }); }
     if (p === '/reddit/home') {
       const sp = url.searchParams;
       const q = { per_sub: Number(sp.get('per_sub')), sort: sp.get('sort') };
       const n = st.homes.push(q) - 1;
       if (homeHook) { const r = await homeHook(q, n); if (r?.status) return json(r.status, { detail: 'boom' }); }
-      return json(200, { sections: homeSections(cards, q.sort, q.per_sub) });
+      return json(200, { sections: homeSections(cards, q.sort, q.per_sub, ALL) });
     }
     if (p === '/reddit/hosts') { st.hostsCalls++; return hosts ? json(200, { hosts }) : json(404, { detail: 'Not Found' }); }
     const cm = /^\/reddit\/threads\/([^/]+)\/comments$/.exec(p);
@@ -279,7 +280,7 @@ async function mockApi(page, { streams = [doneStream], threadGet = () => ({ stat
       const q = { sort: sp.get('sort'), offset: Number(sp.get('offset')), limit: Number(sp.get('limit')), sub: sp.get('sub') };
       const n = st.lists.push(q) - 1;
       if (listHook) { const r = await listHook(q, n); if (r?.status) return json(r.status, { detail: 'boom' }); }
-      if (q.sub != null && !SUBS.some(x => x.slug === q.sub)) return json(404, { detail: 'Subreddit not found' });
+      if (q.sub != null && !ALL.some(x => x.slug === q.sub)) return json(404, { detail: 'Subreddit not found' });
       const all = sortCards(q.sub ? cards.filter(t => subOfCard(t) === q.sub) : cards, q.sort);
       const threads = all.slice(q.offset, q.offset + q.limit);
       const next = q.offset + q.limit < all.length ? q.offset + q.limit : null;
@@ -329,6 +330,449 @@ const body = over => {
   return { ...b, sub: over.sub || SUB_OF[b.post_type] }; // v3: the post type's sub unless given
 };
 
+
+// ------------------------------------------------------------ v3.1: jokes and confessions
+// Run alone with SMOKE_ONLY=v31. Screenshots to $SHOTS_V31 (default /tmp/ar-shots-v31).
+const ONLY_V31 = process.env.SMOKE_ONLY === 'v31';
+const SHOTS_V31 = process.env.SHOTS_V31 || '/tmp/ar-shots-v31';
+const HELPLINE = 'If you are struggling, Tele-MANAS 14416 is free, 24x7';
+const CONF_NOTE = 'Anonymous confession. No real names. Tele-MANAS 14416 is free, 24x7';
+const CONF_STICKY = { ...AUTOMOD, text: 'Keep it light and anonymous: no real names, no illegal acts, nothing that harms anyone. If you are struggling, you can talk to Tele-MANAS: 14416 (free, 24x7).' };
+const JOKE_STICKY = { ...AUTOMOD, text: 'Keep it funny, not hateful. Jokes about religion, caste, gender, disability or regions that punch down get removed. Rule 1: be civil.' };
+const typedThread = (type, sub, extra = {}) => ({
+  ...thread('done', [type === 'confession' ? CONF_STICKY : JOKE_STICKY, ...BASE_COMMENTS.slice(0, 6)]),
+  post_type: type, sub, article: null, link: null, source: null, ...extra,
+  title: type === 'joke' ? V31_TITLES.joke[0] : type === 'confession' ? V31_TITLES.confession[0] : 'A haiku about Bengaluru traffic',
+  headline: null, body: type === 'joke' ? 'Ba dum tss.' : 'Nobody at work knows. I nod at every LBW debate like I have opinions.',
+});
+const streamOf = t => () => ({ body: sse([['snapshot', t], ['status', { status: 'done', comment_count: t.comments.length - 1 }]]) });
+// A sub from a newer backend: unknown post type, no icon or colour.
+const HAIKU_SUB = { slug: 'indiahaiku', name: 'r/IndiaHaiku', title: 'India Haiku', description: 'Five, seven, five', post_type: 'haiku' };
+const HAIKU_CARDS = [0, 1].map(k => ({ ...CARDS[0], id: `h00${k}`, post_type: 'haiku', sub: 'indiahaiku', title: `Silsilay of horns (${k})`, status: 'done', poll: null, created_at: ago(30 + k) }));
+
+// Readable-contrast helper evaluated in the page: any CSS colour -> sRGB via a canvas.
+const CONTRAST_JS = `(() => {
+  const cv = document.createElement('canvas'); cv.width = cv.height = 1; const cx = cv.getContext('2d', { willReadFrequently: true });
+  const rgb = c => { cx.clearRect(0, 0, 1, 1); cx.fillStyle = '#000'; cx.fillStyle = c; cx.fillRect(0, 0, 1, 1); return [...cx.getImageData(0, 0, 1, 1).data].slice(0, 3); };
+  const lum = c => { const [r, g, b] = rgb(c).map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  window.__contrast = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+  window.__rgb = c => rgb(c).join(',');
+})()`;
+
+async function v31Suite() {
+  mkdirSync(SHOTS_V31, { recursive: true });
+
+  // ---------------- composer forms, exact bodies, validation, 422 (1440 light)
+  {
+    const ctx = await newCtx({ viewport: { width: 1440, height: 900 }, colorScheme: 'light' });
+    const page = await ctx.newPage();
+    track(page);
+    let nextHook = null;
+    const st = await mockApi(page, { createHook: async () => { const r = nextHook; nextHook = null; return r; } });
+    const go = async q => { await page.goto(`${BASE}?new=1&${q}&${Q}`); await page.waitForSelector('#compose-body .field'); };
+    const postAndWait = async () => {
+      const n = st.posts.length;
+      await page.locator('#post-btn').click();
+      await page.waitForURL(u => new URL(u).searchParams.get('t') === THREAD_ID);
+      assert.equal(st.posts.length, n + 1);
+      const b = st.posts.at(-1);
+      assert.deepEqual(Object.keys(b), KEYS);
+      return b;
+    };
+    const blocked = async (field, msg) => {
+      const n = st.posts.length;
+      await page.locator('#post-btn').click();
+      assert.equal(await page.locator(`#err-${field}`).textContent(), msg);
+      assert.equal(await page.getAttribute(`[data-field="${field}"]`, 'aria-invalid'), 'true');
+      assert.equal(await page.locator('#post-err').textContent(), msg, 'also above Post');
+      await page.waitForTimeout(100);
+      assert.equal(st.posts.length, n, 'nothing sent');
+    };
+
+    await check('v3.1 composer: picker offers seven communities in registry order, all on screen on desktop', async () => {
+      await go('r=indiajokes');
+      assert.deepEqual(await page.locator('.sub-opt').evaluateAll(bs => bs.map(b => b.dataset.sub)), SUBS.map(x => x.slug));
+      assert.deepEqual(await page.locator('.sub-opt .sub-opt-ic').allTextContents(), SUBS.map(x => x.icon));
+      assert.equal(await page.locator('#sub-pick-n').innerText(), '7 communities', 'no swipe hint on desktop');
+      const boxes = await page.locator('.sub-opt').evaluateAll(bs => bs.map(b => { const r = b.getBoundingClientRect(); return [Math.round(r.top), Math.round(r.right)]; }));
+      assert.ok(new Set(boxes.map(b => b[0])).size <= 3, 'a compact grid');
+      for (const [, right] of boxes) assert.ok(right <= 1440, 'all within the viewport');
+    });
+    await check('v3.1 joke by user: heading, "Joke" field with an example, optional Punchline, exact body', async () => {
+      assert.equal((await page.locator('#compose-h').textContent()).trim(), '😂Posting in r/IndiaJokes');
+      assert.equal(await page.getAttribute('#sub-opt-indiajokes', 'aria-checked'), 'true');
+      assert.equal(await page.getAttribute('#who-user', 'aria-checked'), 'true', 'jokes default to "I\'ll write it"');
+      assert.equal((await page.locator('label[for=f-title] .field-label').textContent()).trim(), 'Joke');
+      assert.ok((await page.getAttribute('#f-title', 'placeholder')).startsWith('Why did the auto driver cross the road?'));
+      assert.equal((await page.locator('label[for=f-body] .field-label').textContent()).replace(/\d+\/\d+$/, '').trim(), 'Punchline (optional)');
+      assert.ok((await page.locator('#type-hint').textContent()).includes('Tell a joke'));
+      await blocked('title', 'Write the joke (at least 3 characters).');
+      await page.fill('#f-title', '  Why did the auto driver cross the road?  ');
+      await page.fill('#f-body', 'He did not. The meter was already running.');
+      const b = await postAndWait();
+      assert.deepEqual(b, body({ post_type: 'joke', author: 'user', title: 'Why did the auto driver cross the road?', body: 'He did not. The meter was already running.' }));
+      assert.equal(b.sub, 'indiajokes');
+    });
+    await check('v3.1 joke one-liner without a punchline sends body null', async () => {
+      await go('r=indiajokes');
+      await page.fill('#f-title', 'My uncle forwards Good Morning images at 4:57 am');
+      assert.deepEqual(await postAndWait(), body({ post_type: 'joke', author: 'user', title: 'My uncle forwards Good Morning images at 4:57 am', body: null }));
+    });
+    await check('v3.1 joke by a bot OP: optional Theme (empty = null, else the theme)', async () => {
+      await go('r=indiajokes');
+      await page.locator('#who-bot').click();
+      assert.equal((await page.locator('label[for=f-idea] .field-label').textContent()).replace(/\d+\/\d+$/, '').trim(), 'Theme (optional)');
+      assert.equal(await page.getAttribute('#f-idea', 'placeholder'), 'e.g. Indian wedding WhatsApp groups');
+      assert.equal(await page.locator('#f-title').count(), 0, 'no joke field for the bot');
+      assert.deepEqual(await postAndWait(), body({ post_type: 'joke', idea: null }));
+      await go('r=indiajokes');
+      await page.locator('#who-bot').click();
+      await page.fill('#f-idea', 'x');
+      await blocked('idea', 'Give the bot a one-line idea (at least 3 characters).');
+      await page.fill('#f-idea', ' Indian wedding WhatsApp groups ');
+      assert.deepEqual(await postAndWait(), body({ post_type: 'joke', idea: 'Indian wedding WhatsApp groups' }));
+    });
+    await check('v3.1 legacy &type=joke and &type=confession map to their subs', async () => {
+      await go('type=joke');
+      assert.equal(await page.getAttribute('#sub-opt-indiajokes', 'aria-checked'), 'true');
+      await go('type=confession');
+      assert.equal(await page.getAttribute('#sub-opt-indiaconfessions', 'aria-checked'), 'true');
+      assert.equal((await page.locator('#compose-h').textContent()).trim(), '🤫Posting in r/IndiaConfessions');
+    });
+    await check('v3.1 confession by user: one textarea, helpline notice, 0/2000 counter, title optional', async () => {
+      await go('r=indiaconfessions');
+      assert.equal(await page.getAttribute('#who-user', 'aria-checked'), 'true');
+      assert.ok((await page.locator('#helpline-note').textContent()).includes(HELPLINE));
+      assert.ok((await page.locator('#helpline-note').textContent()).includes('no real names'));
+      assert.ok(await page.locator('#helpline-note').isVisible());
+      assert.equal((await page.locator('label[for=f-body] .field-label').textContent()).replace(/\d+\/\d+$/, '').trim(), 'Your confession (anonymous, no real names)');
+      assert.equal(await page.locator('#compose-body textarea').count(), 1, 'a single textarea');
+      assert.equal(await page.getAttribute('#f-body', 'maxlength'), null, 'never silently cut: the counter and the error say it');
+      assert.equal(await page.locator('#count-body').textContent(), '0/2000');
+      assert.equal((await page.locator('label[for=f-title] .field-label').textContent()).replace(/\d+\/\d+$/, '').trim(), 'Title (optional)');
+      const order = await page.locator('#compose-body [data-field]').evaluateAll(es => es.map(e => e.dataset.field));
+      assert.ok(order.indexOf('body') < order.indexOf('title'), 'the confession comes first');
+    });
+    await check('v3.1 confession validation: empty, too short (with the count), too long; nothing is sent', async () => {
+      await blocked('body', 'Write your confession (at least 20 characters).');
+      await page.fill('#f-body', 'I eat Maggi raw.');
+      assert.equal(await page.locator('#count-body').textContent(), '16/2000');
+      assert.ok(await page.locator('#count-body').evaluate(e => e.classList.contains('is-under')));
+      await blocked('body', 'A bit more, please: at least 20 characters (16 so far).');
+      await page.fill('#f-body', 'y'.repeat(2001));
+      assert.equal(await page.locator('#count-body').textContent(), '2001/2000');
+      assert.ok(await page.locator('#count-body').evaluate(e => e.classList.contains('is-over')));
+      await blocked('body', 'Keep it under 2000 characters (2001 now).');
+      await page.fill('#f-body', 'y'.repeat(40));
+      await page.fill('#f-title', 'ab');
+      await blocked('title', 'A title needs at least 3 characters, or leave it empty.');
+      await page.screenshot({ path: join(SHOTS_V31, 'compose-confession-errors-1440-light.png') });
+    });
+    await check('v3.1 confession by user posts {body, title: null}; with a title, the title', async () => {
+      const text = 'I have pretended to understand cricket for 11 years at office lunches.';
+      await page.fill('#f-title', '');
+      await page.fill('#f-body', `  ${text}  `);
+      assert.deepEqual(await postAndWait(), body({ post_type: 'confession', author: 'user', title: null, body: text }));
+      await go('r=indiaconfessions');
+      await page.fill('#f-body', text);
+      await page.fill('#f-title', 'Confession: cricket fraud');
+      const b = await postAndWait();
+      assert.deepEqual({ t: b.title, b: b.body, s: b.sub, p: b.post_type }, { t: 'Confession: cricket fraud', b: text, s: 'indiaconfessions', p: 'confession' });
+    });
+    await check('v3.1 confession by a bot OP: helpline still shown, optional theme', async () => {
+      await go('r=indiaconfessions');
+      await page.locator('#who-bot').click();
+      assert.ok((await page.locator('#helpline-note').textContent()).includes(HELPLINE));
+      assert.equal(await page.locator('#f-body').count(), 0);
+      assert.deepEqual(await postAndWait(), body({ post_type: 'confession', idea: null }));
+      await go('r=indiaconfessions');
+      await page.locator('#who-bot').click();
+      await page.fill('#f-idea', 'office secrets');
+      assert.deepEqual(await postAndWait(), body({ post_type: 'confession', idea: 'office secrets' }));
+    });
+    await check('v3.1 server 422 sub mismatch is shown on the picker for a joke and a confession', async () => {
+      for (const [slug, type, fill] of [['indiajokes', 'joke', ['#f-title', 'A pun about paneer']], ['indiaconfessions', 'confession', ['#f-body', 'I hide the good biscuits from guests.']]]) {
+        await go(`r=${slug}`);
+        await page.fill(...fill);
+        const msg = `sub '${slug}' does not take ${type} posts; ${type} posts go to 'other'`;
+        nextHook = { status: 422, body: { detail: [{ type: 'value_error', loc: ['body'], msg: `Value error, ${msg}`, input: {} }] } };
+        await page.locator('#post-btn').click();
+        await page.locator('#post-err:not(:empty)').waitFor();
+        assert.equal(st.posts.at(-1).sub, slug);
+        assert.equal(st.posts.at(-1).post_type, type);
+        assert.equal(await page.locator('#err-sub').textContent(), msg);
+        assert.ok(await page.locator('#sub-pick').evaluate(e => e.classList.contains('is-invalid')));
+        assert.equal(new URL(page.url()).searchParams.get('new'), '1', 'still in the composer');
+      }
+    });
+    await check('v3.1 posting tips name both new communities', async () => {
+      const side = await page.locator('#side').textContent();
+      assert.ok(side.includes('r/IndiaJokes') && side.includes('r/IndiaConfessions'));
+    });
+    await ctx.close();
+  }
+
+  // ---------------- home: quick chips, seven sections, sub pages, threads (1440 light)
+  {
+    const ctx = await newCtx({ viewport: { width: 1440, height: 900 }, colorScheme: 'light' });
+    const page = await ctx.newPage();
+    track(page);
+    let threadBody = typedThread('confession', 'indiaconfessions');
+    await mockApi(page, { threadGet: () => ({ status: 200, body: threadBody }), streams: [() => streamOf(threadBody)()] });
+    await page.goto(`${BASE}?${Q}`);
+    await page.waitForSelector('.home-sec .tcard');
+    await page.waitForFunction(() => document.querySelector('#sub-chips .sub-chip-n')?.textContent !== '');
+    await check('v3.1 home: seven chips with counts, seven sections in order, sidebar lists seven', async () => {
+      const SUBS_N = subsFor(CARDS);
+      assert.deepEqual(await page.locator('#sub-chips .sub-chip').evaluateAll(cs => cs.map(c => [c.dataset.sub, c.querySelector('.sub-chip-n').textContent])),
+        SUBS_N.map(x => [x.slug, String(x.threads)]));
+      assert.deepEqual(await page.locator('.home-sec').evaluateAll(ss => ss.map(s => s.dataset.sub)), SUBS.map(x => x.slug));
+      assert.equal(await page.locator('#side-communities .comm-item').count(), 7);
+      assert.equal(await page.locator('.chips-n').textContent(), '7 to browse');
+      assert.equal(await page.locator('.home-sec .tcard-list[data-painted="1"]').count(), 3, 'only the first three paint at once');
+      for (const slug of ['indiajokes', 'indiaconfessions']) {
+        const sec = page.locator(`#sec-${slug}`);
+        await sec.scrollIntoViewIfNeeded();
+        await sec.locator('.tcard').first().waitFor();
+        assert.deepEqual(await sec.locator('.tcard').evaluateAll(cs => cs.map(c => c.dataset.type)), Array(3).fill(slug === 'indiajokes' ? 'joke' : 'confession'));
+        assert.equal(await sec.locator('.sec-ic').textContent(), slug === 'indiajokes' ? '😂' : '🤫');
+      }
+      await page.evaluate(() => window.scrollTo(0, 0));
+    });
+    await check('v3.1 Create-post bar: Ask, Hot take, AMA, Joke, Confess chips in one row', async () => {
+      assert.deepEqual(await page.locator('.quick-chip').allTextContents(), ['Ask', 'Hot take', 'AMA', 'Joke', 'Confess']);
+      const rows = await page.locator('.quick-row > *').evaluateAll(es => new Set(es.filter(e => e.offsetHeight).map(e => { const r = e.getBoundingClientRect(); return Math.round(r.top + r.height / 2); })).size);
+      assert.equal(rows, 1);
+    });
+    for (const [type, slug, label] of [['joke', 'indiajokes', 'Joke'], ['confession', 'indiaconfessions', 'Confess']]) {
+      await check(`v3.1 "${label}" chip opens the composer in r/${slug === 'indiajokes' ? 'IndiaJokes' : 'IndiaConfessions'}`, async () => {
+        await page.locator(`.quick-chip[data-type=${type}]`).click();
+        await page.waitForURL(u => new URL(u).searchParams.get('r') === slug && new URL(u).searchParams.get('new') === '1');
+        assert.equal(await page.getAttribute(`#sub-opt-${slug}`, 'aria-checked'), 'true');
+        assert.equal(await page.locator(type === 'joke' ? '#f-title' : '#helpline-note').count(), 1, 'the right form');
+        await page.goBack();
+        await page.waitForSelector('.home-sec .tcard');
+      });
+    }
+    for (const x of SUBS.slice(5)) {
+      await check(`v3.1 sub page ${x.name}: banner icon in its colour, title, description, cards, Create`, async () => {
+        await page.goto(`${BASE}?r=${x.slug}&${Q}`);
+        await page.waitForSelector('#tcard-list .tcard');
+        assert.equal(await page.locator('#sub-title').textContent(), x.title);
+        assert.equal(await page.locator('.sub-hero-ic').textContent(), x.icon);
+        assert.equal(await page.locator('.sub-hero .sub-desc').textContent(), x.description);
+        const hex = x.color.toLowerCase();
+        assert.equal(await page.locator('.sub-hero-ic').evaluate(e => getComputedStyle(e).backgroundColor),
+          `rgb(${parseInt(hex.slice(1, 3), 16)}, ${parseInt(hex.slice(3, 5), 16)}, ${parseInt(hex.slice(5, 7), 16)})`);
+        assert.equal(await page.locator('#tcard-list .tcard').count(), 3);
+        assert.ok(await page.locator('#sub-create').isVisible());
+        assert.equal(await page.locator('#sub-chips [aria-current="page"]').getAttribute('data-sub'), x.slug);
+        await noHScroll(page, `1440 ${x.slug}`);
+      });
+    }
+    await check('v3.1 confession thread: Confession flair, r/IndiaConfessions link, quiet note under the post card', async () => {
+      await page.goto(`${BASE}?t=${THREAD_ID}&${Q}`);
+      await page.waitForSelector('.post-full .type-flair');
+      assert.equal(await page.locator('.post-full .type-flair').textContent(), 'Confession');
+      assert.equal(await page.getAttribute('.post-full .type-flair', 'data-type'), 'confession');
+      assert.equal((await page.locator('.post-full .post-sub').textContent()).trim(), '🤫r/IndiaConfessions');
+      assert.equal(new URL(await page.locator('.post-full .post-sub').evaluate(a => a.href)).searchParams.get('r'), 'indiaconfessions');
+      const note = page.locator('#confession-note');
+      assert.equal((await note.textContent()).replace('🤫', '').trim(), CONF_NOTE);
+      assert.ok(await note.isVisible());
+      const st = await note.evaluate(e => { const cs = getComputedStyle(e); return { fs: parseFloat(cs.fontSize), color: cs.color, meta: getComputedStyle(document.body).getPropertyValue('--meta').trim() }; });
+      assert.ok(st.fs <= 12, 'small');
+      await page.evaluate(CONTRAST_JS);
+      assert.equal(await page.evaluate(([a, b]) => window.__rgb(a) === window.__rgb(b), [st.color, st.meta]), true, 'muted (meta colour)');
+      const pc = await page.locator('.post-full').boundingBox();
+      const nb = await note.boundingBox();
+      assert.ok(nb.y >= pc.y + pc.height - 1 && nb.y < pc.y + pc.height + 24, 'right under the post card');
+      assert.equal(await page.getAttribute('#confession-note a', 'href'), 'tel:14416');
+      await page.locator('#sticky .cm').first().waitFor();
+      assert.ok((await page.locator('#sticky').textContent()).includes('14416'), 'the AutoMod sticky carries the helpline too');
+      assert.equal(await page.locator('#confession-note').count(), 1, 'one note only');
+    });
+    await check('v3.1 joke thread: Joke flair, r/IndiaJokes link, no confession note', async () => {
+      threadBody = typedThread('joke', 'indiajokes');
+      await page.goto(`${BASE}?t=${THREAD_ID}&${Q}`);
+      await page.waitForSelector('.post-full .type-flair');
+      assert.equal(await page.locator('.post-full .type-flair').textContent(), 'Joke');
+      assert.equal((await page.locator('.post-full .post-sub').textContent()).trim(), '😂r/IndiaJokes');
+      assert.equal(await page.locator('#confession-note').count(), 0);
+    });
+    await ctx.close();
+  }
+
+  // ---------------- flair colours: readable in light and dark
+  for (const scheme of ['light', 'dark']) {
+    const ctx = await newCtx({ viewport: { width: 768, height: 1024 }, colorScheme: scheme });
+    const page = await ctx.newPage();
+    track(page);
+    let threadBody = null;
+    await mockApi(page, { threadGet: () => ({ status: 200, body: threadBody }), streams: [() => streamOf(threadBody)()] });
+    for (const [type, sub, hex] of [['joke', 'indiajokes', '#f5a623'], ['confession', 'indiaconfessions', '#6b5b95']]) {
+      await check(`v3.1 ${type} flair ${scheme}: its colour, text contrast >= 4.5`, async () => {
+        threadBody = typedThread(type, sub);
+        await page.goto(`${BASE}?t=${THREAD_ID}&${Q}`);
+        const fl = page.locator('.post-full .type-flair');
+        await fl.waitFor();
+        await page.evaluate(CONTRAST_JS);
+        const r = await fl.evaluate(e => { const cs = getComputedStyle(e); return { pc: e.style.getPropertyValue('--pc'), c: cs.color, bg: cs.backgroundColor }; });
+        assert.equal(r.pc, hex);
+        const ratio = await page.evaluate(([a, b]) => window.__contrast(a, b), [r.c, r.bg]);
+        assert.ok(ratio >= 4.5, `${type} ${scheme} contrast ${ratio.toFixed(2)}`);
+        await fl.screenshot({ path: join(SHOTS_V31, `flair-${type}-${scheme}.png`) });
+      });
+    }
+    await ctx.close();
+  }
+
+  // ---------------- a newer backend: unknown sub + post type degrade gracefully (390 light)
+  {
+    const ctx = await newCtx({ viewport: { width: 390, height: 844 }, colorScheme: 'light', deviceScaleFactor: 2 });
+    const page = await ctx.newPage();
+    track(page);
+    const before = errors.length;
+    const haikuThread = typedThread('haiku', 'indiahaiku');
+    await mockApi(page, { cards: [...CARDS, ...HAIKU_CARDS], extraSubs: [HAIKU_SUB], threadGet: () => ({ status: 200, body: haikuThread }), streams: [() => streamOf(haikuThread)()] });
+    await page.goto(`${BASE}?${Q}`);
+    await page.waitForSelector('.home-sec .tcard');
+    await check('v3.1 unknown sub/type: generic chip and section, no Create on its tile, nothing throws', async () => {
+      await page.waitForSelector('#sub-chips .sub-chip[data-sub=indiahaiku]');
+      assert.equal(await page.locator('#sub-chips .sub-chip[data-sub=indiahaiku] .sub-ic').textContent(), '💬');
+      const sec = page.locator('#sec-indiahaiku');
+      await sec.scrollIntoViewIfNeeded();
+      await sec.locator('.tcard').first().waitFor();
+      assert.equal(await sec.locator('.tcard').first().getAttribute('data-type'), 'haiku');
+      assert.equal(await sec.locator('.sec-ic').textContent(), '💬');
+      await noHScroll(page, '390 haiku home');
+    });
+    await check('v3.1 unknown sub page renders without a Create button; composer leaves it out of the picker', async () => {
+      await page.goto(`${BASE}?r=indiahaiku&${Q}`);
+      await page.waitForSelector('#tcard-list .tcard');
+      assert.equal(await page.locator('#sub-title').textContent(), 'India Haiku');
+      assert.equal(await page.locator('#sub-create').count(), 0);
+      await page.goto(`${BASE}?new=1&r=indiahaiku&${Q}`);
+      await page.waitForSelector('#compose-body .field');
+      assert.equal(await page.locator('.sub-opt').count(), 7);
+      assert.equal(await page.locator('#sub-opt-indiahaiku').count(), 0);
+      assert.equal(await page.locator('#sub-pick [aria-checked="true"]').count(), 1, 'falls back to a postable sub');
+    });
+    await check('v3.1 unknown post type in a thread: a neutral "Haiku" pill, not News', async () => {
+      await page.goto(`${BASE}?t=${THREAD_ID}&${Q}`);
+      await page.waitForSelector('.post-full .type-flair');
+      assert.equal(await page.locator('.post-full .type-flair').textContent(), 'Haiku');
+      assert.equal(await page.getAttribute('.post-full .type-flair', 'data-type'), 'generic');
+      assert.equal((await page.locator('.post-full .post-sub').textContent()).trim().toLowerCase(), '💬r/indiahaiku', 'generic icon; the name from /subs if loaded, else the slug');
+      assert.equal(errors.length, before, 'no page errors');
+    });
+    await ctx.close();
+  }
+
+  // ---------------- phone, tablet, desktop x light, dark: home, picker, both forms, thread
+  for (const scheme of ['light', 'dark']) {
+    for (const [w, hgt] of [[390, 844], [768, 1024], [1440, 900]]) {
+      const ctx = await newCtx({ viewport: { width: w, height: hgt }, colorScheme: scheme, deviceScaleFactor: w < 1000 ? 2 : 1 });
+      const page = await ctx.newPage();
+      track(page);
+      const conf = typedThread('confession', 'indiaconfessions');
+      await mockApi(page, { threadGet: () => ({ status: 200, body: conf }), streams: [() => streamOf(conf)()] });
+      const tag = `${w}-${scheme}`;
+      await page.goto(`${BASE}?${Q}`);
+      await page.waitForSelector('.home-sec .tcard');
+      await page.waitForFunction(() => document.querySelector('#sub-chips .sub-chip-n')?.textContent !== '');
+      await page.evaluate(() => document.fonts.ready);
+      await check(`v3.1 home ${w}x${hgt} ${scheme}: 7 chips, 7 sections, create bar <= 2 rows, no horizontal scroll`, async () => {
+        assert.equal(await page.locator('#sub-chips .sub-chip').count(), 7);
+        assert.equal(await page.locator('.home-sec').count(), 7);
+        const card = await page.locator('.create-card').boundingBox();
+        const row = await page.locator('.create-row').boundingBox();
+        const quick = await page.locator('.quick-row').boundingBox();
+        assert.ok(quick.height <= 44, `quick chips in one row (${quick.height})`);
+        assert.ok(card.height <= row.height + quick.height + 40, `create bar is two rows (${card.height})`);
+        const q = await page.locator('.quick-row').evaluate(e => ({ sw: e.scrollWidth, cw: e.clientWidth, ov: getComputedStyle(e).overflowX }));
+        if (q.sw > q.cw) assert.equal(q.ov, 'auto', 'overflowing chips scroll inside the row');
+        await page.locator('.quick-row').evaluate(e => { e.scrollLeft = e.scrollWidth; });
+        const last = await page.locator('.quick-chip[data-type=confession]').boundingBox();
+        assert.ok(last.x >= 0 && last.x + last.width <= w + 0.5, 'Confess reachable');
+        await page.locator('.quick-row').evaluate(e => { e.scrollLeft = 0; });
+        const chips = await page.locator('#sub-chips').evaluate(e => ({ sw: e.scrollWidth, cw: e.clientWidth, wrap: getComputedStyle(e).flexWrap }));
+        if (w < 640) assert.ok(chips.sw > chips.cw, 'chips row scrolls on phones');
+        else assert.equal(chips.wrap, 'wrap', 'chips wrap on wider screens');
+        await noHScroll(page, `${tag} v31 home`);
+      });
+      await page.screenshot({ path: join(SHOTS_V31, `home-${tag}.png`) });
+      if (w === 390) {
+        await page.locator('#sec-indiajokes').scrollIntoViewIfNeeded();
+        await page.locator('#sec-indiajokes .tcard').first().waitFor();
+        await page.screenshot({ path: join(SHOTS_V31, `home-jokes-${tag}.png`) });
+      }
+
+      await page.goto(`${BASE}?new=1&r=indiajokes&${Q}`);
+      await page.waitForSelector('#compose-body .field');
+      await page.evaluate(() => { document.activeElement?.blur?.(); window.scrollTo(0, 0); document.fonts.ready; });
+      await check(`v3.1 picker ${w}x${hgt} ${scheme}: all seven communities reachable, no page scroll`, async () => {
+        assert.equal(await page.locator('.sub-opt').count(), 7);
+        assert.deepEqual(await page.locator('.sub-opt-name').evaluateAll(es => es.filter(e => e.scrollWidth > e.clientWidth).map(e => e.textContent)), [], 'no community name is cut off');
+        const box = page.locator('#sub-pick');
+        if (w < 640) {
+          assert.ok(await box.evaluate(e => e.scrollLeft > 0), 'the picked r/IndiaJokes card was scrolled into the row');
+          assert.ok(await page.locator('#sub-opt-indiajokes').evaluate((b, vw) => { const r = b.getBoundingClientRect(); return r.left >= 0 && r.right <= vw; }, w));
+          await box.evaluate(e => { e.scrollLeft = 0; e.dispatchEvent(new Event('scroll')); });
+          await page.waitForTimeout(50);
+          const vis = await page.locator('.sub-opt').evaluateAll((bs, vw) => bs.map(b => { const r = b.getBoundingClientRect(); return r.right <= vw && r.left >= 0 ? 'full' : r.left < vw ? 'peek' : 'off'; }), w);
+          assert.ok(vis.filter(v => v === 'full').length >= 4, `at least four cards show at once (${vis})`);
+          assert.ok(vis.includes('peek'), `the next column peeks in (${vis})`);
+          assert.ok(await page.locator('.sub-pick-swipe').isVisible(), 'swipe hint');
+          await box.evaluate(e => { e.scrollLeft = e.scrollWidth; e.dispatchEvent(new Event('scroll')); });
+          await page.waitForTimeout(50);
+          const last = await page.locator('.sub-opt').last().boundingBox();
+          assert.ok(last.x >= 0 && last.x + last.width <= w + 0.5, `7th card fully on screen after scrolling (${last.x})`);
+          assert.equal(await page.evaluate(() => window.scrollX), 0, 'only the row scrolls');
+          assert.ok(await box.evaluate(e => e.classList.contains('at-end')), 'fade gone at the end');
+          assert.equal(await page.locator('.sub-pick-swipe').isVisible(), false);
+          await page.screenshot({ path: join(SHOTS_V31, `picker-end-${tag}.png`) });
+          await box.evaluate(e => { e.scrollLeft = 0; e.dispatchEvent(new Event('scroll')); });
+        } else {
+          for (const b of await page.locator('.sub-opt').evaluateAll(bs => bs.map(b => { const r = b.getBoundingClientRect(); return [r.left, r.right]; }))) assert.ok(b[0] >= 0 && b[1] <= w, 'all seven on screen');
+        }
+        await noHScroll(page, `${tag} v31 picker`);
+      });
+      await page.screenshot({ path: join(SHOTS_V31, `picker-joke-${tag}.png`) });
+      await page.fill('#f-title', 'Why did the auto driver cross the road? He did not, the meter was running');
+      await page.evaluate(() => document.activeElement?.blur?.());
+      await page.locator('#f-title').scrollIntoViewIfNeeded();
+      await page.screenshot({ path: join(SHOTS_V31, `compose-joke-${tag}.png`) });
+      await page.locator('#who-bot').click();
+      await page.screenshot({ path: join(SHOTS_V31, `compose-joke-bot-${tag}.png`) });
+
+      await page.goto(`${BASE}?new=1&r=indiaconfessions&${Q}`);
+      await page.waitForSelector('#helpline-note');
+      await page.fill('#f-body', 'I eat Maggi raw.');
+      await page.locator('#post-btn').click();
+      await page.evaluate(() => { document.activeElement?.blur?.(); });
+      await check(`v3.1 confession form ${w}x${hgt} ${scheme}: helpline visible, inline error, no horizontal scroll`, async () => {
+        assert.ok(await page.locator('#helpline-note').isVisible());
+        assert.equal(await page.locator('#err-body').textContent(), 'A bit more, please: at least 20 characters (16 so far).');
+        if (w < 640) assert.ok(await page.locator('#post-btn').isVisible(), 'sticky Post button on the mobile sheet');
+        await noHScroll(page, `${tag} v31 confession`);
+      });
+      await page.locator('#helpline-note').scrollIntoViewIfNeeded();
+      await page.screenshot({ path: join(SHOTS_V31, `compose-confession-${tag}.png`) });
+
+      await page.goto(`${BASE}?t=${THREAD_ID}&${Q}`);
+      await page.waitForSelector('#confession-note');
+      await page.locator('#sticky .cm').first().waitFor();
+      await check(`v3.1 confession thread ${w}x${hgt} ${scheme}: note visible, no horizontal scroll`, async () => {
+        assert.ok(await page.locator('#confession-note').isVisible());
+        await noHScroll(page, `${tag} v31 thread`);
+      });
+      await page.screenshot({ path: join(SHOTS_V31, `thread-confession-${tag}.png`) });
+      await ctx.close();
+    }
+  }
+}
+
 // ------------------------------------------------------------ run
 const server = spawn('python3', ['-m', 'http.server', String(PORT), '--bind', '127.0.0.1'], { cwd: dirname(HERE), stdio: 'ignore' });
 const browser = await chromium.launch();
@@ -339,6 +783,7 @@ const track = page => page.on('pageerror', e => errors.push(String(e)));
 
 try {
   await new Promise(r => setTimeout(r, 600));
+  if (!ONLY_V31) { // the whole v2/v3 suite; SMOKE_ONLY=v31 runs just the v3.1 block below
   // ---------------- front page (desktop, light): v3 community sections
   {
     const ctx = await newCtx({ viewport: { width: 1440, height: 900 }, colorScheme: 'light' });
@@ -2100,6 +2545,10 @@ try {
 
   // ---------------- v3 F5: calm threads + touch long-press (agent-reddit/scroll.mjs)
   await scrollSuite({ browser, BASE, check, shots: process.env.SHOTS_V3 || '/tmp/ar-shots-v3' });
+  }
+
+  // ---------------- v3.1: r/IndiaJokes and r/IndiaConfessions
+  await v31Suite();
 
   await check('no uncaught page errors', async () => { assert.deepEqual(errors, []); });
   console.log(`\nPASS: ${results.length} checks. Screenshots in ${SHOTS}`);

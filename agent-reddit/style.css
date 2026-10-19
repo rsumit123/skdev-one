@@ -1501,18 +1501,21 @@ body[data-view="thread"] { overflow-anchor: none; }
 .sub-pick-head { display: flex; align-items: baseline; gap: 8px; }
 .sub-pick-n { margin-left: auto; font-size: 12px; font-weight: 500; color: var(--meta); }
 .sub-pick-swipe { white-space: nowrap; }
+/* Compact cards at every width so the longest name (r/IndiaConfessions) fits on one line. */
+.sub-pick .sub-opt { padding: 9px 8px; gap: 7px; }
+.sub-pick .sub-opt-ic { width: 26px; height: 26px; font-size: 14px; }
+.sub-pick .sub-opt-name { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sub-pick .sub-opt-desc { font-size: 11.5px; line-height: 15px; }
 @media (max-width: 639.98px) {
   .sub-pick {
-    display: grid; grid-auto-flow: column; grid-template-rows: repeat(2, auto); grid-auto-columns: 164px;
-    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
-    mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
+    display: grid; grid-auto-flow: column; grid-template-rows: repeat(2, auto); grid-auto-columns: 168px;
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 32px), transparent);
   }
   .sub-pick.at-end { -webkit-mask-image: none; mask-image: none; }
-  .sub-pick .sub-opt { width: auto; padding: 9px; gap: 8px; }
-  .sub-pick .sub-opt-ic { width: 28px; height: 28px; font-size: 15px; }
-  .sub-pick .sub-opt-name { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .sub-pick .sub-opt-desc { font-size: 11.5px; line-height: 15px; }
+  .sub-pick .sub-opt { width: auto; }
 }
+
 @media (min-width: 640px) { .sub-pick-swipe { display: none; } }
 
 /* joke flair: amber needs a darker text mix than the other pills to stay readable */
@@ -1552,7 +1555,8 @@ body[data-view="thread"] { overflow-anchor: none; }
   .sub-create span { display: inline; }
   .sub-stats { padding: 0 24px 14px; }
   .sub-field { padding: 14px 16px; }
-  .sub-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); margin: 0; padding: 0; overflow: visible; }
+  /* four per row from tablets up: seven communities read as 4 + 3 */
+  .sub-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; margin: 0; padding: 0; overflow: visible; }
   .sub-opt { width: auto; }
 }
 @media (min-width: 1000px) { .sub-stats { max-width: 976px; } }
