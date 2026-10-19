@@ -458,3 +458,102 @@ test('opRoles from op, flags and ama_host_bot_id', () => {
   assert.deepEqual(opRoles({ op: { type: 'bot', bot_id: 0 } }, [{ id: 4, is_op: true }]), { opBot: 4, opUser: null, host: null });
   assert.deepEqual(opRoles({}, []), { opBot: null, opUser: null, host: null });
 });
+
+// ---------------------------------------------------------------- v3 F5: calm threads
+import {
+  rankOrder, arrangeTree, shouldBuffer, mergePolicy, pillText, pickAnchor, anchorTarget, pressReducer, PRESS,
+} from './tree.js';
+
+const ser = roots => roots.map(r => (r.children.length ? `${r.id}(${ser(r.children)})` : `${r.id}`)).join(' ');
+
+test('rankOrder + arrangeTree: frozen order survives score changes', () => {
+  const sorted = sortTree(buildTree(sample()), 'best'); // roots 4 (9), 1 (5); under 1: 5 (7), 2 (3)
+  const rank = rankOrder(sorted);
+  assert.equal(ser(sorted), '4 1(5 2(3))');
+  const bumped = sample().map(x => (x.id === 1 ? { ...x, score: 99 } : x.id === 2 ? { ...x, score: 50 } : x));
+  assert.equal(ser(arrangeTree(buildTree(bumped), rank, 'best')), '4 1(5 2(3))', 'scores moved, order did not');
+  assert.equal(ser(sortTree(buildTree(bumped), 'best')), '1(2(3) 5) 4', 'a re-sort would reorder');
+});
+
+test('arrangeTree places arrivals by the sort among frozen siblings, then they stay put', () => {
+  const base = sample();
+  const rank = rankOrder(sortTree(buildTree(base), 'best'));
+  const withNew = [...base, c(6, null, 6), c(7, 1, 1)];
+  const a = arrangeTree(buildTree(withNew), rank, 'best');
+  assert.deepEqual(a.map(r => r.id), [4, 6, 1], 'score 6 lands between 9 and 5');
+  assert.deepEqual(a[2].children.map(r => r.id), [5, 2, 7], 'score 1 reply goes last');
+  const rank2 = rankOrder(a);
+  const later = withNew.map(x => (x.id === 6 ? { ...x, score: -5 } : x));
+  assert.deepEqual(arrangeTree(buildTree(later), rank2, 'best').map(r => r.id), [4, 6, 1], 'once shown, an arrival keeps its slot');
+  assert.deepEqual(arrangeTree(buildTree(withNew), rank, 'new').map(r => r.id)[0], 6, 'New puts arrivals first');
+  assert.deepEqual(arrangeTree(buildTree(base), null, 'best').map(r => r.id), [4, 1], 'no rank = plain sort');
+});
+
+test('shouldBuffer: far from the live edge or interacting', () => {
+  const base = { distance: 0, viewport: 800, selecting: false, replyFocused: false, profileOpen: false };
+  assert.equal(shouldBuffer(base), false);
+  assert.equal(shouldBuffer({ ...base, distance: 1199 }), false);
+  assert.equal(shouldBuffer({ ...base, distance: 1201 }), true, '> 1.5 viewports');
+  assert.equal(shouldBuffer({ ...base, distance: -400 }), false, 'above the comments');
+  assert.equal(shouldBuffer({ ...base, selecting: true }), true);
+  assert.equal(shouldBuffer({ ...base, replyFocused: true }), true);
+  assert.equal(shouldBuffer({ ...base, profileOpen: true }), true);
+  assert.equal(shouldBuffer({}), false);
+});
+
+test('mergePolicy: hold vs show', () => {
+  const b = { buffering: false, heldCount: 0, own: false, replyToMine: false, parentHeld: false, hiddenByCollapse: false };
+  assert.equal(mergePolicy(b), 'show');
+  assert.equal(mergePolicy({ ...b, buffering: true }), 'hold');
+  assert.equal(mergePolicy({ ...b, heldCount: 2 }), 'hold', 'keep arrival order: once holding, keep holding');
+  assert.equal(mergePolicy({ ...b, buffering: true, own: true }), 'show', 'the reader\'s own comment always shows');
+  assert.equal(mergePolicy({ ...b, buffering: true, replyToMine: true }), 'show');
+  assert.equal(mergePolicy({ ...b, buffering: true, hiddenByCollapse: true }), 'show', 'invisible anyway; bumps the hidden count');
+  assert.equal(mergePolicy({ ...b, parentHeld: true, replyToMine: true, own: false }), 'hold', 'a reply to a held comment waits with it');
+  assert.equal(mergePolicy({ ...b, parentHeld: true, own: true }), 'show');
+});
+
+test('pillText', () => {
+  assert.equal(pillText(1, 'up'), '↑ 1 new comment');
+  assert.equal(pillText(4, 'down'), '↓ 4 new comments');
+});
+
+test('pickAnchor: the item at the top edge of the visible area', () => {
+  assert.equal(pickAnchor([], 48), -1);
+  assert.equal(pickAnchor([100, 300], 48), 0, 'nothing above the edge: the first item');
+  assert.equal(pickAnchor([-900, -200, 30, 48, 400], 48), 3, 'last top at or above the edge');
+  assert.equal(pickAnchor([-900, -200, 49.6, 400], 48), 1);
+});
+
+test('anchorTarget: keep the offset, clamp fallbacks into view', () => {
+  assert.equal(anchorTarget({ before: -120, after: 80, inset: 48, clamp: false }), 200);
+  assert.equal(anchorTarget({ before: 300, after: 300, inset: 48, clamp: false }), 0);
+  assert.equal(anchorTarget({ before: -120, after: -120, inset: 48, clamp: true }), -168, 'scroll back so it sits at the inset');
+  assert.equal(anchorTarget({ before: 300, after: 280, inset: 48, clamp: true }), -20);
+});
+
+test('pressReducer: touch long-press state machine', () => {
+  const r = (s, e) => pressReducer(s, e);
+  let { state, effect } = r(PRESS, { type: 'down', pointerType: 'mouse', x: 0, y: 0, id: 1, eligible: true, t: 0 });
+  assert.equal(state.phase, 'idle'); assert.equal(effect, null, 'mouse never long-presses');
+  ({ state, effect } = r(PRESS, { type: 'down', pointerType: 'touch', x: 0, y: 0, id: 1, eligible: false, t: 0 }));
+  assert.equal(state.phase, 'idle'); assert.equal(effect, null, 'links/buttons are not eligible');
+  ({ state, effect } = r(PRESS, { type: 'down', pointerType: 'touch', x: 10, y: 10, id: 1, eligible: true, t: 0 }));
+  assert.equal(state.phase, 'pressing'); assert.equal(effect, 'press');
+  const pressing = state;
+  ({ state, effect } = r(pressing, { type: 'move', x: 15, y: 15, id: 1 }));
+  assert.equal(state.phase, 'pressing', '7 px is still a press'); assert.equal(effect, null);
+  ({ state, effect } = r(pressing, { type: 'move', x: 10, y: 19, id: 1 }));
+  assert.equal(state.phase, 'idle', '9 px cancels'); assert.equal(effect, 'release');
+  ({ state, effect } = r(pressing, { type: 'cancel', t: 100 }));
+  assert.equal(state.phase, 'idle'); assert.equal(effect, 'release', 'scroll / pointercancel cancels');
+  ({ state, effect } = r(pressing, { type: 'up', id: 1, t: 200 }));
+  assert.equal(state.phase, 'idle'); assert.equal(effect, 'release'); assert.equal(state.until, 0, 'a tap is not swallowed');
+  ({ state, effect } = r(pressing, { type: 'timer' }));
+  assert.equal(state.phase, 'fired'); assert.equal(effect, 'fire');
+  ({ state, effect } = r(state, { type: 'up', id: 1, t: 500 }));
+  assert.equal(state.phase, 'idle'); assert.equal(state.until, 900, 'the click after a long-press is swallowed for 400 ms');
+  assert.equal(r(PRESS, { type: 'timer' }).effect, null);
+  assert.equal(r({ ...pressing }, { type: 'move', x: 99, y: 99, id: 2 }).state.phase, 'pressing', 'other pointers are ignored');
+  assert.equal(r(PRESS, { type: 'down', pointerType: 'pen', x: 0, y: 0, id: 3, eligible: true, t: 0 }).effect, 'press', 'pen too');
+});

@@ -3,12 +3,14 @@
 // Playwright is NOT a repo dependency. Install it somewhere else, e.g.
 //   mkdir -p /tmp/ar-pw && cd /tmp/ar-pw && npm init -y && npm i playwright && npx playwright install chromium
 // then run:  PW_DIR=/tmp/ar-pw node agent-reddit/smoke.mjs
-// Screenshots go to $SHOTS (default /tmp/ar-shots-v2).
+// Screenshots go to $SHOTS (default /tmp/ar-shots-v2); the v3 calm-thread/long-press ones to
+// $SHOTS_V3 (default /tmp/ar-shots-v3).
 import { spawn } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import assert from 'node:assert/strict';
+import { scrollSuite } from './scroll.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PW_DIR = process.env.PW_DIR || '/tmp/ar-pw';
@@ -786,6 +788,12 @@ try {
       assert.equal(await actions(5).locator('.reply-btn').count(), 0);
     });
     await check('remove event: [removed by moderator], no Reply; AutoMod reply has the MOD shield', async () => {
+      // v3: #c120 arrived while the reply box was focused, so it waited behind the pill.
+      assert.equal(await page.locator('#live-pill').textContent(), '↓ 1 new comment');
+      assert.equal(await cmt(120).count(), 0);
+      await page.locator('#live-pill').click();
+      await cmt(120).waitFor();
+      assert.equal(await page.locator('#live-pill').isHidden(), true);
       assert.equal(await cmt(14).locator('> .cm-main > .cm-body').textContent(), '[removed by moderator]');
       assert.equal(await actions(14).locator('.reply-btn').count(), 0);
       assert.equal((await cmt(120).locator('> .cm-main > .cm-head .mod-badge').textContent()).trim(), 'MOD');
@@ -1627,6 +1635,9 @@ try {
       await ctx.close();
     }
   }
+
+  // ---------------- v3 F5: calm threads + touch long-press (agent-reddit/scroll.mjs)
+  await scrollSuite({ browser, BASE, check, shots: process.env.SHOTS_V3 || '/tmp/ar-shots-v3' });
 
   await check('no uncaught page errors', async () => { assert.deepEqual(errors, []); });
   console.log(`\nPASS: ${results.length} checks. Screenshots in ${SHOTS}`);

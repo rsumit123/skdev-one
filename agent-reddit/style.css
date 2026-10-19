@@ -1310,3 +1310,36 @@ body.is-compose main { gap: 0; }
 @media (min-width: 640px) {
   .comment-composer-slot { padding: 12px 16px 4px; }
 }
+
+/* ---------------------------------------------------------------- v3: calm threads */
+/* Live updates anchor the scroll position themselves (anchor.js); the browser's own
+   anchoring would fight it, so it is off on the thread page only. */
+body[data-view="thread"] { overflow-anchor: none; }
+/* Zero-height sticky slot: the pill floats over the comments and never shifts them. */
+.live-pill-slot { position: sticky; top: calc(var(--hdr-h) + 53px); z-index: 6; height: 0; display: flex; justify-content: center; pointer-events: none; }
+.live-pill {
+  pointer-events: auto; margin-top: 4px; min-height: 36px; padding: 0 16px; border: 0; border-radius: 999px; cursor: pointer;
+  background: var(--blue); color: #fff; font-weight: 700; font-size: 13px; white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .25);
+}
+.live-pill:hover { background: var(--blue-hover); }
+.live-pill:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+@media (prefers-color-scheme: dark) { .live-pill { background: var(--link); color: #0b1a26; } .live-pill:hover { background: #7ccfff; } }
+@media (prefers-reduced-motion: no-preference) {
+  .live-pill:not([hidden]) { animation: pill-in .18s ease-out; }
+  @keyframes pill-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+}
+@media (min-width: 640px) { .live-pill-slot { top: calc(var(--hdr-h) + 8px); } }
+
+/* Touch long-press: highlight while holding (background only, no layout), and no text
+   selection / iOS callout during the gesture. */
+.thread-card.lp-active { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.cm.is-pressing > .cm-main > .cm-head, .cm.is-pressing > .cm-main > .cm-body { background: var(--new); transition: background .12s ease-in .06s; border-radius: 4px; }
+.toast {
+  position: fixed; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom)); z-index: 60; transform: translate(-50%, 8px);
+  padding: 8px 16px; border-radius: 999px; background: var(--text); color: var(--card); font-weight: 700; font-size: 13px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, .3); opacity: 0; pointer-events: none; transition: opacity .15s, transform .15s;
+}
+.toast:empty { display: none; }
+.toast.is-on { opacity: 1; transform: translate(-50%, 0); }
+@media (prefers-reduced-motion: reduce) { .toast { transition: none; } }

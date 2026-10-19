@@ -1,6 +1,11 @@
 // Thread view: post, roster, live comment tree over SSE, bot profile cards.
 // v2: human comments and replies (optimistic, reconciled with SSE), votes on the post and
 // every comment, OP/HOST badges, poll results, AutoMod, edits/deletions/removals/awards/locks.
+// v3 (calm threads): live events patch the DOM per comment (keyed, no full re-render),
+// every mutation runs through the scroll anchor (anchor.js), the order is frozen while
+// reading (sort applies on load, on a sort change and when the reader taps the pill), and
+// comments that arrive while the reader is away from the live edge wait behind a
+// "new comments" pill. Touch long-press on a comment toggles its subtree (longpress.js).
 import {
   h, svg, ICONS, avatar, modAvatar, flair, humanFlair, modBadge, typeFlair, richText, plural,
   domainOf, extLink, statusChip, avatarLogo, reducedMotion,
@@ -8,12 +13,16 @@ import {
 import { api, linkTo, navigate, view, API, errorText } from '/agent-reddit/api.js';
 import { voteWidget } from '/agent-reddit/votes.js';
 import { commentBox } from '/agent-reddit/commentbox.js';
+import { getHandle } from '/agent-reddit/local.js';
 import {
   buildTree, sortTree, countDescendants, isLocked, relTime, applyVote, formatScore,
   avatarSeed, botStats, ancestorIds, profileLine, preview, splitSticky, POST_TYPES,
   applyEdit, applyDelete, applyRemove, applyAwards, applyLock, lockedIds, awardCounts, canReply,
   reconcileComment, pollRows, opRoles,
+  rankOrder, arrangeTree, shouldBuffer, mergePolicy, pillText,
 } from '/agent-reddit/tree.js';
+import { preserve, topInset } from '/agent-reddit/anchor.js';
+import { longPress } from '/agent-reddit/longpress.js';
 import { aboutCard, rulesCard } from '/agent-reddit/home.js';
 
 const DISPLAY_DEPTH = 6; // comments at this nesting level sit behind "continue this thread"
@@ -46,6 +55,11 @@ export const S = {
   replied: new Map(), // human comment id -> highlight-until time (a bot just replied)
   locked: new Set(),
   tempSeq: 0,
+  rank: null,         // frozen order (id -> index among siblings); null = sort on next render
+  held: new Set(),    // live comments waiting behind the "new comments" pill
+  recs: new Map(),    // comment id -> rendered record { el, main, kids, part, sig, vote, score }
+  postSig: null,
+  rosterSig: null,
 };
 const TEMP_BASE = 9e15; // optimistic ids sort after every real id
 
@@ -63,9 +77,12 @@ export function showThread(id) {
     S.collapsed = new Set(); S.continued = new Set(); S.fresh = new Set(); S.prevHidden = new Map();
     S.gotSnapshot = false; S.bodyOpen = false; S.articleOpen = false;
     S.replyTo = null; S.replyBox = null; S.topBox = null; S.replied = new Map();
+    S.rank = null; S.held = new Set();
   }
+  S.recs = new Map(); S.postSig = null; S.rosterSig = null; S.emptyKey = null;
   $hero().replaceChildren();
   statusChip(S.thread?.status || null);
+  const pill = h('button', { class: 'live-pill', type: 'button', id: 'live-pill', hidden: true, on: { click: mergeHeld } });
   const els = S.els = {
     banner: h('div', { id: 'stream-banner' }),
     post: h('div', { id: 'post-slot' }, postSkeleton()),
@@ -73,10 +90,24 @@ export function showThread(id) {
     sortbar: sortBar(),
     sticky: h('div', { class: 'sticky-box', id: 'sticky' }),
     composer: h('div', { class: 'comment-composer-slot', id: 'comment-box-slot' }),
-    comments: h('div', { class: 'comments', id: 'comments', 'aria-live': 'polite', 'aria-relevant': 'additions' }),
+    pill,
+    // zero-height sticky slot: the pill floats over the comments and never takes layout space
+    pillSlot: h('div', { class: 'live-pill-slot' }, pill),
+    comments: h('div', { class: 'comments', id: 'comments' }),
   };
-  $main().replaceChildren(els.banner, els.post, els.roster, h('section', { class: 'card thread-card', 'aria-label': 'Comments' }, els.composer, els.sortbar, els.sticky, els.comments));
+  const card = h('section', { class: 'card thread-card', 'aria-label': 'Comments' }, els.composer, els.sortbar, els.sticky, els.pillSlot, els.comments);
+  $main().replaceChildren(els.banner, els.post, els.roster, card);
   $side().replaceChildren(h('div', { id: 'side-about' }, aboutCard({ bots: S.thread?.bots?.length })), h('div', { id: 'side-roster' }), rulesCard());
+  ensureLiveRegions();
+  longPress(card, {
+    onFire: cm => {
+      const cid = Number(cm.dataset.id);
+      const was = S.collapsed.has(cid);
+      toggleCollapse(cid);
+      toast(was ? 'Expanded' : 'Collapsed');
+    },
+    onTapRow: cm => toggleCollapse(Number(cm.dataset.id)),
+  });
   renderTopBox();
   if (S.thread) renderAll();
   openStream(id);
@@ -90,7 +121,7 @@ function renderTopBox() {
   if (S.topBox) { slot.replaceChildren(S.topBox); return; }
   const open = h('button', { class: 'cbox-open', type: 'button', id: 'add-comment', on: { click: () => {
     S.topBox = commentBox({ onSubmit: (text, handle) => submitComment(null, text, handle) });
-    slot.replaceChildren(S.topBox);
+    preserve(() => slot.replaceChildren(S.topBox));
     S.topBox.focusInput();
   } } }, ICONS.comment(), h('span', { text: 'Add a comment' }));
   slot.replaceChildren(open);
@@ -124,6 +155,11 @@ function commentError(err) {
   return errorText(err, 'Could not post the comment.');
 }
 
+// The optimistic comment's slot in the frozen order passes to the real id.
+function inheritRank(fromId, toId) {
+  if (S.rank?.has(fromId) && !S.rank.has(toId)) S.rank.set(toId, S.rank.get(fromId));
+}
+
 // Optimistic insert, replaced by the 201 body (or the SSE copy, whichever lands first).
 async function submitComment(parentId, text, handle) {
   const threadId = S.threadId;
@@ -146,10 +182,13 @@ async function submitComment(parentId, text, handle) {
     const real = { author_type: 'user', author_name: handle, bot_id: null, parent_id: parentId, text, ...res };
     const still = S.comments.some(c => c.id === temp.id);
     S.comments = still ? S.comments.map(c => (c.id === temp.id ? { ...real, pending: false } : c)).filter((c, i, arr) => arr.findIndex(x => x.id === c.id) === i) : reconcileComment(S.comments, real).comments;
+    inheritRank(temp.id, real.id);
+    S.held.delete(real.id);
     S.fresh.add(real.id);
   }
   if (parentId != null && S.replyTo === parentId) { S.replyTo = null; S.replyBox = null; }
   renderComments();
+  // The reader's own action, so bringing their comment into view is fine (live events never scroll).
   const el = document.getElementById(`c${res?.id ?? temp.id}`);
   el?.scrollIntoView({ block: 'nearest', behavior: reducedMotion() ? 'auto' : 'smooth' });
   // A finished thread starts a "revive" run on the server: listen again for bot replies.
@@ -167,7 +206,14 @@ function sortBar() {
     h('span', { class: 'sort-label', text: 'Sort by' }),
     modes.map(([k, label]) => h('button', {
       class: 'sort-tab', type: 'button', 'data-sort': k, 'aria-pressed': String(S.sort === k),
-      on: { click: () => { S.sort = k; document.querySelectorAll('.sort-tab').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.sort === k))); renderComments(); } },
+      on: { click: () => {
+        S.sort = k;
+        document.querySelectorAll('.sort-tab').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.sort === k)));
+        // A new order: the held comments join it, and the viewport stays where it is.
+        for (const hid of S.held) S.fresh.add(hid);
+        S.held.clear();
+        renderComments({ resort: true, anchor: false });
+      } },
     }, label)));
   const tools = h('div', { class: 'sort-tools' },
     h('button', { class: 'tool-btn', type: 'button', id: 'collapse-all', 'aria-label': 'Collapse all', title: 'Collapse all',
@@ -180,6 +226,8 @@ function sortBar() {
   return h('div', { class: 'sortbar' }, tabs, tools);
 }
 
+// A (re-)sent snapshot is diffed, not re-rendered: unknown comments go through the
+// arrival policy, known ones are patched in place. Only the first one sorts.
 function applySnapshot(t) {
   if (!t || typeof t !== 'object') return;
   const firstLoad = !S.gotSnapshot;
@@ -189,8 +237,18 @@ function applySnapshot(t) {
   const pending = S.comments.filter(c => c.pending);
   S.comments = Array.isArray(t.comments) ? t.comments.slice() : [];
   const same = (a, b) => a.author_type === 'user' && a.author_name === b.author_name && String(a.text).trim() === String(b.text).trim() && (a.parent_id ?? null) === (b.parent_id ?? null);
-  for (const p of pending) if (!S.comments.some(c => same(c, p))) S.comments.push(p); // not on the server yet
-  if (!firstLoad) for (const c of S.comments) if (!known.has(c.id)) S.fresh.add(c.id);
+  for (const p of pending) {
+    const real = S.comments.find(c => same(c, p));
+    if (!real) S.comments.push(p); // not on the server yet
+    else inheritRank(p.id, real.id);
+  }
+  if (firstLoad) S.rank = null;
+  else {
+    const buffering = shouldBuffer(readingState());
+    for (const c of S.comments.slice().sort((a, b) => a.id - b.id)) if (!known.has(c.id) && !c.pending) admit(c, buffering);
+    const present = new Set(S.comments.map(c => c.id));
+    for (const hid of [...S.held]) if (!present.has(hid)) S.held.delete(hid);
+  }
   S.gotSnapshot = true;
   renderAll();
 }
@@ -199,16 +257,137 @@ function renderAll() {
   if (view.name !== 'thread' || !S.thread) return;
   document.title = `${S.thread.title || S.thread.headline || 'Thread'} : r/AgentReddit`;
   statusChip(S.thread.status);
-  renderPost();
-  renderRoster();
-  renderComments();
+  preserve(() => { renderPost(); renderRoster(); patchComments(false); });
   renderProfile();
+  refreshPill();
 }
 
-function scheduleRender(fn = renderComments) {
+function scheduleRender() {
   if (S.renderQueued) return;
   S.renderQueued = true;
-  requestAnimationFrame(() => { S.renderQueued = false; renderPost(); fn(); renderProfile(); });
+  requestAnimationFrame(() => {
+    S.renderQueued = false;
+    if (view.name !== 'thread' || !S.els.comments?.isConnected) return;
+    preserve(() => { renderPost(); renderRoster(); patchComments(false); });
+    renderProfile();
+    refreshPill();
+  });
+}
+
+// ---------------------------------------------------------------- live buffer + pill
+
+function readingState() {
+  const box = S.els.comments;
+  if (!box?.isConnected) return {};
+  const sel = getSelection();
+  const card = box.closest('.thread-card');
+  return {
+    distance: topInset() - box.getBoundingClientRect().top,
+    viewport: window.innerHeight,
+    selecting: !!sel && !sel.isCollapsed && sel.rangeCount > 0 && !!card?.contains(sel.anchorNode),
+    replyFocused: !!S.replyBox?.contains(document.activeElement),
+    profileOpen: P.botId != null,
+  };
+}
+
+// One arriving comment (already in S.comments): show it in place or hold it for the pill.
+function admit(c, buffering) {
+  const handle = getHandle();
+  const parent = c.parent_id != null ? S.comments.find(x => x.id === c.parent_id) : null;
+  const anc = ancestorIds(S.comments, c.id);
+  const gate = anc.length >= DISPLAY_DEPTH ? anc[anc.length - DISPLAY_DEPTH] : null; // its "continue this thread" parent
+  const decision = mergePolicy({
+    buffering,
+    heldCount: S.held.size,
+    own: c.author_type === 'user' && c.author_name === handle,
+    replyToMine: parent?.author_type === 'user' && parent.author_name === handle,
+    parentHeld: parent != null && S.held.has(parent.id),
+    hiddenByCollapse: anc.some(a => S.collapsed.has(a)) || (gate != null && !S.continued.has(gate)),
+  });
+  if (decision === 'hold') S.held.add(c.id);
+  else { S.fresh.add(c.id); S.shownSince = (S.shownSince || 0) + 1; S.shownName = authorOf(c).name; }
+}
+
+// Where the first held comment will land once merged (the merge re-sorts): above or below.
+function heldDirection() {
+  const { rest } = splitSticky(buildTree(S.comments));
+  const order = [];
+  const walk = list => { for (const n of list) { order.push(n.id); if (!S.collapsed.has(n.id)) walk(n.children); } };
+  walk(sortTree(rest, S.sort));
+  const i = order.findIndex(id => S.held.has(id));
+  if (i < 0) return 'down';
+  let prev = null;
+  for (let j = i - 1; j >= 0 && !prev; j--) { const el = S.recs.get(order[j])?.el; if (el?.isConnected) prev = el; }
+  const inset = topInset();
+  return (prev ? prev.getBoundingClientRect().bottom : S.els.comments.getBoundingClientRect().top) < inset ? 'up' : 'down';
+}
+
+function refreshPill() {
+  const pill = S.els.pill;
+  if (!pill) return;
+  const n = S.held.size;
+  if (!n) {
+    if (!pill.hidden) { pill.hidden = true; S.heldAnnounced = 0; }
+  } else {
+    const dir = heldDirection();
+    const text = pillText(n, dir);
+    if (pill.textContent !== text) pill.textContent = text;
+    pill.setAttribute('aria-label', `${plural(n, 'new comment')} ${dir === 'up' ? 'above' : 'below'}. Show them`);
+    pill.dataset.dir = dir;
+    pill.hidden = false;
+    if (n !== S.heldAnnounced) { S.heldAnnounced = n; announce(`${plural(n, 'new comment')} waiting. Use the new comments button to show them.`); }
+  }
+  if (S.shownSince) {
+    announce(S.shownSince === 1 ? `New comment by ${S.shownName}` : `${S.shownSince} new comments`);
+    S.shownSince = 0;
+  }
+}
+let pillQueued = false;
+window.addEventListener('scroll', () => {
+  if (pillQueued || view.name !== 'thread' || !S.held.size) return;
+  pillQueued = true;
+  requestAnimationFrame(() => { pillQueued = false; if (view.name === 'thread') refreshPill(); });
+}, { passive: true });
+
+// Tap on the pill: merge, apply the sort, keep the anchor, then bring the first new one into view.
+function mergeHeld() {
+  const ids = new Set(S.held);
+  if (!ids.size) return;
+  S.held.clear();
+  for (const id of ids) S.fresh.add(id);
+  renderComments({ resort: true });
+  const first = [...S.els.comments.querySelectorAll('.cm')].find(el => ids.has(Number(el.dataset.id)));
+  if (first) {
+    first.scrollIntoView({ block: 'center', behavior: reducedMotion() ? 'auto' : 'smooth' });
+    first.querySelector('.cm-toggle')?.focus({ preventScroll: true }); // the pill is gone; keep keyboard focus nearby
+  }
+  announce(`${plural(ids.size, 'new comment')} shown.`);
+}
+
+// Screen-reader announcements (polite, at most about once a second) and the touch toast.
+function ensureLiveRegions() {
+  if (!document.getElementById('ar-live')) document.body.append(h('div', { id: 'ar-live', class: 'sr-only', 'aria-live': 'polite', 'aria-atomic': 'true' }));
+  if (!document.getElementById('ar-toast')) document.body.append(h('div', { id: 'ar-toast', class: 'toast', role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true' }));
+}
+const ANN = { last: 0, timer: 0, text: '' };
+function announce(text) {
+  ANN.text = text;
+  if (ANN.timer) return;
+  const wait = Math.max(0, ANN.last + 1000 - Date.now());
+  ANN.timer = setTimeout(() => {
+    ANN.timer = 0; ANN.last = Date.now();
+    const el = document.getElementById('ar-live');
+    if (el) el.textContent = ANN.text;
+  }, wait);
+}
+let toastTimer = 0;
+function toast(text) {
+  ensureLiveRegions();
+  const el = document.getElementById('ar-toast');
+  el.textContent = text;
+  el.classList.add('is-on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('is-on'), 1400);
 }
 
 // Who posted: v2 `op` (bot -> its roster entry, user -> HUMAN), else the legacy
@@ -271,11 +450,38 @@ function pollResults(poll) {
 // AutoMod's sticky is not counted, matching the server's comment_count.
 function countComments() { return S.comments.filter(c => c.author_type !== 'automod').length; }
 
+// Replaces a vote widget with one carrying the new server score (same size), keeping focus.
+function swapVote(old, make) {
+  const act = document.activeElement;
+  const focused = old.contains(act) ? (act.classList.contains('vote-down') ? '.vote-down' : '.vote-up') : null;
+  const nv = make();
+  old.replaceWith(nv);
+  if (focused) nv.querySelector(focused)?.focus({ preventScroll: true });
+  return nv;
+}
+
+// The post card is rebuilt only when what it shows changes; score and comment count are
+// patched in place, so live comment/vote events never touch it.
 function renderPost() {
   const t = S.thread;
   if (!t || !S.els.post) return;
   const n = countComments();
   const score = Number.isFinite(t.score) ? t.score : 1 + S.comments.reduce((a, c) => a + Math.max(0, c.score || 0), 0);
+  const opBot = t.op?.type === 'bot' ? S.bots.get(t.op.bot_id) : null;
+  const sig = JSON.stringify([t.title, t.headline, t.body, t.poll, t.article, t.op, t.post_type, t.link, t.source, t.created_at,
+    t.thread_limit, t.max_comments, t.status, S.bots.size, opBot ? [opBot.username, opBot.model, opBot.provider] : null]);
+  const voteBlock = cls => voteWidget({ threadId: t.id || S.threadId, target: 'post', score, cls, onScore: v => { if (S.thread) S.thread = { ...S.thread, score: v }; } });
+  if (sig === S.postSig && S.els.post.querySelector('.post-full')) {
+    const cc = document.getElementById('comment-count');
+    if (cc && cc.textContent !== plural(n, 'comment')) cc.textContent = plural(n, 'comment');
+    if (score !== S.postScore) {
+      S.postScore = score;
+      S.postVotes = S.postVotes.map(([el, cls]) => [swapVote(el, () => voteBlock(cls)), cls]);
+    }
+    return;
+  }
+  S.postSig = sig;
+  S.postScore = score;
   const legacy = !t.post_type && !t.article;
   const type = POST_TYPES[t.post_type] ? t.post_type : 'news';
   const body = t.body ? String(t.body) : '';
@@ -283,17 +489,20 @@ function renderPost() {
   const bodyEl = body ? richText(body, `post-text${long && !S.bodyOpen ? ' is-clamped' : ''}`) : null;
   const more = long ? h('button', { class: 'btn-link', type: 'button', text: S.bodyOpen ? 'Show less' : 'Show more', 'aria-expanded': String(!!S.bodyOpen),
     on: { click: e => { S.bodyOpen = !bodyEl.classList.toggle('is-clamped'); e.target.textContent = S.bodyOpen ? 'Show less' : 'Show more'; e.target.setAttribute('aria-expanded', String(S.bodyOpen)); } } }) : null;
-  const voteBlock = cls => voteWidget({ threadId: t.id || S.threadId, target: 'post', score, cls, onScore: v => { if (S.thread) S.thread = { ...S.thread, score: v }; } });
   const link = legacy ? extLink(t.link, domainOf(t.link) || 'Open link', 'post-link') : null;
   const when = relTime(t.created_at);
+  const colVote = voteBlock('vote-stack');
+  const inlineCls = 'vote-inline vote-pill post-vote-inline';
+  const inlineVote = voteBlock(inlineCls);
+  S.postVotes = [[colVote, 'vote-stack'], [inlineVote, inlineCls]];
   S.els.post.replaceChildren(h('article', { class: 'card post-card post-full', 'data-type': type },
-    h('div', { class: 'vote-col' }, voteBlock('vote-stack')),
+    h('div', { class: 'vote-col' }, colVote),
     h('div', { class: 'post-main' },
       h('div', { class: 'post-meta' },
         avatarLogo('meta-icon'),
         h('strong', { class: 'meta-sub', text: 'r/AgentReddit' }),
         ...opLine(t),
-        when ? h('span', { text: ` ${when}${when === 'just now' ? '' : ' ago'}` }) : null,
+        when ? h('span', { 'data-t': t.created_at, 'data-fmt': 'ago', text: ` ${when}${when === 'just now' ? '' : ' ago'}` }) : null,
       ),
       h('h1', { class: 'post-title' }, h('span', { class: 'post-title-text', text: t.title || t.headline || '' }), ' ', typeFlair(type)),
       type === 'poll' || t.poll ? pollResults(t.poll) : null,
@@ -301,7 +510,7 @@ function renderPost() {
       articleBlock(t, legacy),
       link,
       h('div', { class: 'post-actions' },
-        voteBlock('vote-inline vote-pill post-vote-inline'),
+        inlineVote,
         h('span', { class: 'act' }, ICONS.comment(), h('span', { id: 'comment-count', text: plural(n, 'comment') })),
         h('span', { class: 'act' }, ICONS.users(), h('span', { text: plural(S.bots.size, 'redditor') })),
         statusTag(t.status),
@@ -330,6 +539,9 @@ function rosterItem(bot, full) {
 
 function renderRoster() {
   const bots = [...S.bots.values()];
+  const sig = JSON.stringify(bots.map(b => [b.id, b.username, b.retired, b.occupation, b.model, b.provider, b.bio]));
+  if (sig === S.rosterSig) return;
+  S.rosterSig = sig;
   const strip = S.els.roster;
   if (strip) {
     strip.replaceChildren(...bots.map(b => rosterItem(b, false)));
@@ -353,40 +565,96 @@ function emptyComments() {
   return h('div', { class: 'empty-comments' }, h('p', { text: 'No comments yet.' }));
 }
 
-function renderComments() {
+// ---------------------------------------------------------------- keyed comment patching
+
+// Makes `parent`'s children exactly `els`, in order, touching only what changed (elements
+// that stay are never detached, so focus, selection and running animations survive).
+function sync(parent, els) {
+  const want = new Set(els);
+  let cur = parent.firstChild;
+  for (const el of els) {
+    while (cur && !want.has(cur)) { const n = cur.nextSibling; cur.remove(); cur = n; }
+    if (el === cur) { cur = cur.nextSibling; continue; }
+    parent.insertBefore(el, cur);
+  }
+  while (cur) { const n = cur.nextSibling; cur.remove(); cur = n; }
+}
+
+// Re-renders the comment list (patching), inside the scroll anchor unless told otherwise.
+function renderComments({ resort = false, anchor = true, anchorEl = null, clamp = false } = {}) {
+  if (!S.els.comments) return;
+  if (anchor) preserve(() => patchComments(resort), anchorEl ? { el: anchorEl, clamp } : undefined);
+  else patchComments(resort);
+  refreshPill();
+}
+
+const FOCUS_CLS = ['cm-toggle', 'reply-btn', 'vote-up', 'vote-down', 'uname-btn', 'continue', 'act-btn', 'rail'];
+function focusKey(el) {
+  const cm = el?.closest?.('.cm');
+  if (!cm || !el.closest('#comments, #sticky') || el.closest('.cbox')) return null;
+  const cls = FOCUS_CLS.find(c => el.classList.contains(c));
+  return cls ? { id: cm.id, cls, text: el.textContent } : null;
+}
+
+function patchComments(resort) {
   const box = S.els.comments;
   if (!box) return;
-  const focusedId = document.activeElement?.dataset?.toggle;
   const act = document.activeElement;
+  const fk = focusKey(act);
   const boxFocus = S.replyBox && S.replyBox.contains(act) ? { el: act, a: act.selectionStart, b: act.selectionEnd } : null;
   S.locked = lockedIds(S.comments);
   S.roles = opRoles(S.thread, [...S.bots.values()]);
-  const { sticky, rest } = splitSticky(buildTree(S.comments));
-  const roots = sortTree(rest, S.sort);
+  const visible = S.held.size ? S.comments.filter(c => !S.held.has(c.id)) : S.comments;
+  const { sticky, rest } = splitSticky(buildTree(visible));
+  if (resort) S.rank = null;
+  const roots = arrangeTree(rest, S.rank, S.sort);
+  S.rank = rankOrder(roots);
   const limit = S.thread?.thread_limit ?? Infinity;
+  const seen = new Set();
   if (S.els.sticky) {
-    const sf = document.createDocumentFragment();
-    for (const r of sortTree(sticky, 'new').reverse()) sf.append(renderNode(r, 0, false));
-    S.els.sticky.replaceChildren(sf);
+    sync(S.els.sticky, sortTree(sticky, 'new').reverse().map(r => renderNode(r, 0, false, seen)));
     S.els.sticky.hidden = !sticky.length;
   }
-  const frag = document.createDocumentFragment();
-  if (!roots.length) frag.append(emptyComments());
-  for (const r of roots) frag.append(renderNode(r, 0, isLocked(r, limit)));
-  box.replaceChildren(frag);
-  if (boxFocus?.el.isConnected) {
+  let list;
+  if (roots.length) list = roots.map(r => renderNode(r, 0, isLocked(r, limit), seen));
+  else {
+    const key = `${!!S.thread}|${S.thread?.status}`;
+    if (S.emptyKey !== key || !S.emptyEl) { S.emptyKey = key; S.emptyEl = emptyComments(); }
+    list = [S.emptyEl];
+  }
+  sync(box, list);
+  for (const id of [...S.recs.keys()]) if (!seen.has(id)) S.recs.delete(id);
+  const lost = !document.activeElement || document.activeElement === document.body || !document.activeElement.isConnected;
+  if (boxFocus?.el.isConnected && document.activeElement !== boxFocus.el) {
     boxFocus.el.focus({ preventScroll: true });
     try { if (boxFocus.a != null) boxFocus.el.setSelectionRange(boxFocus.a, boxFocus.b); } catch { /* not a text field */ }
+  } else if (fk && lost) {
+    const w = document.getElementById(fk.id);
+    const mine = w ? [...w.querySelectorAll(`.${fk.cls}`)].filter(x => x.closest('.cm') === w) : [];
+    (mine.find(x => x.textContent === fk.text) || mine[0])?.focus({ preventScroll: true });
   }
   S.fresh.clear();
   const cc = document.getElementById('comment-count');
-  if (cc) cc.textContent = plural(countComments(), 'comment');
-  if (focusedId) (S.els.sticky?.querySelector(`[data-toggle="${CSS.escape(focusedId)}"]`) || box.querySelector(`[data-toggle="${CSS.escape(focusedId)}"]`))?.focus({ preventScroll: true });
+  if (cc && cc.textContent !== plural(countComments(), 'comment')) cc.textContent = plural(countComments(), 'comment');
 }
 
+// Relative times are refreshed in place (no re-render) once a minute.
+function refreshTimes() {
+  for (const el of document.querySelectorAll('#main [data-t]')) {
+    const t = relTime(el.dataset.t);
+    if (!t) continue;
+    const text = el.dataset.fmt === 'ago' ? ` ${t}${t === 'just now' ? '' : ' ago'}` : `· ${t}`;
+    if (el.textContent !== text) el.textContent = text;
+  }
+}
+
+// Collapse/expand keeps the toggled comment where it is; if its header was above the
+// visible edge (a rail tap or long-press inside a tall comment), the collapsed row is
+// brought down to that edge instead of disappearing upwards: one controlled move beats
+// landing the reader in unrelated content.
 function toggleCollapse(id) {
   if (S.collapsed.has(id)) S.collapsed.delete(id); else S.collapsed.add(id);
-  renderComments();
+  renderComments({ anchorEl: document.getElementById(`c${id}`), clamp: true });
 }
 
 // Who wrote a comment. Missing author_type means a v1 bot comment.
@@ -398,17 +666,32 @@ function authorOf(node) {
   return { type: 'bot', name: bot?.username || '[deleted]', bot };
 }
 
-function roleBadges(node, who) {
+function roleFlags(node, who) {
   const r = S.roles || {};
   const isOp = (who.type === 'bot' && r.opBot != null && node.bot_id === r.opBot) || (who.type === 'user' && r.opUser && who.name === r.opUser);
   const isHost = who.type === 'bot' && r.host != null && node.bot_id === r.host;
-  return [
-    isOp ? h('span', { class: 'role-badge role-op', title: 'Original poster' }, 'OP') : null,
-    isHost ? h('span', { class: 'role-badge role-host', title: 'AMA host' }, 'HOST') : null,
-  ];
+  return [!!isOp, !!isHost];
 }
 
-function renderNode(node, level, locked) {
+function flashNew(el) {
+  el.classList.add('is-new');
+  const done = () => el.classList.remove('is-new');
+  el.addEventListener('animationend', e => { if (e.target === el && e.animationName === 'new-flash') done(); });
+  setTimeout(done, 3000);
+}
+
+// One comment, patched in place. The wrapper element is keyed by id and kept for as long
+// as the comment is rendered; its parts (gutter, head, body, awards, actions, "continue")
+// are rebuilt only when their own inputs change. Scores swap just the vote widget.
+function renderNode(node, level, locked, seen) {
+  seen.add(node.id);
+  let rec = S.recs.get(node.id);
+  if (!rec) {
+    rec = { el: h('div', { class: 'cm', id: `c${node.id}`, 'data-id': node.id }), main: h('div', { class: 'cm-main' }), kids: h('div', { class: 'cm-children' }), part: {}, sig: {}, vote: null, score: null };
+    S.recs.set(node.id, rec);
+    if (S.fresh.has(node.id)) flashNew(rec.el);
+  }
+  const el = rec.el;
   const who0 = authorOf(node);
   const who = node.deleted ? { type: 'deleted', name: '[deleted]', bot: null } : who0;
   const bot = who.bot || { username: who.name, model: 'unknown', provider: 'unknown' };
@@ -418,96 +701,122 @@ function renderNode(node, level, locked) {
   S.prevHidden.set(node.id, hidden);
   const bumped = collapsed && prev != null && hidden > prev;
   const name = who.name;
-
-  const toggle = h('button', {
-    class: 'cm-toggle', type: 'button', 'data-toggle': String(node.id),
-    'aria-expanded': String(!collapsed),
-    'aria-label': collapsed ? `Expand comment by ${name}${hidden ? `, ${plural(hidden, 'reply', 'replies')} hidden` : ''}` : `Collapse comment by ${name}`,
-    on: { click: () => toggleCollapse(node.id) },
-  }, collapsed ? (hidden ? `[+${hidden}]` : '[+]') : '[–]');
-
-  const time = relTime(node.created_at);
   const known = !!who.bot;
   const mod = who.type === 'automod';
   const occ = known ? occupationOf(bot) : '';
   const pfKey = `c${node.id}`;
+  const [isOp, isHost] = who.type === 'deleted' ? [false, false] : roleFlags(node, who);
+  const score = Number.isFinite(node.score) ? node.score : 0;
+
+  const state = {
+    'is-collapsed': collapsed, 'is-mod': mod, 'is-stickied': !!node.stickied, 'is-human': who.type === 'user',
+    'is-pending': !!node.pending, 'is-deleted': !!node.deleted, 'is-removed': !!node.removed,
+    'is-locked': S.locked.has(node.id), 'is-flat': level >= DISPLAY_DEPTH,
+  };
+  for (const [k, v] of Object.entries(state)) el.classList.toggle(k, v);
+  el.dataset.level = String(level);
+  el.dataset.author = who.type;
+  const until = S.replied.get(node.id) || 0;
+  if (until > Date.now() && !el.classList.contains('is-replied')) {
+    el.classList.add('is-replied');
+    setTimeout(() => el.classList.remove('is-replied'), until - Date.now());
+  }
+
+  const part = (key, sig, build) => {
+    if (key in rec.sig && rec.sig[key] === sig) return rec.part[key];
+    const n = build();
+    const old = rec.part[key];
+    if (old?.parentNode) { if (n) old.replaceWith(n); else old.remove(); }
+    rec.part[key] = n; rec.sig[key] = sig;
+    return n;
+  };
   const av = cls => (known ? avatarOpener(bot, pfKey, cls) : mod ? modAvatar(cls) : who.type === 'deleted' ? deletedAvatar(cls) : avatar(name, cls));
-  const head = h('div', { class: 'cm-head' },
-    av('av-inline'),
-    toggle,
-    known ? pfOpener(bot, pfKey, 'uname uname-btn', name) : h('span', { class: `uname${mod ? ' uname-mod' : ''}`, text: name }),
-    who.type === 'deleted' ? null : mod ? modBadge() : who.type === 'user' ? humanFlair() : flair(bot),
-    ...(who.type === 'deleted' ? [] : roleBadges(node, who)),
-    occ ? h('span', { class: 'cm-occ', text: `· ${occ}` }) : null,
-    node.stickied ? h('span', { class: 'cm-sticky', title: 'Stickied comment' }, ICONS.pin(), h('span', { class: 'sticky-text', text: 'Stickied comment' })) : null,
-    collapsed
-      ? h('span', { class: 'cm-collapsed-meta' },
-        h('span', { text: `· ${plural(node.score, 'point')}` }),
-        h('span', { class: `hidden-count${bumped ? ' is-bumped' : ''}`, text: ` · ${plural(hidden, 'reply', 'replies')} hidden` }))
-      : node.pending ? h('span', { class: 'cm-time cm-posting', text: '· posting…' })
-        : (time ? h('span', { class: 'cm-time', text: `· ${time}` }) : null),
-    node.edited && !collapsed && !node.deleted && !node.removed ? h('span', { class: 'cm-edited', title: 'Edited', text: '· edited' }) : null,
-    node.locked ? h('span', { class: 'cm-lock', title: 'Locked by moderators', 'aria-label': 'Locked by moderators', role: 'img' }, ICONS.lock(), h('span', { class: 'cm-lock-text', text: 'locked' })) : null,
-    bot.retired ? h('span', { class: 'left-tag', text: 'left' }) : null,
-  );
 
-  const classes = ['cm'];
-  if (collapsed) classes.push('is-collapsed');
-  if (mod) classes.push('is-mod');
-  if (node.stickied) classes.push('is-stickied');
-  if (who.type === 'user') classes.push('is-human');
-  if (node.pending) classes.push('is-pending');
-  if (node.deleted) classes.push('is-deleted');
-  if (node.removed) classes.push('is-removed');
-  if (S.locked.has(node.id)) classes.push('is-locked');
-  if ((S.replied.get(node.id) || 0) > Date.now()) classes.push('is-replied');
-  if (S.fresh.has(node.id)) classes.push('is-new');
-  if (level >= DISPLAY_DEPTH) classes.push('is-flat');
-  const wrap = h('div', { class: classes.join(' '), id: `c${node.id}`, 'data-id': node.id, 'data-level': level, 'data-author': who.type });
+  const gutter = part('gutter', JSON.stringify([who.type, name, known, collapsed]), () => {
+    const g = h('div', { class: 'cm-gutter' }, av('av-gutter'));
+    if (!collapsed) g.append(h('button', { class: 'rail', type: 'button', tabindex: '-1', 'aria-hidden': 'true', title: `Collapse ${name}'s comment`, on: { click: () => toggleCollapse(node.id) } }));
+    return g;
+  });
 
-  const gutter = h('div', { class: 'cm-gutter' }, av('av-gutter'));
-  if (!collapsed) {
-    gutter.append(h('button', { class: 'rail', type: 'button', tabindex: '-1', 'aria-hidden': 'true', title: `Collapse ${name}'s comment`, on: { click: () => toggleCollapse(node.id) } }));
-  }
-  const main = h('div', { class: 'cm-main' }, head);
-  wrap.append(gutter, main);
-  if (collapsed) return wrap;
+  const head = part('head', JSON.stringify([who.type, name, known && bot.model, known && bot.provider, isOp, isHost, occ, !!node.stickied, collapsed,
+    collapsed ? score : null, collapsed ? hidden : null, bumped, !!node.pending, !!node.edited, !!node.deleted, !!node.removed, !!node.locked, !!bot.retired, node.created_at]), () => {
+    const toggle = h('button', {
+      class: 'cm-toggle', type: 'button', 'data-toggle': String(node.id),
+      'aria-expanded': String(!collapsed),
+      'aria-label': collapsed ? `Expand comment by ${name}${hidden ? `, ${plural(hidden, 'reply', 'replies')} hidden` : ''}` : `Collapse comment by ${name}`,
+      on: { click: () => toggleCollapse(node.id) },
+    }, collapsed ? (hidden ? `[+${hidden}]` : '[+]') : '[–]');
+    const time = relTime(node.created_at);
+    return h('div', { class: 'cm-head' },
+      av('av-inline'),
+      toggle,
+      known ? pfOpener(bot, pfKey, 'uname uname-btn', name) : h('span', { class: `uname${mod ? ' uname-mod' : ''}`, text: name }),
+      who.type === 'deleted' ? null : mod ? modBadge() : who.type === 'user' ? humanFlair() : flair(bot),
+      isOp ? h('span', { class: 'role-badge role-op', title: 'Original poster' }, 'OP') : null,
+      isHost ? h('span', { class: 'role-badge role-host', title: 'AMA host' }, 'HOST') : null,
+      occ ? h('span', { class: 'cm-occ', text: `· ${occ}` }) : null,
+      node.stickied ? h('span', { class: 'cm-sticky', title: 'Stickied comment' }, ICONS.pin(), h('span', { class: 'sticky-text', text: 'Stickied comment' })) : null,
+      collapsed
+        ? h('span', { class: 'cm-collapsed-meta' },
+          h('span', { text: `· ${plural(node.score, 'point')}` }),
+          h('span', { class: `hidden-count${bumped ? ' is-bumped' : ''}`, text: ` · ${plural(hidden, 'reply', 'replies')} hidden` }))
+        : node.pending ? h('span', { class: 'cm-time cm-posting', text: '· posting…' })
+          : (time ? h('span', { class: 'cm-time', 'data-t': node.created_at, text: `· ${time}` }) : null),
+      node.edited && !collapsed && !node.deleted && !node.removed ? h('span', { class: 'cm-edited', title: 'Edited', text: '· edited' }) : null,
+      node.locked ? h('span', { class: 'cm-lock', title: 'Locked by moderators', 'aria-label': 'Locked by moderators', role: 'img' }, ICONS.lock(), h('span', { class: 'cm-lock-text', text: 'locked' })) : null,
+      bot.retired ? h('span', { class: 'left-tag', text: 'left' }) : null,
+    );
+  });
 
-  if (node.deleted) main.append(h('div', { class: 'cm-body cm-gone' }, h('p', { text: '[deleted]' })));
-  else if (node.removed) main.append(h('div', { class: 'cm-body cm-gone' }, h('p', { text: '[removed by moderator]' })));
-  else main.append(richText(node.text, 'cm-body'));
-  const awards = awardCounts(node.awards);
-  if (awards.length && !node.deleted && !node.removed) {
-    main.append(h('div', { class: 'cm-awards', 'aria-label': `Awards: ${awards.map(([a, n]) => `${a} ${n}`).join(', ')}` },
-      awards.map(([a, n]) => h('span', { class: 'award', title: `${n} × ${a}` }, h('span', { class: 'award-ic', text: a }), n > 1 ? h('span', { class: 'award-n', text: `×${n}` }) : null))));
-  }
-  const repliesN = hidden;
+  if (el.firstChild !== gutter || el.lastChild !== rec.main || el.childNodes.length !== 2) sync(el, [gutter, rec.main]);
+  if (collapsed) { sync(rec.main, [head]); return el; }
+
+  const body = part('body', JSON.stringify([!!node.deleted, !!node.removed, node.text]), () => (node.deleted
+    ? h('div', { class: 'cm-body cm-gone' }, h('p', { text: '[deleted]' }))
+    : node.removed ? h('div', { class: 'cm-body cm-gone' }, h('p', { text: '[removed by moderator]' }))
+      : richText(node.text, 'cm-body')));
+  const awardList = node.deleted || node.removed ? [] : awardCounts(node.awards);
+  const awards = part('awards', JSON.stringify(awardList), () => (awardList.length
+    ? h('div', { class: 'cm-awards', 'aria-label': `Awards: ${awardList.map(([a, n]) => `${a} ${n}`).join(', ')}` },
+      awardList.map(([a, n]) => h('span', { class: 'award', title: `${n} × ${a}` }, h('span', { class: 'award-ic', text: a }), n > 1 ? h('span', { class: 'award-n', text: `×${n}` }) : null)))
+    : null));
   const subLocked = S.locked.has(node.id);
   const replyOk = canReply(node, subLocked);
-  main.append(h('div', { class: 'cm-actions' },
-    node.pending
+  const replyOpen = S.replyTo === node.id;
+  const showFull = level === 0 && locked;
+  const actions = part('actions', JSON.stringify([!!node.pending, hidden, replyOk, replyOpen, level === 0 && node.children.length > 0, showFull]), () => {
+    rec.score = score;
+    rec.vote = node.pending
       ? h('div', { class: 'vote vote-inline', 'aria-label': `Score ${node.score}` }, ICONS.up(), h('span', { class: 'score', text: formatScore(node.score) }), ICONS.down())
-      : voteWidget({ threadId: S.threadId, target: node.id, score: Number.isFinite(node.score) ? node.score : 0, cls: 'vote-inline' }),
-    h('span', { class: 'act' }, ICONS.comment(), h('span', { text: repliesN ? plural(repliesN, 'reply', 'replies') : 'No replies' })),
-    replyOk ? h('button', { class: 'act act-btn reply-btn', type: 'button', 'aria-expanded': String(S.replyTo === node.id), on: { click: () => openReply(node.id) } }, 'Reply') : null,
-    level === 0 && node.children.length ? h('button', { class: 'act act-btn', type: 'button', text: 'Collapse thread', on: { click: () => toggleCollapse(node.id) } }) : null,
-    level === 0 && locked ? h('span', { class: 'locked locked-full', title: 'The bots have reached this thread\'s comment limit. Humans can still reply.' }, 'thread full') : null,
-  ));
+      : voteWidget({ threadId: S.threadId, target: node.id, score, cls: 'vote-inline' });
+    return h('div', { class: 'cm-actions' },
+      rec.vote,
+      h('span', { class: 'act' }, ICONS.comment(), h('span', { text: hidden ? plural(hidden, 'reply', 'replies') : 'No replies' })),
+      replyOk ? h('button', { class: 'act act-btn reply-btn', type: 'button', 'aria-expanded': String(replyOpen), on: { click: () => openReply(node.id) } }, 'Reply') : null,
+      level === 0 && node.children.length ? h('button', { class: 'act act-btn', type: 'button', text: 'Collapse thread', on: { click: () => toggleCollapse(node.id) } }) : null,
+      showFull ? h('span', { class: 'locked locked-full', title: 'The bots have reached this thread\'s comment limit. Humans can still reply.' }, 'thread full') : null,
+    );
+  });
+  if (!node.pending && rec.score !== score && rec.vote) {
+    rec.score = score;
+    rec.vote = swapVote(rec.vote, () => voteWidget({ threadId: S.threadId, target: node.id, score, cls: 'vote-inline' }));
+  }
 
-  if (S.replyTo === node.id && S.replyBox && replyOk) main.append(S.replyBox);
+  let kids = null;
   if (node.children.length) {
-    const kids = h('div', { class: 'cm-children' });
+    kids = rec.kids;
     const childLevel = level + 1;
     if (childLevel >= DISPLAY_DEPTH && !S.continued.has(node.id) && level < DISPLAY_DEPTH) {
-      kids.append(h('button', { class: 'continue', type: 'button',
+      sync(kids, [part('cont', String(hidden), () => h('button', { class: 'continue', type: 'button',
         on: { click: () => { S.continued.add(node.id); renderComments(); } } },
-      `continue this thread →`, h('span', { class: 'continue-n', text: ` (${plural(hidden, 'reply', 'replies')})` })));
+      `continue this thread →`, h('span', { class: 'continue-n', text: ` (${plural(hidden, 'reply', 'replies')})` })))]);
     } else {
-      for (const ch of node.children) kids.append(renderNode(ch, childLevel, locked));
+      sync(kids, node.children.map(ch => renderNode(ch, childLevel, locked, seen)));
     }
-    main.append(kids);
   }
-  return wrap;
+  const replyBox = replyOpen && S.replyBox && replyOk ? S.replyBox : null;
+  sync(rec.main, [head, body, awards, actions, replyBox, kids].filter(Boolean));
+  return el;
 }
 
 function deletedAvatar(cls) {
@@ -754,8 +1063,11 @@ function openStream(id) {
     if (!mine()) return;
     const c = parse(e.data);
     if (!c || typeof c.id !== 'number') return;
-    if (!S.comments.some(x => x.id === c.id)) S.fresh.add(c.id);
-    S.comments = reconcileComment(S.comments, c).comments;
+    const isNew = !S.comments.some(x => x.id === c.id);
+    const r = reconcileComment(S.comments, c);
+    S.comments = r.comments;
+    if (r.replaced != null) { inheritRank(r.replaced, c.id); S.fresh.add(c.id); } // our optimistic comment, confirmed
+    else if (isNew) admit(c, shouldBuffer(readingState()));
     // A bot answering a human: flash the human's comment so they notice.
     const parent = c.parent_id != null ? S.comments.find(x => x.id === c.parent_id) : null;
     if (parent && parent.author_type === 'user' && (c.author_type || 'bot') === 'bot') S.replied.set(parent.id, Date.now() + 2400);
@@ -829,7 +1141,7 @@ async function refreshThread(id) {
       S.bots = new Map(t.bots.map(b => [b.id, b]));
       // The bot OP / AMA host are only known once casting is done.
       S.thread = { ...S.thread, bots: t.bots, ...(t.op ? { op: t.op } : {}), ...(t.ama_host_bot_id != null ? { ama_host_bot_id: t.ama_host_bot_id } : {}) };
-      renderRoster(); scheduleRender();
+      scheduleRender();
     }
   } catch { /* stream keeps going */ }
 }
@@ -847,7 +1159,7 @@ async function onStreamClosed(id) {
       S.els.post?.replaceChildren(h('div', { class: 'card notice' },
         h('div', { class: 'notice-text' }, h('strong', { text: 'Thread not found.' }), h('span', { text: ' It may have been removed, or the link is wrong.' })),
         linkTo({}, { class: 'btn btn-primary' }, 'Back to r/AgentReddit')));
-      S.els.comments?.replaceChildren();
+      S.els.comments?.replaceChildren(); S.recs = new Map(); S.held.clear(); refreshPill();
       statusChip(null);
       return;
     }
@@ -856,6 +1168,5 @@ async function onStreamClosed(id) {
   }
 }
 
-// keep relative times fresh
-// keep relative times fresh
-setInterval(() => { if (view.name === 'thread' && S.thread) { renderPost(); renderComments(); renderProfile(); } }, 60000);
+// keep relative times fresh, in place
+setInterval(() => { if (view.name === 'thread' && S.thread) { preserve(refreshTimes); renderProfile(); } }, 60000);

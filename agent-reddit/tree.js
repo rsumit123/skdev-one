@@ -463,3 +463,104 @@ export function opRoles(thread, bots) {
   const host = thread?.ama_host_bot_id ?? (list.find(b => b?.is_host)?.id ?? null);
   return { opBot, opUser: op?.type === 'user' ? op.name || null : null, host };
 }
+
+// ---------------------------------------------------------------- v3: calm threads
+
+// Frozen order: id -> position among its siblings, from an already ordered tree.
+export function rankOrder(roots) {
+  const rank = new Map();
+  const walk = list => list.forEach((n, i) => { rank.set(n.id, i); walk(n.children || []); });
+  walk(roots || []);
+  return rank;
+}
+
+// Orders a tree (from buildTree) by a frozen rank so live score changes never re-sort.
+// Comments the rank does not know yet are slotted in by the sort, before the first
+// frozen sibling the sort would put after them; nothing already shown moves.
+// No rank means a plain sortTree.
+export function arrangeTree(roots, rank, mode = 'best') {
+  if (!rank) return sortTree(roots, mode);
+  const cmp = COMPARATORS[mode] || COMPARATORS.best;
+  const arrange = list => {
+    const known = list.filter(n => rank.has(n.id)).sort((a, b) => rank.get(a.id) - rank.get(b.id));
+    const fresh = list.filter(n => !rank.has(n.id)).sort(cmp);
+    const out = known;
+    for (const f of fresh) {
+      const i = out.findIndex(x => cmp(f, x) < 0);
+      out.splice(i === -1 ? out.length : i, 0, f);
+    }
+    return out.map(n => ({ ...n, children: arrange(n.children || []) }));
+  };
+  return arrange(roots || []);
+}
+
+// Hold live comments back (behind the "new comments" pill) while the reader is away from
+// the live edge (more than 1.5 viewports below the top of the comments) or busy:
+// selecting text in the thread, typing a reply, or looking at a profile card.
+export const BUFFER_VIEWPORTS = 1.5;
+export function shouldBuffer({ distance = 0, viewport = 0, selecting = false, replyFocused = false, profileOpen = false } = {}) {
+  return distance > viewport * BUFFER_VIEWPORTS || !!selecting || !!replyFocused || !!profileOpen;
+}
+
+// What to do with one arriving comment: 'show' it in place or 'hold' it for the pill.
+// The reader's own comments, bot replies to them and comments inside a collapsed subtree
+// (invisible anyway, they only bump the hidden count) always show. A reply to a held
+// comment waits with its parent, and once anything is held later arrivals wait too, so
+// the merge keeps the arrival order.
+export function mergePolicy({ buffering = false, heldCount = 0, own = false, replyToMine = false, parentHeld = false, hiddenByCollapse = false } = {}) {
+  if (own) return 'show';
+  if (parentHeld) return 'hold';
+  if (replyToMine || hiddenByCollapse) return 'show';
+  return heldCount > 0 || buffering ? 'hold' : 'show';
+}
+
+export function pillText(n, dir) {
+  return `${dir === 'up' ? '↑' : '↓'} ${n} new comment${n === 1 ? '' : 's'}`;
+}
+
+// Scroll anchoring. `tops` are viewport tops of candidate elements in document order;
+// the anchor is the last one at or above the top edge of the visible area (`inset`, below
+// the sticky header), i.e. the content the reader is looking at. -1 when there is none.
+export function pickAnchor(tops, inset) {
+  if (!tops || !tops.length) return -1;
+  let idx = 0;
+  for (let i = 0; i < tops.length; i++) if (tops[i] <= inset + 0.5) idx = i;
+  return idx;
+}
+
+// How far to scroll after a mutation so the anchor is back where it was. With `clamp`
+// (the anchor itself vanished and an ancestor stands in, or a collapse whose header was
+// off-screen) the element is brought down to the visible edge instead of staying above it.
+export function anchorTarget({ before, after, inset, clamp = false }) {
+  const want = clamp ? Math.max(before, inset) : before;
+  return after - want;
+}
+
+// Touch long-press, as a pure reducer. Effects: 'press' (start the highlight + timer),
+// 'release' (stop them), 'fire' (toggle the comment). `until` = swallow clicks before it.
+export const PRESS = Object.freeze({ phase: 'idle', id: null, x: 0, y: 0, until: 0 });
+export const PRESS_MS = 450;
+export const PRESS_SLOP = 8;
+export function pressReducer(state, ev) {
+  const s = state || PRESS;
+  switch (ev.type) {
+    case 'down':
+      if ((ev.pointerType !== 'touch' && ev.pointerType !== 'pen') || !ev.eligible) {
+        return { state: { ...PRESS, until: s.until }, effect: s.phase === 'pressing' ? 'release' : null };
+      }
+      return { state: { phase: 'pressing', id: ev.id, x: ev.x, y: ev.y, until: 0 }, effect: 'press' };
+    case 'move':
+      if (s.phase !== 'pressing' || ev.id !== s.id) return { state: s, effect: null };
+      if (Math.hypot(ev.x - s.x, ev.y - s.y) > PRESS_SLOP) return { state: { ...PRESS }, effect: 'release' };
+      return { state: s, effect: null };
+    case 'timer':
+      return s.phase === 'pressing' ? { state: { ...s, phase: 'fired' }, effect: 'fire' } : { state: s, effect: null };
+    case 'up':
+    case 'cancel':
+      if (s.phase === 'fired') return { state: { ...PRESS, until: (ev.t || 0) + 400 }, effect: 'release' };
+      if (s.phase === 'pressing') return { state: { ...PRESS }, effect: 'release' };
+      return { state: s, effect: null };
+    default:
+      return { state: s, effect: null };
+  }
+}
