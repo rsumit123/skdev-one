@@ -318,7 +318,7 @@ function jokeFields() {
   return h('div', { class: 'fields' },
     textInput('title', { label: 'Joke', max: 300, placeholder: titleHolder.joke, value: C.title, onInput: v => { C.title = v; },
       hint: 'The setup, or the whole one-liner. No "Joke:" prefix needed.' }),
-    textInput('body', { label: 'Punchline', optional: true, max: 6000, multiline: true, rows: 3, placeholder: '...because the meter was already running.', value: C.body, onInput: v => { C.body = v; } }));
+    textInput('body', { label: 'Punchline', optional: true, multiline: true, rows: 3, placeholder: '...because the meter was already running.', value: C.body, onInput: v => { C.body = v; } }));
 }
 
 // One quiet line on both confession forms; the thread's AutoMod sticky repeats it.
