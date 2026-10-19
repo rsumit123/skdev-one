@@ -245,7 +245,7 @@ test('preview collapses whitespace and cuts on a word boundary', () => {
 
 // ---------------------------------------------------------------- v2
 
-const KEYS = ['post_type', 'author', 'title', 'body', 'idea', 'article', 'poll_options', 'ama_host', 'user_name', 'bots', 'thread_limit', 'max_comments'];
+const KEYS = ['post_type', 'author', 'title', 'body', 'idea', 'article', 'poll_options', 'ama_host', 'user_name', 'bots', 'thread_limit', 'max_comments', 'sub'];
 const base = (extra = {}) => ({
   type: 'news', author: 'bot', source: 'paper', picked: null, paste: { headline: '', link: '', text: '' },
   title: '', body: '', idea: '', options: ['', ''], amaHost: null, handle: 'guest_0042',
@@ -370,12 +370,12 @@ test('buildCreateBody: exact key set for every type x author', () => {
 test('buildCreateBody: news by bot and by user', () => {
   assert.deepEqual(buildCreateBody(base({ picked: ART })), {
     post_type: 'news', author: 'bot', title: null, body: null, idea: null, article: ART, poll_options: null, ama_host: null,
-    user_name: 'guest_0042', bots: 5, thread_limit: 6, max_comments: 40,
+    user_name: 'guest_0042', bots: 5, thread_limit: 6, max_comments: 40, sub: 'indianews',
   });
   assert.deepEqual(buildCreateBody(base({ author: 'user', source: 'paste', paste: { headline: 'Potholes again', link: 'https://e.com/p', text: '' }, body: ' my take ', crowd: 'large', length: 'long', limit: 12 })), {
     post_type: 'news', author: 'user', title: 'Potholes again', body: 'my take', idea: null,
     article: { headline: 'Potholes again', body: null, link: 'https://e.com/p', source: null }, poll_options: null, ama_host: null,
-    user_name: 'guest_0042', bots: 8, thread_limit: 12, max_comments: 80,
+    user_name: 'guest_0042', bots: 8, thread_limit: 12, max_comments: 80, sub: 'indianews',
   });
   assert.equal(buildCreateBody(base({ picked: ART, idea: '  focus on EMIs ' })).idea, 'focus on EMIs');
 });
@@ -556,4 +556,138 @@ test('pressReducer: touch long-press state machine', () => {
   assert.equal(r(PRESS, { type: 'timer' }).effect, null);
   assert.equal(r({ ...pressing }, { type: 'move', x: 99, y: 99, id: 2 }).state.phase, 'pressing', 'other pointers are ignored');
   assert.equal(r(PRESS, { type: 'down', pointerType: 'pen', x: 0, y: 0, id: 3, eligible: true, t: 0 }).effect, 'press', 'pen too');
+});
+
+// ---------------------------------------------------------------- v3: subreddits
+import {
+  SUBS, subForType, typeForSub, normalizeSub, normalizeSubs, subInfo, subOf, cardDecor,
+  sectionFrom, sectionsFrom, pageSection, moreCount, emptySubs, subsDiff, validSlug,
+} from './tree.js';
+
+const API_SUBS = [
+  { slug: 'indianews', name: 'r/IndiaNews', title: 'India News', description: 'News d', post_type: 'news', color: '#E8590C', icon: '📰', threads: 9, live: 1 },
+  { slug: 'askindia', name: 'r/AskIndia', title: 'Ask India', description: 'Ask d', post_type: 'ask', color: '#1C7ED6', icon: '🙋', threads: 0, live: 0 },
+];
+
+test('registry: five subs in order, 1:1 with post types', () => {
+  assert.deepEqual(SUBS.map(s => s.slug), ['indianews', 'askindia', 'unpopularindia', 'indiapolls', 'indiaama']);
+  assert.deepEqual(SUBS.map(s => s.post_type), Object.keys(POST_TYPES));
+  for (const s of SUBS) assert.match(s.color, /^#[0-9A-F]{6}$/i);
+});
+
+test('subForType / typeForSub map both ways, with fallbacks', () => {
+  assert.equal(subForType('ask'), 'askindia');
+  assert.equal(subForType('poll'), 'indiapolls');
+  assert.equal(subForType('nope'), 'indianews', 'unknown types land in r/IndiaNews');
+  assert.equal(typeForSub('indiaama'), 'ama');
+  assert.equal(typeForSub('unpopularindia'), 'opinion');
+  assert.equal(typeForSub('r/whatever'), null);
+  assert.equal(typeForSub(undefined), null);
+  // An API registry wins over the built-in one.
+  const custom = [{ slug: 'desi_polls', post_type: 'poll' }];
+  assert.equal(subForType('poll', custom), 'desi_polls');
+  assert.equal(typeForSub('desi_polls', custom), 'poll');
+  assert.equal(subForType('ask', custom), 'askindia', 'types the API list lacks fall back');
+});
+
+test('normalizeSub: validates every field and falls back per field', () => {
+  assert.deepEqual(normalizeSub(API_SUBS[0]), API_SUBS[0]);
+  const bad = normalizeSub({ slug: 'askindia', color: 'red; background:url(x)', icon: '', threads: -3, live: 'x', name: 'AskIndia' });
+  assert.equal(bad.color, '#1C7ED6');
+  assert.equal(bad.icon, '🙋');
+  assert.equal(bad.post_type, 'ask');
+  assert.equal(bad.name, 'r/AskIndia');
+  assert.equal(bad.threads, null);
+  assert.equal(bad.live, 0);
+  assert.equal(normalizeSub({ slug: 'Bad Slug!' }), null);
+  assert.equal(normalizeSub({ slug: 'mystery' }), null, 'unknown sub without a usable post type');
+  assert.equal(normalizeSub({ slug: 'mystery', post_type: 'poll' }).name, 'r/mystery');
+  assert.equal(normalizeSub(null), null);
+  assert.ok(validSlug('indiaama') && !validSlug('../x') && !validSlug(''));
+});
+
+test('normalizeSubs keeps order, drops junk and duplicate slugs', () => {
+  const out = normalizeSubs([API_SUBS[1], null, { slug: '' }, API_SUBS[0], { ...API_SUBS[1], threads: 5 }]);
+  assert.deepEqual(out.map(s => s.slug), ['askindia', 'indianews']);
+  assert.equal(out[0].threads, 0);
+  assert.deepEqual(normalizeSubs('nope'), []);
+});
+
+test('subInfo / subOf: API first, registry next, post_type derivation for old rows', () => {
+  assert.equal(subInfo('askindia', API_SUBS).description, 'Ask d');
+  assert.equal(subInfo('indiaama', API_SUBS).name, 'r/IndiaAMA');
+  assert.equal(subInfo('nope', API_SUBS), null);
+  assert.equal(subOf({ sub: 'askindia', post_type: 'news' }), 'askindia');
+  assert.equal(subOf({ post_type: 'ama' }), 'indiaama');
+  assert.equal(subOf({ sub: 'Bad!', post_type: 'opinion' }), 'unpopularindia');
+  assert.equal(subOf({}), 'indianews', 'v1 rows without post_type are news');
+});
+
+test('cardDecor: sections and sub pages drop the flair, mixed lists get the sub chip', () => {
+  const t = { sub: 'askindia', post_type: 'ask' };
+  assert.deepEqual(cardDecor(t, 'section', 'askindia'), { chip: null, flair: false });
+  assert.deepEqual(cardDecor(t, 'sub', 'askindia'), { chip: null, flair: false });
+  assert.deepEqual(cardDecor(t, 'sub', 'indianews'), { chip: 'askindia', flair: false }, 'a stray card is labelled');
+  assert.deepEqual(cardDecor(t, 'mixed'), { chip: 'askindia', flair: false });
+  assert.deepEqual(cardDecor({ post_type: 'poll' }, 'mixed'), { chip: 'indiapolls', flair: false });
+  assert.deepEqual(cardDecor(t), { chip: null, flair: true });
+});
+
+const card = id => ({ id, title: id });
+test('sectionFrom / sectionsFrom: first cards, total and the next offset', () => {
+  const s = sectionFrom({ sub: API_SUBS[0], threads: [card('a'), card('b'), card('a'), null, card('c')], total: 9 });
+  assert.deepEqual(s.items.map(x => x.id), ['a', 'b', 'c']);
+  assert.equal(s.total, 9);
+  assert.equal(s.next, 3);
+  assert.equal(sectionFrom({ sub: API_SUBS[0], threads: [card('a')], total: 1 }).next, null);
+  assert.equal(sectionFrom({ sub: API_SUBS[0], threads: [card('a'), card('b')] }).total, 2, 'missing total = what was sent');
+  assert.equal(sectionFrom({ sub: { slug: 'x y' }, threads: [card('a')] }), null);
+  const all = sectionsFrom({ sections: [
+    { sub: API_SUBS[0], threads: [card('a')], total: 1 },
+    { sub: API_SUBS[1], threads: [], total: 0 },
+    { sub: API_SUBS[0], threads: [card('z')], total: 1 },
+    'junk',
+  ] });
+  assert.deepEqual(all.map(x => x.sub.slug), ['indianews'], 'empty and duplicate sections dropped');
+  assert.deepEqual(sectionsFrom(null), []);
+});
+
+test('pageSection: appends a page in place, dedupes, stops at the end', () => {
+  let s = sectionFrom({ sub: API_SUBS[0], threads: [card('a'), card('b'), card('c')], total: 7 });
+  let r = pageSection(s, { threads: [card('c'), card('d'), card('e')], total: 7, next_offset: 6 }, 3);
+  assert.deepEqual(r.added.map(x => x.id), ['d', 'e']);
+  assert.deepEqual(r.section.items.map(x => x.id), ['a', 'b', 'c', 'd', 'e']);
+  assert.equal(r.section.next, 6);
+  assert.equal(moreCount(r.section), 2);
+  r = pageSection(r.section, { threads: [card('f'), card('g')], total: 7, next_offset: null }, 6);
+  assert.equal(r.section.next, null);
+  assert.equal(moreCount(r.section), 0);
+  s = sectionFrom({ sub: API_SUBS[0], threads: [card('a')], total: 3 });
+  r = pageSection(s, { threads: [card('b'), card('c')], total: 3, next_offset: 99 }, 1);
+  assert.equal(r.section.next, null, 'everything of total is shown');
+  r = pageSection(sectionFrom({ sub: API_SUBS[0], threads: [card('a')], total: 9 }), { threads: [card('b')], total: 9, next_offset: 1 }, 1);
+  assert.equal(r.section.next, null, 'a cursor that does not move ends paging');
+  assert.equal(moreCount(sectionFrom({ sub: API_SUBS[0], threads: [card('a'), card('b'), card('c')], total: 20 })), 3);
+});
+
+test('emptySubs: registry subs without a section, in order', () => {
+  const secs = sectionsFrom({ sections: [{ sub: API_SUBS[0], threads: [card('a')], total: 1 }] });
+  assert.deepEqual(emptySubs(SUBS, secs).map(s => s.slug), ['askindia', 'unpopularindia', 'indiapolls', 'indiaama']);
+  assert.deepEqual(emptySubs(normalizeSubs(API_SUBS), secs).map(s => s.slug), ['askindia']);
+  assert.deepEqual(emptySubs(normalizeSubs([{ ...API_SUBS[1], threads: 4 }]), []).map(s => s.slug), [], 'a sub with posts never gets the tile');
+  assert.deepEqual(emptySubs(null, []).map(s => s.slug), SUBS.map(s => s.slug));
+});
+
+test('subsDiff: only subs whose counts or live numbers moved', () => {
+  const a = normalizeSubs(API_SUBS);
+  assert.deepEqual(subsDiff(a, a), []);
+  const b = normalizeSubs([{ ...API_SUBS[0], live: 2 }, API_SUBS[1]]);
+  assert.deepEqual(subsDiff(a, b).map(s => s.slug), ['indianews']);
+});
+
+test('buildCreateBody: sub from the picker, else the post type\'s sub', () => {
+  assert.equal(buildCreateBody(base({ type: 'ask', author: 'user', title: 'Why?' })).sub, 'askindia');
+  assert.equal(buildCreateBody(base({ type: 'poll', idea: 'x', sub: 'indiapolls' })).sub, 'indiapolls');
+  assert.equal(buildCreateBody(base({ type: 'poll', idea: 'x', sub: 'Bad Slug' })).sub, 'indiapolls');
+  assert.equal(buildCreateBody(base({ type: 'ama', sub: 'askindia' })).sub, 'askindia', 'sent as picked so the server can 422');
 });

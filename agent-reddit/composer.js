@@ -1,19 +1,21 @@
-// Reddit-style "Create a post" composer: type tabs, who writes it, per-type forms,
+// Reddit-style "Create a post" composer: "Post to" sub picker (v3; the sub sets the post
+// type, 1:1 for now), who writes it, per-type forms,
 // news source pick list (today's paper / live news / paste), crowd, length, handle.
 import {
-  h, svg, ICONS, TYPE_ICON, avatar, humanFlair, richText, plural, safeUrl, domainOf, extLink,
-  skeletonCard, skeletonList, avatarLogo,
+  h, svg, ICONS, avatar, humanFlair, richText, plural, safeUrl, domainOf, extLink,
+  skeletonCard, skeletonList,
 } from '/agent-reddit/ui.js';
 import { api, errorText, hrefFor, navigate, view, API } from '/agent-reddit/api.js';
 import {
   mergeItems, nextOffset, paperSource, paperDate, relTime, POST_TYPES, typeInfo,
   CROWDS, LENGTHS, LIMIT_RANGE, DEFAULT_LIMIT, validateCreate, buildCreateBody, validHandle,
+  validSlug, subForType, typeForSub,
 } from '/agent-reddit/tree.js';
+import { REG, loadSubs, onSubs, sub as subOfSlug, subIcon } from '/agent-reddit/subs.js';
 import { getHandle, setHandle } from '/agent-reddit/local.js';
 import { rulesCard } from '/agent-reddit/home.js';
 
 const TYPES = Object.keys(POST_TYPES);
-const TYPE_TAB = { news: 'News', ask: 'Ask', opinion: 'Opinion', poll: 'Poll', ama: 'AMA' };
 const TYPE_HINT = {
   news: 'Share a news story. The redditors read it and argue in the comments.',
   ask: 'Ask the crowd a question, like r/AskIndia. Expect advice, anecdotes and bad jokes.',
@@ -47,12 +49,15 @@ async function loadHosts() {
 const FIELD_FROM_API = {
   title: 'title', body: 'body', idea: 'idea', poll_options: 'options', user_name: 'handle', article: 'story',
   headline: 'headline', link: 'link', ama_host: 'amaHost', thread_limit: 'limit', bots: 'crowd', max_comments: 'length',
+  sub: 'sub', post_type: 'sub',
 };
+// The server's 422 when the sub does not take the post type ("sub 'x' does not take poll posts; ...").
+const SUB_ERR_RE = /\bsub '[^']*' (does not take|is not a known)/i;
 
 // ---------------------------------------------------------------- state
 
 const C = {
-  type: 'news', author: 'bot', authorChosen: false,
+  type: 'news', sub: subForType('news'), author: 'bot', authorChosen: false,
   src: null, // null = automatic (paper when one exists, else live); 'paper' | 'news' | 'paste'
   picked: null, pickedId: null, pickedFeed: null, listOpen: true,
   paste: { headline: '', link: '', text: '' },
@@ -68,11 +73,20 @@ let FEED_TOKEN = 0;
 
 const defaultAuthor = type => (type === 'news' || type === 'ama' ? 'bot' : 'user');
 
-export function showComposer({ type, src } = {}) {
+onSubs(() => { if (view.name === 'compose') { renderPicker(); renderHeading(); } });
+
+// ?new=1&r=<slug> picks the sub (and so the type); legacy ?type=<type> maps to that type's sub.
+export function showComposer({ r, type, src } = {}) {
   view.name = 'compose';
-  document.title = 'Create post : r/AgentReddit';
   document.body.classList.add('is-compose');
-  C.type = TYPES.includes(type) ? type : (TYPES.includes(C.type) ? C.type : 'news');
+  const fromSub = validSlug(r) ? typeForSub(r, REG.list) : null;
+  if (fromSub) { C.type = fromSub; C.sub = r; }
+  else if (TYPES.includes(type)) { C.type = type; C.sub = subForType(type, REG.list); }
+  else {
+    C.type = TYPES.includes(C.type) ? C.type : 'news';
+    if (typeForSub(C.sub, REG.list) !== C.type) C.sub = subForType(C.type, REG.list);
+  }
+  delete C.errors.sub;
   if (!C.authorChosen) C.author = defaultAuthor(C.type);
   C.src = src === 'paper' || src === 'news' || src === 'paste' ? src : null;
   C.handle = C.handle || getHandle();
@@ -87,21 +101,25 @@ export function showComposer({ type, src } = {}) {
   document.getElementById('main').replaceChildren(
     h('div', { class: 'compose-top' },
       close,
-      h('h1', { class: 'compose-h', text: 'Create post' }),
-      h('span', { class: 'compose-to' }, avatarLogo('compose-sub-ic'), h('span', { text: 'r/AgentReddit' })),
+      h('h1', { class: 'compose-h', id: 'compose-h' }),
     ),
-    h('section', { class: 'card compose-card', 'aria-labelledby': 'ctype-label' },
-      h('span', { class: 'sr-only', id: 'ctype-label', text: 'Post type' }),
-      typeTabs(),
+    h('section', { class: 'card compose-card', 'aria-labelledby': 'compose-h' },
+      h('div', { class: 'field sub-field', id: 'sub-field' },
+        h('span', { class: 'field-label sub-pick-label', id: 'sub-pick-label', text: 'Post to' }),
+        h('div', { class: 'sub-pick', id: 'sub-pick', role: 'radiogroup', 'aria-labelledby': 'sub-pick-label', 'aria-describedby': 'err-sub', 'data-field': 'sub' }),
+        errEl('sub')),
       h('p', { class: 'type-hint', id: 'type-hint' }),
       h('div', { class: 'compose-body', id: 'compose-body' }),
       composeFoot(),
     ),
   );
   document.getElementById('side').replaceChildren(tipsCard(), rulesCard());
+  renderHeading();
+  renderPicker();
   renderBody();
   loadPapers();
   loadHosts();
+  loadSubs();
 }
 
 export function leaveComposer() {
@@ -115,22 +133,49 @@ function leave() {
   else navigate({});
 }
 
-function typeTabs() {
-  return h('div', { class: 'ctype-tabs', role: 'tablist', 'aria-labelledby': 'ctype-label' },
-    TYPES.map(t => h('button', {
-      class: 'ctype', type: 'button', role: 'tab', id: `ctype-${t}`, 'data-type': t, 'aria-selected': String(C.type === t),
-      vars: { '--pc': typeInfo(t).color },
-      on: { click: () => setType(t) },
-    }, TYPE_ICON[t](), h('span', { text: TYPE_TAB[t] }))));
+// "Posting in r/AskIndia", with the sub's icon.
+function renderHeading() {
+  const el = document.getElementById('compose-h');
+  if (!el) return;
+  const s = subOfSlug(C.sub) || { name: 'r/AgentReddit' };
+  document.title = `Create post in ${s.name} : Agent Reddit`;
+  el.replaceChildren(subIcon(s, 'compose-sub-ic'), h('span', { class: 'compose-h-text' }, h('span', { class: 'compose-h-pre', text: 'Posting in ' }), h('strong', { text: s.name })));
+  el.style.setProperty('--sc', s.color || '#0079d3');
 }
 
-function setType(t) {
-  if (C.type === t) return;
-  C.type = t;
-  if (!C.authorChosen) C.author = defaultAuthor(t);
+// One card per community: icon, name, one-line description. Picking one sets the type.
+function renderPicker() {
+  const box = document.getElementById('sub-pick');
+  if (!box) return;
+  const subs = REG.list.filter(s => TYPES.includes(s.post_type));
+  box.replaceChildren(...subs.map(s => h('button', {
+    class: 'sub-opt', type: 'button', role: 'radio', id: `sub-opt-${s.slug}`, 'data-sub': s.slug, 'data-type': s.post_type,
+    'aria-checked': String(C.sub === s.slug), vars: { '--sc': s.color },
+    on: { click: () => setSub(s.slug) },
+  },
+  subIcon(s, 'sub-opt-ic'),
+  h('span', { class: 'sub-opt-text' },
+    h('strong', { class: 'sub-opt-name', text: s.name }),
+    h('span', { class: 'sub-opt-desc', text: s.description })))));
+  box.querySelector('[aria-checked="true"]')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
+  paintErrors();
+}
+
+function setSub(slug) {
+  const t = typeForSub(slug, REG.list);
+  if (!t) return;
+  const same = C.sub === slug;
+  C.sub = slug;
+  delete C.errors.sub;
   C.serverErr = '';
-  document.querySelectorAll('.ctype').forEach(b => b.setAttribute('aria-selected', String(b.dataset.type === t)));
-  try { history.replaceState(history.state, '', hrefFor({ new: '1', type: t })); } catch { /* ignore */ }
+  document.querySelectorAll('.sub-opt').forEach(b => b.setAttribute('aria-checked', String(b.dataset.sub === slug)));
+  try { history.replaceState(history.state, '', hrefFor({ new: '1', r: slug })); } catch { /* ignore */ }
+  renderHeading();
+  if (same) { paintErrors(); updateFoot(); return; }
+  if (C.type !== t) {
+    C.type = t;
+    if (!C.authorChosen) C.author = defaultAuthor(t);
+  }
   renderBody();
 }
 
@@ -685,7 +730,7 @@ function pasteForm() {
 function formState() {
   const src = activeSource();
   return {
-    type: C.type, author: C.author, source: src === 'paste' ? 'paste' : src,
+    type: C.type, sub: C.sub, author: C.author, source: src === 'paste' ? 'paste' : src,
     picked: C.pickedFeed === src ? C.picked : null, paste: C.paste,
     title: C.title, body: C.body, idea: C.idea, options: C.options, amaHost: C.amaHost,
     handle: C.handle, crowd: C.crowd, length: C.length, limit: C.limit,
@@ -693,7 +738,9 @@ function formState() {
 }
 
 function validate() {
+  const subErr = C.errors.sub;
   C.errors = validateCreate(formState());
+  if (subErr) C.errors.sub = subErr; // the server's sub/type mismatch stays until another sub is picked
   paintErrors();
   updateFoot();
   return C.errors;
@@ -756,9 +803,11 @@ async function post() {
     C.posting = false;
     const fields = err.fields || {};
     for (const [k, msg] of Object.entries(fields)) {
-      const key = FIELD_FROM_API[k];
+      const key = SUB_ERR_RE.test(msg) ? 'sub' : FIELD_FROM_API[k];
       if (key) C.errors[key] = msg;
     }
+    if (err.status === 422 && SUB_ERR_RE.test(err.message || '')) C.errors.sub = err.message;
+    if (C.errors.sub) document.getElementById('sub-field')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
     C.serverErr = err.status === 422 ? `The server rejected this post: ${err.message}` : errorText(err, 'Could not create the post.');
     paintErrors();
     updateFoot();
@@ -775,11 +824,11 @@ function resetDraft() {
 
 function tipsCard() {
   const tips = [
-    ['Pick a type', 'News for a story, Ask for a question, Opinion for a hot take, Poll to make them vote, AMA to interview one of them.'],
+    ['Pick a community', 'r/IndiaNews for a story, r/AskIndia for a question, r/UnpopularIndia for a hot take, r/IndiaPolls to make them vote, r/IndiaAMA to interview one of them.'],
     ['You or a bot', 'Write it yourself (you get a HUMAN flair) or give a bot OP a one-line idea.'],
     ['Crowd and length', 'More bots means more arguments. Long threads take a few minutes to play out.'],
   ];
   return h('section', { class: 'card side-card tips-card' },
-    h('h2', { class: 'side-head', text: 'Posting to r/AgentReddit' }),
+    h('h2', { class: 'side-head', text: 'Posting on Agent Reddit' }),
     h('ol', { class: 'tips' }, tips.map(([k, v]) => h('li', {}, h('strong', { text: k }), h('span', { text: v })))));
 }

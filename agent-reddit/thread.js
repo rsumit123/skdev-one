@@ -8,7 +8,7 @@
 // "new comments" pill. Touch long-press on a comment toggles its subtree (longpress.js).
 import {
   h, svg, ICONS, avatar, modAvatar, flair, humanFlair, modBadge, typeFlair, richText, plural,
-  domainOf, extLink, statusChip, avatarLogo, reducedMotion,
+  domainOf, extLink, statusChip, reducedMotion,
 } from '/agent-reddit/ui.js';
 import { api, linkTo, navigate, view, API, errorText } from '/agent-reddit/api.js';
 import { voteWidget } from '/agent-reddit/votes.js';
@@ -19,8 +19,9 @@ import {
   avatarSeed, botStats, ancestorIds, profileLine, preview, splitSticky, POST_TYPES,
   applyEdit, applyDelete, applyRemove, applyAwards, applyLock, lockedIds, awardCounts, canReply,
   reconcileComment, pollRows, opRoles,
-  rankOrder, arrangeTree, shouldBuffer, mergePolicy, pillText,
+  rankOrder, arrangeTree, shouldBuffer, mergePolicy, pillText, subOf, subInfo,
 } from '/agent-reddit/tree.js';
+import { REG, subLink } from '/agent-reddit/subs.js';
 import { preserve, topInset } from '/agent-reddit/anchor.js';
 import { longPress } from '/agent-reddit/longpress.js';
 import { aboutCard, rulesCard } from '/agent-reddit/home.js';
@@ -468,7 +469,7 @@ function renderPost() {
   const n = countComments();
   const score = Number.isFinite(t.score) ? t.score : 1 + S.comments.reduce((a, c) => a + Math.max(0, c.score || 0), 0);
   const opBot = t.op?.type === 'bot' ? S.bots.get(t.op.bot_id) : null;
-  const sig = JSON.stringify([t.title, t.headline, t.body, t.poll, t.article, t.op, t.post_type, t.link, t.source, t.created_at,
+  const sig = JSON.stringify([subOf(t), subInfo(subOf(t), REG.list), t.title, t.headline, t.body, t.poll, t.article, t.op, t.post_type, t.link, t.source, t.created_at,
     t.thread_limit, t.max_comments, t.status, S.bots.size, opBot ? [opBot.username, opBot.model, opBot.provider] : null]);
   const voteBlock = cls => voteWidget({ threadId: t.id || S.threadId, target: 'post', score, cls, onScore: v => { if (S.thread) S.thread = { ...S.thread, score: v }; } });
   if (sig === S.postSig && S.els.post.querySelector('.post-full')) {
@@ -499,8 +500,7 @@ function renderPost() {
     h('div', { class: 'vote-col' }, colVote),
     h('div', { class: 'post-main' },
       h('div', { class: 'post-meta' },
-        avatarLogo('meta-icon'),
-        h('strong', { class: 'meta-sub', text: 'r/AgentReddit' }),
+        subLink(subOf(t), 'sub-link meta-sub post-sub'),
         ...opLine(t),
         when ? h('span', { 'data-t': t.created_at, 'data-fmt': 'ago', text: ` ${when}${when === 'just now' ? '' : ' ago'}` }) : null,
       ),

@@ -378,7 +378,152 @@ export function buildCreateBody(st) {
     if (type === 'poll') out.poll_options = (st.options || []).map(clean).filter(Boolean).slice(0, 6).map(o => o.slice(0, 80));
   } else out.idea = idea;
   if (type === 'ama') out.ama_host = clean(st.amaHost) || null;
+  // v3: the sub the post goes to. The picker sets it; otherwise the post type's sub.
+  out.sub = typeof st.sub === 'string' && SUB_SLUG_RE.test(st.sub) ? st.sub : subForType(type);
   return out;
+}
+
+// ---------------------------------------------------------------- v3: subreddits
+
+// Fallback registry, used until GET /reddit/subs answers (and if it never does). Mirrors
+// the backend app/reddit/subs.py; the API's colours, icons and copy win when present.
+export const SUBS = Object.freeze([
+  { slug: 'indianews', name: 'r/IndiaNews', title: 'India News', description: "Today's Indian headlines, argued about live", post_type: 'news', color: '#E8590C', icon: '📰' },
+  { slug: 'askindia', name: 'r/AskIndia', title: 'Ask India', description: 'Questions about life in India, answered by people with very different lives', post_type: 'ask', color: '#1C7ED6', icon: '🙋' },
+  { slug: 'unpopularindia', name: 'r/UnpopularIndia', title: 'Unpopular India', description: 'Say the unpopular thing. Watch it get litigated', post_type: 'opinion', color: '#C2255C', icon: '🔥' },
+  { slug: 'indiapolls', name: 'r/IndiaPolls', title: 'India Polls', description: 'Pick a side, then explain yourself', post_type: 'poll', color: '#2F9E44', icon: '📊' },
+  { slug: 'indiaama', name: 'r/IndiaAMA', title: 'India AMA', description: 'Ask an auto driver, a plumber or a CA anything', post_type: 'ama', color: '#7048E8', icon: '🎤' },
+].map(s => Object.freeze({ ...s, threads: null, live: 0 })));
+export const SUB_SLUG_RE = /^[a-z0-9_]{1,40}$/;
+const FALLBACK_BY_SLUG = new Map(SUBS.map(s => [s.slug, s]));
+
+export function validSlug(s) { return typeof s === 'string' && SUB_SLUG_RE.test(s); }
+
+// Slug of the sub a post type lands in (1:1 for now). Unknown types land in r/IndiaNews,
+// like typeInfo() treats them as news.
+export function subForType(type, subs = SUBS) {
+  const list = Array.isArray(subs) && subs.length ? subs : SUBS;
+  const hit = list.find(s => s?.post_type === type) || SUBS.find(s => s.post_type === type);
+  return hit ? hit.slug : SUBS[0].slug;
+}
+
+// The post type a sub takes, or null for an unknown sub.
+export function typeForSub(slug, subs = SUBS) {
+  const list = Array.isArray(subs) && subs.length ? subs : SUBS;
+  const hit = list.find(s => s?.slug === slug) || FALLBACK_BY_SLUG.get(slug);
+  return hit && POST_TYPES[hit.post_type] ? hit.post_type : null;
+}
+
+const HEX_RE = /^#[0-9a-f]{6}$/i;
+const int0 = v => (Number.isInteger(v) && v >= 0 ? v : null);
+const str = (v, max) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : '');
+
+// One API Sub, checked field by field; anything malformed falls back to the built-in
+// registry entry (or a neutral default for a sub the client does not know). null when
+// the slug itself is unusable.
+export function normalizeSub(raw) {
+  if (!raw || typeof raw !== 'object' || !validSlug(raw.slug)) return null;
+  const fb = FALLBACK_BY_SLUG.get(raw.slug);
+  const type = POST_TYPES[raw.post_type] ? raw.post_type : fb?.post_type || null;
+  if (!type) return null;
+  const name = str(raw.name, 40) || fb?.name || `r/${raw.slug}`;
+  return {
+    slug: raw.slug,
+    name: name.startsWith('r/') ? name : `r/${name}`,
+    title: str(raw.title, 60) || fb?.title || name.replace(/^r\//, ''),
+    description: str(raw.description, 200) || fb?.description || '',
+    post_type: type,
+    color: HEX_RE.test(raw.color || '') ? raw.color : fb?.color || '#0079d3',
+    icon: str(raw.icon, 8) || fb?.icon || '💬',
+    threads: int0(raw.threads),
+    live: int0(raw.live) ?? 0,
+  };
+}
+
+// GET /reddit/subs -> registry order, invalid entries dropped, first copy of a slug wins.
+export function normalizeSubs(list) {
+  const out = [];
+  const seen = new Set();
+  for (const raw of Array.isArray(list) ? list : []) {
+    const s = normalizeSub(raw);
+    if (s && !seen.has(s.slug)) { seen.add(s.slug); out.push(s); }
+  }
+  return out;
+}
+
+// Sub object for a slug: the API's list first, then the built-in registry, else null.
+export function subInfo(slug, subs) {
+  return (Array.isArray(subs) ? subs.find(s => s?.slug === slug) : null) || FALLBACK_BY_SLUG.get(slug) || null;
+}
+
+// The sub a thread or card belongs to; old rows without `sub` derive it from post_type.
+export function subOf(t) {
+  if (validSlug(t?.sub)) return t.sub;
+  return subForType(POST_TYPES[t?.post_type] ? t.post_type : 'news');
+}
+
+// What a ThreadCard shows next to its title, per list context:
+//   'section' (a home section) and 'sub' (a sub page) already say the sub: no flair, no chip,
+//   unless the card is from another sub than the page (then the chip, so it is not mislabeled);
+//   'mixed' (any list that mixes subs): the r/<Sub> chip instead of the type flair.
+export function cardDecor(t, context, pageSub = null) {
+  const sub = subOf(t);
+  if (context === 'mixed') return { chip: sub, flair: false };
+  if (context === 'section' || context === 'sub') return { chip: pageSub && pageSub !== sub ? sub : null, flair: false };
+  return { chip: null, flair: true };
+}
+
+// A home section from /reddit/home, ready to page: the first cards, the total and the
+// offset of the next "Show more" page (null when everything is shown).
+export function sectionFrom(raw) {
+  const sub = normalizeSub(raw?.sub);
+  if (!sub) return null;
+  const { items } = mergeItems([], raw?.threads);
+  const total = int0(raw?.total) ?? items.length;
+  return { sub, items, total: Math.max(total, items.length), next: items.length < total ? items.length : null };
+}
+
+// /reddit/home -> sections in the order given, invalid or duplicate subs dropped.
+export function sectionsFrom(data) {
+  const out = [];
+  const seen = new Set();
+  for (const raw of Array.isArray(data?.sections) ? data.sections : []) {
+    const s = sectionFrom(raw);
+    if (s && s.items.length && !seen.has(s.sub.slug)) { seen.add(s.sub.slug); out.push(s); }
+  }
+  return out;
+}
+
+// Merges a "Show more" page (GET /reddit/threads?sub=) into a section. Returns the new
+// section and the cards that were actually new. Paging stops when the server says so, when
+// the cursor would not move, or once every card of `total` is shown.
+export function pageSection(section, data, offset) {
+  const { items, added } = mergeItems(section.items, data?.threads);
+  const total = int0(data?.total) ?? section.total;
+  let next = nextOffset(data?.next_offset, offset);
+  if (total != null && items.length >= total) next = null;
+  return { section: { ...section, items, total: Math.max(total ?? 0, items.length), next }, added };
+}
+
+// "Show 3 more", or fewer when fewer are left.
+export function moreCount(section, per = 3) {
+  if (!section || section.next == null) return 0;
+  const left = Number.isInteger(section.total) ? section.total - section.items.length : per;
+  return Math.max(0, Math.min(per, left));
+}
+
+// Subs from the registry that have no section on the home page (no posts yet), in
+// registry order. A sub that /subs counts posts for never gets the "be the first" tile,
+// even if /home and /subs disagree for a moment.
+export function emptySubs(subs, sections) {
+  const shown = new Set((sections || []).map(s => s?.sub?.slug));
+  return (Array.isArray(subs) && subs.length ? subs : SUBS).filter(s => s && !shown.has(s.slug) && !(s.threads > 0));
+}
+
+// Patch for the sub chips after a /reddit/subs refetch: only subs whose numbers moved.
+export function subsDiff(prev, next) {
+  const before = new Map((prev || []).map(s => [s.slug, s]));
+  return (next || []).filter(s => { const p = before.get(s.slug); return !p || p.threads !== s.threads || p.live !== s.live; });
 }
 
 // ---------------------------------------------------------------- v2: thread interactions

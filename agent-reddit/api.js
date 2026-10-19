@@ -21,7 +21,8 @@ export async function api(path, opts = {}) {
     if (typeof detail === 'string') message = detail;
     else if (Array.isArray(detail)) {
       for (const d of detail) {
-        const key = Array.isArray(d?.loc) ? d.loc[d.loc.length - 1] : null;
+        // loc ['body', 'title'] names a field; a model-level error has loc ['body'] only.
+        const key = Array.isArray(d?.loc) && d.loc.length > 1 ? d.loc[d.loc.length - 1] : null;
         const msg = typeof d?.msg === 'string' ? d.msg.replace(/^Value error,\s*/i, '') : '';
         if (key != null && msg && !(key in fields)) fields[key] = msg;
       }

@@ -1,10 +1,11 @@
-// Playwright smoke test for Agent Reddit v2 against a mocked API (the v2 contract in
-// docs/superpowers/specs/2026-10-18-agent-reddit-v2-design.md).
+// Playwright smoke test for Agent Reddit against a mocked API (the v2 contract in
+// docs/superpowers/specs/2026-10-18-agent-reddit-v2-design.md plus the v3 subreddit contract
+// in docs/superpowers/specs/2026-10-19-agent-reddit-v3-design.md: /subs, /home, /threads?sub=).
 // Playwright is NOT a repo dependency. Install it somewhere else, e.g.
 //   mkdir -p /tmp/ar-pw && cd /tmp/ar-pw && npm init -y && npm i playwright && npx playwright install chromium
 // then run:  PW_DIR=/tmp/ar-pw node agent-reddit/smoke.mjs
 // Screenshots go to $SHOTS (default /tmp/ar-shots-v2); the v3 calm-thread/long-press ones to
-// $SHOTS_V3 (default /tmp/ar-shots-v3).
+// $SHOTS_V3 (default /tmp/ar-shots-v3), the v3 communities ones to $SHOTS_V3B (default /tmp/ar-shots-v3b).
 import { spawn } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -128,7 +129,7 @@ const RICH = [...V2_COMMENTS.map(c => ({
 const ARTICLE = { headline: NEWS[0].title, body: `${NEWS[0].summary}\n\nThe monetary policy committee voted 5-1 to keep the rate unchanged.`, link: 'https://example.com/story-0', source: 'The Hindu' };
 // v2 thread: news post by bot OP 1, with an article block and a post score.
 const thread = (status, comments) => ({
-  id: THREAD_ID, post_type: 'news', title: 'Seventh pause in a row: is the RBI just waiting for the monsoon?', headline: 'Seventh pause in a row: is the RBI just waiting for the monsoon?',
+  id: THREAD_ID, post_type: 'news', sub: 'indianews', title: 'Seventh pause in a row: is the RBI just waiting for the monsoon?', headline: 'Seventh pause in a row: is the RBI just waiting for the monsoon?',
   body: 'Submission statement: food inflation is doing all the work here, and EMIs are not moving.',
   article: ARTICLE, op: { type: 'bot', bot_id: 1 }, score: 57, poll: null, ama_host_bot_id: null,
   link: ARTICLE.link, source: ARTICLE.source, status, thread_limit: 8, max_comments: 40,
@@ -140,7 +141,17 @@ const legacyThread = (status, comments, extra = {}) => ({
   created_at: ago(55), bots: BOTS, comments, ...extra,
 });
 
-// Front page: 40 ThreadCards across every type, op kind and status.
+// v3 sub registry, as GET /reddit/subs returns it (counts are filled in per mock).
+const SUBS = [
+  { slug: 'indianews', name: 'r/IndiaNews', title: 'India News', description: "Today's Indian headlines, argued about live", post_type: 'news', color: '#E8590C', icon: '📰' },
+  { slug: 'askindia', name: 'r/AskIndia', title: 'Ask India', description: 'Questions about life in India, answered by people with very different lives', post_type: 'ask', color: '#1C7ED6', icon: '🙋' },
+  { slug: 'unpopularindia', name: 'r/UnpopularIndia', title: 'Unpopular India', description: 'Say the unpopular thing. Watch it get litigated', post_type: 'opinion', color: '#C2255C', icon: '🔥' },
+  { slug: 'indiapolls', name: 'r/IndiaPolls', title: 'India Polls', description: 'Pick a side, then explain yourself', post_type: 'poll', color: '#2F9E44', icon: '📊' },
+  { slug: 'indiaama', name: 'r/IndiaAMA', title: 'India AMA', description: 'Ask an auto driver, a plumber or a CA anything', post_type: 'ama', color: '#7048E8', icon: '🎤' },
+];
+const SUB_OF = Object.fromEntries(SUBS.map(x => [x.post_type, x.slug]));
+
+// Front page: 40 ThreadCards across every type, op kind and status (8 per sub).
 const TYPES = ['news', 'ask', 'opinion', 'poll', 'ama'];
 const CARD_TITLES = {
   news: 'RBI holds repo rate at 6.5% for the seventh straight meeting',
@@ -155,7 +166,7 @@ const CARDS = Array.from({ length: 40 }, (_, i) => {
   const human = i % 3 === 1;
   return {
     id: `t${String(i).padStart(3, '0')}`,
-    post_type: type,
+    post_type: type, sub: SUB_OF[type],
     title: `${CARD_TITLES[type]}${i >= 5 ? ` (#${i})` : ''}`,
     preview: type === 'poll' ? '' : 'Submission statement: the numbers look fine on paper, but anyone paying an EMI or a landlord in a metro will tell you a very different story about how the month actually goes.',
     op: human ? { type: 'user', name: i === 1 ? 'priya_k' : `human_${i}` } : { type: 'bot', bot_id: 1 + (i % 6), name: ['chai_and_chill_91', 'NotAnEconomist', 'bengaluru_potholes', 'Throwaway_Chartered', 'uncle_ji_forwards', 'hostel_maggi'][i % 6] },
@@ -168,11 +179,17 @@ const CARDS = Array.from({ length: 40 }, (_, i) => {
   };
 });
 const hot = t => (t.score + 2 * t.comments) / Math.pow((now - Date.parse(t.created_at)) / 3600000 + 2, 1.5);
-const SORTED = {
-  hot: CARDS.slice().sort((a, b) => hot(b) - hot(a)),
-  new: CARDS.slice().sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at)),
-  top: CARDS.slice().sort((a, b) => b.score - a.score),
-};
+const sortCards = (list, sort) => list.slice().sort(sort === 'new' ? (a, b) => Date.parse(b.created_at) - Date.parse(a.created_at)
+  : sort === 'top' ? (a, b) => b.score - a.score : (a, b) => hot(b) - hot(a));
+const SORTED = { hot: sortCards(CARDS, 'hot'), new: sortCards(CARDS, 'new'), top: sortCards(CARDS, 'top') };
+const subOfCard = t => t.sub || SUB_OF[t.post_type] || 'indianews';
+const isLiveCard = t => t.status === 'running' || t.status === 'casting';
+// What the mock /reddit/home returns for a card set: registry order, empty subs omitted.
+const homeSections = (cards, sort = 'hot', per = 3) => SUBS.map(x => {
+  const rows = sortCards(cards.filter(t => subOfCard(t) === x.slug), sort);
+  return rows.length ? { sub: { ...x, threads: rows.length, live: rows.filter(isLiveCard).length }, threads: rows.slice(0, per), total: rows.length } : null;
+}).filter(Boolean);
+const subsFor = cards => SUBS.map(x => { const rows = cards.filter(t => subOfCard(t) === x.slug); return { ...x, threads: rows.length, live: rows.filter(isLiveCard).length }; });
 
 const sse = events => 'retry: 200\n\n' + events.map(([ev, data]) => (ev === ':' ? ': ping\n\n' : `event: ${ev}\ndata: ${JSON.stringify(data)}\n\n`)).join('');
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': 'GET,POST,OPTIONS' };
@@ -180,12 +197,13 @@ const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers
 function deferred() { let resolve; const p = new Promise(r => { resolve = r; }); return { p, resolve }; }
 
 // Installs API mocks. `streams` is a list of handlers; call n uses streams[min(n, len-1)].
-// Records: st.news (feed queries), st.lists (front page queries), st.posts (create bodies),
-// st.votes ({id, body}), st.surprises (count).
+// Records: st.news (feed queries), st.lists (/threads queries, with sub), st.homes (/home
+// queries), st.subsCalls, st.posts (create bodies), st.votes ({id, body}), st.surprises (count).
+// `subsList` overrides the /subs answer (a function of the call number).
 async function mockApi(page, { streams = [doneStream], threadGet = () => ({ status: 200, body: thread('running', V2_COMMENTS) }), down = false,
   papers = PAPERS, paperItems = PAPER, liveItems = NEWS, newsHook = null, cards = CARDS, listHook = null, createHook = null, newId = THREAD_ID,
-  commentHook = null, hosts = null } = {}) {
-  const st = { streamCalls: 0, posts: [], news: [], lists: [], votes: [], surprises: 0, comments: [], hostsCalls: 0 };
+  commentHook = null, hosts = null, homeHook = null, subsList = null } = {}) {
+  const st = { streamCalls: 0, posts: [], news: [], lists: [], homes: [], subsCalls: 0, votes: [], surprises: 0, comments: [], hostsCalls: 0 };
   await page.route(`${MOCK}/**`, async route => {
     const req = route.request();
     const url = new URL(req.url());
@@ -194,6 +212,14 @@ async function mockApi(page, { streams = [doneStream], threadGet = () => ({ stat
     const json = (status, body) => route.fulfill({ status, headers: CORS, contentType: 'application/json', body: JSON.stringify(body) });
     const p = url.pathname;
     if (p === '/reddit/papers') return json(200, papers);
+    if (p === '/reddit/subs') { const n = st.subsCalls++; return json(200, { subs: subsList ? subsList(n) : subsFor(cards) }); }
+    if (p === '/reddit/home') {
+      const sp = url.searchParams;
+      const q = { per_sub: Number(sp.get('per_sub')), sort: sp.get('sort') };
+      const n = st.homes.push(q) - 1;
+      if (homeHook) { const r = await homeHook(q, n); if (r?.status) return json(r.status, { detail: 'boom' }); }
+      return json(200, { sections: homeSections(cards, q.sort, q.per_sub) });
+    }
     if (p === '/reddit/hosts') { st.hostsCalls++; return hosts ? json(200, { hosts }) : json(404, { detail: 'Not Found' }); }
     const cm = /^\/reddit\/threads\/([^/]+)\/comments$/.exec(p);
     if (cm && req.method() === 'POST') {
@@ -225,10 +251,11 @@ async function mockApi(page, { streams = [doneStream], threadGet = () => ({ stat
     }
     if (p === '/reddit/threads') {
       const sp = url.searchParams;
-      const q = { sort: sp.get('sort'), offset: Number(sp.get('offset')), limit: Number(sp.get('limit')) };
+      const q = { sort: sp.get('sort'), offset: Number(sp.get('offset')), limit: Number(sp.get('limit')), sub: sp.get('sub') };
       const n = st.lists.push(q) - 1;
       if (listHook) { const r = await listHook(q, n); if (r?.status) return json(r.status, { detail: 'boom' }); }
-      const all = cards === CARDS ? SORTED[q.sort] || SORTED.hot : cards;
+      if (q.sub != null && !SUBS.some(x => x.slug === q.sub)) return json(404, { detail: 'Subreddit not found' });
+      const all = sortCards(q.sub ? cards.filter(t => subOfCard(t) === q.sub) : cards, q.sort);
       const threads = all.slice(q.offset, q.offset + q.limit);
       const next = q.offset + q.limit < all.length ? q.offset + q.limit : null;
       return json(200, { threads, total: all.length, next_offset: next });
@@ -271,8 +298,11 @@ const scrollEnd = page => page.evaluate(() => window.scrollTo(0, document.docume
 const cardIds = page => page.locator('.tcard').evaluateAll(cs => cs.map(c => c.dataset.id));
 const PAPER_SRC = 'The Indian Express (print, p. 2)';
 // Every create body has exactly these keys (v2 contract).
-const KEYS = ['post_type', 'author', 'title', 'body', 'idea', 'article', 'poll_options', 'ama_host', 'user_name', 'bots', 'thread_limit', 'max_comments'];
-const body = over => ({ post_type: 'news', author: 'bot', title: null, body: null, idea: null, article: null, poll_options: null, ama_host: null, user_name: HANDLE, bots: 5, thread_limit: 6, max_comments: 40, ...over });
+const KEYS = ['post_type', 'author', 'title', 'body', 'idea', 'article', 'poll_options', 'ama_host', 'user_name', 'bots', 'thread_limit', 'max_comments', 'sub'];
+const body = over => {
+  const b = { post_type: 'news', author: 'bot', title: null, body: null, idea: null, article: null, poll_options: null, ama_host: null, user_name: HANDLE, bots: 5, thread_limit: 6, max_comments: 40, ...over };
+  return { ...b, sub: over.sub || SUB_OF[b.post_type] }; // v3: the post type's sub unless given
+};
 
 // ------------------------------------------------------------ run
 const server = spawn('python3', ['-m', 'http.server', String(PORT), '--bind', '127.0.0.1'], { cwd: dirname(HERE), stdio: 'ignore' });
@@ -284,26 +314,35 @@ const track = page => page.on('pageerror', e => errors.push(String(e)));
 
 try {
   await new Promise(r => setTimeout(r, 600));
-  // ---------------- front page (desktop, light)
+  // ---------------- front page (desktop, light): v3 community sections
   {
     const ctx = await newCtx({ viewport: { width: 1440, height: 900 }, colorScheme: 'light' });
     const page = await ctx.newPage();
     track(page);
-    const st = await mockApi(page, { streams: [doneStream] });
+    let holdMore = null;
+    const st = await mockApi(page, { streams: [doneStream], listHook: async q => { if (holdMore && q.sub) await holdMore.p; } });
     await page.goto(`${BASE}?${Q}`);
-    await page.waitForSelector('.tcard');
+    await page.waitForSelector('.home-sec .tcard');
     const card = id => page.locator(`.tcard[data-id="${id}"]`);
+    const HOME = homeSections(CARDS, 'hot');
+    const secIds = slug => page.locator(`#sec-${slug} .tcard`).evaluateAll(cs => cs.map(c => c.dataset.id));
+    const paintAll = async () => {
+      for (const x of SUBS) { await page.locator(`#sec-${x.slug}`).scrollIntoViewIfNeeded(); await page.waitForTimeout(60); }
+      await page.waitForFunction(n => document.querySelectorAll('.home-sec .tcard-list[data-painted="1"]').length === n, HOME.length);
+      await page.evaluate(() => window.scrollTo(0, 0));
+    };
 
     await check('page title and robots meta', async () => {
       assert.equal(await page.title(), 'Agent Reddit');
       assert.equal(await page.getAttribute('meta[name=robots]', 'content'), 'noindex, nofollow');
     });
-    await check('front page loads Hot from offset 0, 15 per page; old picker and launch panel are gone', async () => {
-      assert.deepEqual(st.lists[0], { sort: 'hot', offset: 0, limit: 15 });
-      assert.equal(await page.locator('.tcard').count(), 15);
-      assert.deepEqual(await cardIds(page), SORTED.hot.slice(0, 15).map(c => c.id));
+    await check('home asks /reddit/home?per_sub=3&sort=hot and /reddit/subs; no flat feed request; old picker gone', async () => {
+      assert.deepEqual(st.homes[0], { per_sub: 3, sort: 'hot' });
+      assert.equal(st.homes.length, 1);
+      assert.ok(st.subsCalls >= 1);
+      assert.equal(st.lists.length, 0, 'sections come from /home only');
       assert.equal(await page.getAttribute('#sort-hot', 'aria-selected'), 'true');
-      for (const sel of ['#launch', '#launch-btn', '.paper-card', '.news-card', '#recent', '#tab-own']) assert.equal(await page.locator(sel).count(), 0, sel);
+      for (const sel of ['#launch', '#launch-btn', '.paper-card', '.news-card', '#recent', '#tab-own', '#tcard-list']) assert.equal(await page.locator(sel).count(), 0, sel);
     });
     await check('create bar, Surprise me and header Create post are the obvious entry points', async () => {
       assert.equal((await page.locator('#create-input').textContent()).trim(), 'Create post');
@@ -312,131 +351,400 @@ try {
       assert.ok(await page.locator('#fab').isHidden(), 'no floating + on desktop');
       assert.ok(await page.locator('#create-link').isVisible() && await page.locator('#create-poll').isVisible());
     });
-    await check('card: OP line with model flair, relative time, title, preview, counts, LIVE', async () => {
-      const c = card('t000');
-      assert.equal(await c.locator('.meta-user').textContent(), 'u/chai_and_chill_91');
-      assert.equal(await c.locator('.post-meta .flair').textContent(), BOTS[0].model);
-      assert.equal(await c.locator('.meta-time').textContent(), '· 20 minutes ago');
-      assert.equal(await c.locator('.tcard-link').textContent(), CARDS[0].title);
+    await check('community chips: registry order, icon + name + post count, live dot only where something is live', async () => {
+      await page.waitForFunction(() => document.querySelector('#sub-chips .sub-chip-n')?.textContent !== '');
+      const rows = await page.locator('#sub-chips .sub-chip').evaluateAll(cs => cs.map(c => ({
+        slug: c.dataset.sub, ic: c.querySelector('.sub-ic').textContent, name: c.querySelector('.sub-chip-name').textContent,
+        n: c.querySelector('.sub-chip-n').textContent, live: !c.querySelector('.sub-chip-live').hidden, href: new URL(c.href).searchParams.get('r') })));
+      const want = subsFor(CARDS);
+      assert.deepEqual(rows.map(r => r.slug), SUBS.map(x => x.slug));
+      assert.deepEqual(rows.map(r => r.name), SUBS.map(x => x.name));
+      assert.deepEqual(rows.map(r => r.ic), SUBS.map(x => x.icon));
+      assert.deepEqual(rows.map(r => r.n), want.map(x => String(x.threads)));
+      assert.deepEqual(rows.map(r => r.live), want.map(x => x.live > 0));
+      assert.deepEqual(rows.map(r => r.href), SUBS.map(x => x.slug));
+      assert.ok(rows.some(r => r.live) && rows.some(r => !r.live), 'fixture has both');
+      const bg = await page.locator('#sub-chips .sub-chip[data-sub="askindia"] .sub-ic').evaluate(e => getComputedStyle(e).backgroundColor);
+      assert.equal(bg, 'rgb(28, 126, 214)', 'icon disc in the colour the API sent');
+    });
+    await check('sections render in registry order with 3 cards each; later sections paint when they come near the viewport', async () => {
+      assert.deepEqual(await page.locator('.home-sec').evaluateAll(ss => ss.map(s => s.dataset.sub)), HOME.map(x => x.sub.slug));
+      assert.equal(HOME.length, 5);
+      for (const x of HOME.slice(0, 3)) assert.deepEqual(await secIds(x.sub.slug), x.threads.map(t => t.id), x.sub.slug);
+      const late = HOME[4].sub.slug;
+      assert.equal(await page.locator(`#sec-${late} .tcard-list`).getAttribute('aria-busy'), 'true', 'section 5 waits as skeletons');
+      assert.equal(await page.locator(`#sec-${late} .skeleton`).count(), 3);
+      assert.ok((await page.locator(`#sec-${late} .sec-name`).textContent()).includes('r/IndiaAMA'), 'its header is already there');
+      const before = st.homes.length + st.lists.length;
+      await paintAll();
+      for (const x of HOME) assert.deepEqual(await secIds(x.sub.slug), x.threads.map(t => t.id), x.sub.slug);
+      assert.equal(st.homes.length + st.lists.length, before, 'deferred painting makes no extra requests');
+    });
+    await check('section header: sub icon in its colour, r/<Sub>, one-line description, See all link', async () => {
+      for (const x of SUBS) {
+        const sec = page.locator(`#sec-${x.slug}`);
+        assert.equal(await sec.locator('.sec-ic').textContent(), x.icon);
+        assert.equal(await sec.locator('.sec-name').textContent(), x.name);
+        assert.equal(await sec.locator('.sec-desc').textContent(), x.description);
+        assert.equal(new URL(await sec.locator('.sec-all').evaluate(a => a.href)).searchParams.get('r'), x.slug);
+      }
+      const lines = await page.locator('#sec-askindia .sec-desc').evaluate(el => Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight)));
+      assert.equal(lines, 1, 'description stays on one line');
+    });
+    await check('section cards carry no type flair (the section already names the sub) and no sub chip', async () => {
+      assert.equal(await page.locator('.home-sec .tcard .type-flair').count(), 0);
+      assert.equal(await page.locator('.home-sec .tcard .card-sub').count(), 0);
+      const rows = await page.locator('.home-sec').evaluateAll(ss => ss.map(s => [s.dataset.sub, [...s.querySelectorAll('.tcard')].map(c => c.dataset.sub)]));
+      for (const [slug, subs] of rows) assert.ok(subs.length === 3 && subs.every(x => x === slug), slug);
+    });
+    const first = HOME[0].threads[0];
+    await check('card: OP line with model flair, relative time, title, preview, counts', async () => {
+      const c = card(first.id);
+      assert.equal(await c.locator('.meta-user').textContent(), `u/${first.op.name}`);
+      if (first.op_model) assert.equal(await c.locator('.post-meta .flair').textContent(), first.op_model);
+      assert.ok((await c.locator('.meta-time').textContent()).startsWith('· '), 'relative time');
+      assert.equal(await c.locator('.tcard-link').textContent(), first.title);
       assert.ok((await c.locator('.tcard-preview').textContent()).startsWith('Submission statement'));
-      assert.equal(await c.locator('.tcard-comments').textContent(), `${CARDS[0].comments} comments`);
-      assert.equal(await c.locator('.tcard-bots').textContent(), `${CARDS[0].bots} redditors`);
-      assert.ok(await c.locator('.live-badge').isVisible());
-      assert.equal((await c.locator('.live-badge').textContent()).trim(), 'LIVE');
+      assert.equal(await c.locator('.tcard-comments').textContent(), `${first.comments} comments`);
+      assert.equal(await c.locator('.tcard-bots').textContent(), `${first.bots} redditors`);
       const lines = await c.locator('.tcard-preview').evaluate(el => Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight)));
       assert.ok(lines <= 2, `preview clamps to 2 lines (${lines})`);
     });
     await check('human OP shows u/<name> with HUMAN flair and no model flair', async () => {
-      const c = card('t001');
-      assert.equal(await c.locator('.meta-user').textContent(), 'u/priya_k');
+      const t = HOME.flatMap(x => x.threads).find(x => x.op.type === 'user');
+      assert.ok(t, 'fixture shows a human post on the home page');
+      const c = card(t.id);
+      assert.equal(await c.locator('.meta-user').textContent(), `u/${t.op.name}`);
       assert.equal(await c.locator('.flair-human').textContent(), 'HUMAN');
       assert.equal(await c.locator('.flair:not(.flair-human)').count(), 0);
-    });
-    await check('flair label per post type', async () => {
-      const want = { news: 'News', ask: 'Ask', opinion: 'Unpopular opinion', poll: 'Poll', ama: 'AMA' };
-      const rows = await page.locator('.tcard').evaluateAll(cs => cs.map(c => [c.dataset.type, c.querySelector('.type-flair')?.textContent, c.querySelector('.type-flair')?.dataset.type]));
-      for (const [type, label, ft] of rows) { assert.equal(label, want[type], type); assert.equal(ft, type); }
-      assert.deepEqual(new Set(rows.map(r => r[0])), new Set(TYPES));
-      const colors = new Set(await page.locator('.type-flair').evaluateAll(fs => fs.map(f => getComputedStyle(f).backgroundColor)));
-      assert.equal(colors.size, 5, 'each type has its own colour');
     });
     await check('LIVE badge only while casting or running', async () => {
       const rows = await page.locator('.tcard').evaluateAll(cs => cs.map(c => [c.dataset.status, !!c.querySelector('.live-badge')]));
       for (const [status, live] of rows) assert.equal(live, status === 'casting' || status === 'running', status);
-      assert.equal((await card('t004').locator('.live-badge').textContent()).trim(), 'STARTING');
+      assert.ok(rows.some(r => r[1]), 'a live card is on the home page');
     });
     await check('poll card shows a mini bar with the leading option', async () => {
-      const c = card('t003');
+      const c = card(HOME.find(x => x.sub.slug === 'indiapolls').threads[0].id);
       assert.equal(await c.locator('.poll-seg').count(), 4);
       assert.equal((await c.locator('.poll-legend').textContent()).trim(), 'Kolkata leads with 50% · 10 votes');
       assert.equal(await c.locator('.tcard-preview').count(), 0);
     });
     await check('no horizontal scroll 1440 front page', () => noHScroll(page, '1440 front'));
-    await check('sidebar: About, paper teaser with story count, rules', async () => {
-      assert.ok((await page.locator('#side').textContent()).includes('About Community'));
+    await check('sidebar: About (mentions communities), Communities list, paper teaser with story count, rules', async () => {
+      const side = await page.locator('#side').textContent();
+      assert.ok(side.includes('About Agent Reddit'));
+      assert.ok(side.includes('5 communities'), 'About copy mentions the communities');
+      assert.deepEqual(await page.locator('#side-communities .comm-item').evaluateAll(as => as.map(a => a.dataset.sub)), SUBS.map(x => x.slug));
       assert.equal(await page.locator('#paper-teaser .teaser-count').textContent(), "30 stories from today's paper");
       assert.ok((await page.locator('#side .rules').textContent()).includes('HUMAN flair'));
+      assert.equal(await page.locator('#side .about-stats div:nth-child(2) strong').textContent(), '40', 'posts = sum of /subs counts');
     });
+    const VOTE = HOME[2].threads[0];
     await check('upvote on a card sends {target:"post", dir:1}, shows the server score and persists', async () => {
-      const c = card('t002');
+      const c = card(VOTE.id);
       await c.locator('.vote-col .vote-up').click();
-      const want = CARDS[2].score + 1 + 100;
-      await page.waitForFunction(w => document.querySelector('.tcard[data-id="t002"] .vote-col .score').textContent === String(w), want);
-      assert.deepEqual(st.votes[0], { id: 't002', body: { target: 'post', dir: 1 } });
+      const want = VOTE.score + 1 + 100;
+      await page.waitForFunction(([id, w]) => document.querySelector(`.tcard[data-id="${id}"] .vote-col .score`).textContent === String(w), [VOTE.id, want]);
+      assert.deepEqual(st.votes[0], { id: VOTE.id, body: { target: 'post', dir: 1 } });
       assert.equal(await c.locator('.vote-col .vote-up').getAttribute('aria-pressed'), 'true');
       assert.equal(await c.locator('.vote-pill .score').textContent(), String(want), 'mobile footer copy stays in sync');
-      assert.equal(await page.evaluate(() => localStorage.getItem('ar:votes:t002')), '{"post":1}');
+      assert.equal(await page.evaluate(id => localStorage.getItem(`ar:votes:${id}`), VOTE.id), '{"post":1}');
     });
     await check('clicking up again clears the vote (dir 0); down sends dir -1', async () => {
-      const c = card('t002');
+      const c = card(VOTE.id);
       await c.locator('.vote-col .vote-up').click();
-      await page.waitForFunction(() => document.querySelector('.tcard[data-id="t002"] .vote-up').getAttribute('aria-pressed') === 'false');
+      await page.waitForFunction(id => document.querySelector(`.tcard[data-id="${id}"] .vote-up`).getAttribute('aria-pressed') === 'false', VOTE.id);
       await c.locator('.vote-col .vote-down').click();
-      await page.waitForFunction(() => document.querySelector('.tcard[data-id="t002"] .vote-down').getAttribute('aria-pressed') === 'true');
+      await page.waitForFunction(id => document.querySelector(`.tcard[data-id="${id}"] .vote-down`).getAttribute('aria-pressed') === 'true', VOTE.id);
       await page.waitForTimeout(150);
       assert.deepEqual(st.votes.slice(1).map(v => v.body), [{ target: 'post', dir: 0 }, { target: 'post', dir: -1 }]);
-      assert.equal(await page.evaluate(() => localStorage.getItem('ar:votes:t002')), '{"post":-1}');
+      assert.equal(await page.evaluate(id => localStorage.getItem(`ar:votes:${id}`), VOTE.id), '{"post":-1}');
     });
     await check('own vote is still highlighted after a reload', async () => {
       await page.reload();
-      await page.waitForSelector('.tcard[data-id="t002"]');
-      assert.equal(await card('t002').locator('.vote-col .vote-down').getAttribute('aria-pressed'), 'true');
-      assert.ok(await card('t002').locator('.vote-col .vote-btns').evaluate(v => v.classList.contains('is-down')));
-      assert.equal(await card('t000').locator('.vote-col .vote-up').getAttribute('aria-pressed'), 'false');
+      await page.waitForSelector(`.tcard[data-id="${VOTE.id}"]`);
+      assert.equal(await card(VOTE.id).locator('.vote-col .vote-down').getAttribute('aria-pressed'), 'true');
+      assert.ok(await card(VOTE.id).locator('.vote-col .vote-btns').evaluate(v => v.classList.contains('is-down')));
+      assert.equal(await card(first.id).locator('.vote-col .vote-up').getAttribute('aria-pressed'), 'false');
     });
-    await check('infinite scroll requests offset 15 then 30, ends caught up with 40 unique cards', async () => {
-      for (let i = 0; i < 30 && !(await page.locator('#feed .feed-end').count()); i++) { await scrollEnd(page); await page.waitForTimeout(120); }
-      await page.locator('#feed .feed-end').waitFor();
-      const ids = await cardIds(page);
-      assert.equal(ids.length, 40);
-      assert.equal(new Set(ids).size, 40);
-      assert.deepEqual(ids, SORTED.hot.map(c => c.id));
-      assert.deepEqual(st.lists.slice(-3).map(q => [q.sort, q.offset, q.limit]), [['hot', 0, 15], ['hot', 15, 15], ['hot', 30, 15]], 'after the reload');
-      assert.ok((await page.locator('#feed .feed-end').textContent()).includes("You're all caught up"));
-    });
-    await check('New and Top tabs refetch with sort=new / sort=top from offset 0', async () => {
-      await page.evaluate(() => window.scrollTo(0, 0));
+    await check('"Show 3 more" pages in place with sub=, offset 3 then 6, no duplicate request, and gives way at the end', async () => {
+      const news = sortCards(CARDS.filter(t => t.sub === 'indianews'), 'hot');
+      const more = page.locator('#sec-indianews .sec-more');
+      assert.equal((await more.textContent()).trim(), 'Show 3 more');
+      await more.scrollIntoViewIfNeeded();
+      const y0 = await page.locator('#sec-indianews').evaluate(e => e.getBoundingClientRect().top);
       st.lists.length = 0;
+      holdMore = deferred();
+      await more.click();
+      await page.locator('#sec-indianews .feed-loading').waitFor();
+      assert.equal(await page.locator('#sec-indianews .sec-more').count(), 0, 'button is replaced while loading');
+      holdMore.resolve(); holdMore = null;
+      await page.waitForFunction(() => document.querySelectorAll('#sec-indianews .tcard').length === 6);
+      assert.deepEqual(st.lists, [{ sort: 'hot', offset: 3, limit: 3, sub: 'indianews' }]);
+      assert.deepEqual(await secIds('indianews'), news.slice(0, 6).map(t => t.id));
+      assert.equal(await page.locator('#sec-indianews .tcard.is-appended').count(), 3, 'appended, not re-rendered');
+      assert.equal((await page.locator('#sec-indianews .sec-more').textContent()).trim(), 'Show 2 more');
+      assert.equal(await page.locator('#sec-indianews').evaluate(e => e.getBoundingClientRect().top), y0, 'expanding in place does not move the section');
+      await page.locator('#sec-indianews .sec-more').click();
+      await page.waitForFunction(() => document.querySelectorAll('#sec-indianews .tcard').length === 8);
+      assert.deepEqual(st.lists.map(q => q.offset), [3, 6]);
+      assert.deepEqual(await secIds('indianews'), news.map(t => t.id));
+      assert.equal(await page.locator('#sec-indianews button.sec-more').count(), 0, 'Show more hides at the end');
+      assert.equal((await page.locator('#sec-indianews .sec-more-link').textContent()).trim(), 'Go to r/IndiaNews→');
+      assert.equal(await secIds('askindia').then(x => x.length), 3, 'other sections untouched');
+    });
+    await check('New and Top tabs refetch /home with sort=new / sort=top', async () => {
+      await page.evaluate(() => window.scrollTo(0, 0));
+      const n = st.homes.length;
       await page.locator('#sort-new').click();
-      await page.waitForFunction(id => document.querySelector('.tcard')?.dataset.id === id, SORTED.new[0].id);
-      assert.deepEqual(st.lists[0], { sort: 'new', offset: 0, limit: 15 });
+      const NEW = homeSections(CARDS, 'new');
+      await page.waitForFunction(id => document.querySelector('.home-sec .tcard')?.dataset.id === id, NEW[0].threads[0].id);
+      assert.deepEqual(st.homes[n], { per_sub: 3, sort: 'new' });
       assert.equal(await page.getAttribute('#sort-new', 'aria-selected'), 'true');
       assert.equal(await page.getAttribute('#sort-hot', 'aria-selected'), 'false');
+      assert.equal(await page.locator('#sec-indianews .tcard').count(), 3, 'expanded section reset to 3');
       await page.locator('#sort-top').click();
-      await page.waitForFunction(id => document.querySelector('.tcard')?.dataset.id === id, SORTED.top[0].id);
-      assert.deepEqual(st.lists.at(-1), { sort: 'top', offset: 0, limit: 15 });
-      assert.deepEqual((await cardIds(page)).slice(0, 15), SORTED.top.slice(0, 15).map(c => c.id));
+      const TOP = homeSections(CARDS, 'top');
+      await page.waitForFunction(id => document.querySelector('.home-sec .tcard')?.dataset.id === id, TOP[0].threads[0].id);
+      assert.deepEqual(st.homes.at(-1), { per_sub: 3, sort: 'top' });
+      assert.deepEqual(await secIds('indianews'), TOP[0].threads.map(t => t.id));
+      st.lists.length = 0;
+      await page.locator('#sec-indianews .sec-more').click();
+      await page.waitForFunction(() => document.querySelectorAll('#sec-indianews .tcard').length === 6);
+      assert.deepEqual(st.lists[0], { sort: 'top', offset: 3, limit: 3, sub: 'indianews' }, 'Show more pages in the chosen sort');
     });
-    await check('clicking a card opens its thread; Back returns to the same front page', async () => {
-      const target = SORTED.top[3];
-      await page.locator(`.tcard[data-id="${target.id}"] .tcard-preview, .tcard[data-id="${target.id}"] .post-meta`).first().click();
+    await check('clicking a card opens its thread; Back restores the sort, the expanded section and the scroll position', async () => {
+      await paintAll();
+      const target = homeSections(CARDS, 'top')[3].threads[1];
+      await page.locator(`.tcard[data-id="${target.id}"]`).scrollIntoViewIfNeeded();
+      await page.evaluate(() => window.scrollBy(0, 120));
+      const y = await page.evaluate(() => window.scrollY);
+      assert.ok(y > 600, `scrolled down (${y})`);
+      await page.locator(`.tcard[data-id="${target.id}"] .post-meta`).click();
       await page.waitForURL(u => new URL(u).searchParams.get('t') === target.id);
       assert.equal(new URL(page.url()).searchParams.get('api'), MOCK, 'api override preserved');
       await page.locator('.post-full .post-title').waitFor();
-      const before = st.lists.length;
+      const before = st.homes.length;
       await page.goBack();
-      await page.waitForSelector('.tcard');
+      await page.waitForSelector('.home-sec .tcard');
       assert.equal(new URL(page.url()).search, `?${Q}`);
       assert.equal(await page.getAttribute('#sort-top', 'aria-selected'), 'true', 'sort survives Back');
+      assert.equal(st.homes.length, before, 'home is reused from cache on Back');
+      assert.equal(await page.locator('#sec-indianews .tcard').count(), 6, 'expanded section survives Back');
+      await page.waitForFunction(w => Math.abs(window.scrollY - w) <= 2, y, { timeout: 3000 });
       assert.equal(await page.locator(`.tcard[data-id="${target.id}"]`).count(), 1);
-      assert.equal(st.lists.length, before, 'recent list is reused from cache on Back');
     });
-    await check('paper teaser opens the composer on News with Today\'s paper', async () => {
+    await check('"See all" opens the sub page ?r=<slug>', async () => {
+      await page.locator('#sec-askindia .sec-all').click();
+      await page.waitForURL(u => new URL(u).searchParams.get('r') === 'askindia');
+      await page.locator('#sub-title').waitFor();
+      assert.equal(await page.locator('#sub-title').textContent(), 'Ask India');
+      await page.goBack();
+      await page.waitForSelector('.home-sec .tcard');
+    });
+    await check('paper teaser opens the composer in r/IndiaNews with Today\'s paper', async () => {
       await page.locator('#teaser-post').click();
       await page.waitForURL(u => new URL(u).searchParams.get('new') === '1');
-      assert.equal(new URL(page.url()).searchParams.get('type'), 'news');
+      assert.equal(new URL(page.url()).searchParams.get('r'), 'indianews');
       await page.waitForSelector('.paper-card');
-      assert.equal(await page.getAttribute('#ctype-news', 'aria-selected'), 'true');
+      assert.equal(await page.getAttribute('#sub-opt-indianews', 'aria-checked'), 'true');
       assert.equal(await page.getAttribute('#tab-paper', 'aria-selected'), 'true');
       assert.ok(await page.locator('#hdr-create').isHidden(), 'no Create post button inside the composer');
       await page.goBack();
-      await page.waitForSelector('.tcard');
+      await page.waitForSelector('.home-sec .tcard');
     });
     await check('Surprise me posts to /reddit/surprise and opens the new thread', async () => {
       await page.locator('#surprise').click();
       await page.waitForURL(u => new URL(u).searchParams.get('t') === SURPRISE_ID);
       assert.equal(st.surprises, 1);
       assert.equal(st.posts.length, 0);
+    });
+    await ctx.close();
+  }
+
+  // ---------------- v3: sub page (?r=askindia), infinite scroll, sort, Back restore (1440 light)
+  {
+    const ctx = await newCtx({ viewport: { width: 1440, height: 900 }, colorScheme: 'light' });
+    const page = await ctx.newPage();
+    track(page);
+    // 34 r/AskIndia posts (3 pages of 15) plus a few elsewhere.
+    const MANY = [...Array.from({ length: 34 }, (_, i) => ({ ...CARDS[1 + (i % 8) * 5], id: `a${String(i).padStart(3, '0')}`, title: `${CARD_TITLES.ask} [${i}]`, created_at: ago(5 + i * 31), score: 10 + (i * 13) % 50, status: i === 2 ? 'running' : 'done' })),
+      ...CARDS.filter(t => t.sub !== 'askindia')];
+    const st = await mockApi(page, { cards: MANY });
+    const ASK = mode => sortCards(MANY.filter(t => t.sub === 'askindia'), mode);
+    await page.goto(`${BASE}?r=askindia&${Q}`);
+    await page.waitForSelector('#tcard-list .tcard');
+    const ids = () => page.locator('#tcard-list .tcard').evaluateAll(cs => cs.map(c => c.dataset.id));
+
+    await check('sub page banner: icon in the sub colour, title, r/<Sub>, description, posts and live stats', async () => {
+      assert.equal(await page.title(), 'r/AskIndia : Agent Reddit');
+      assert.equal(await page.locator('.sub-hero .sub-hero-ic').textContent(), '🙋');
+      assert.equal(await page.locator('.sub-hero .sub-hero-ic').evaluate(e => getComputedStyle(e).backgroundColor), 'rgb(28, 126, 214)');
+      assert.equal(await page.locator('#sub-title').textContent(), 'Ask India');
+      assert.equal(await page.locator('.sub-hero .community-sub').textContent(), 'r/AskIndia');
+      assert.equal(await page.locator('.sub-hero .sub-desc').textContent(), SUBS[1].description);
+      assert.equal(await page.locator('#sub-stats [data-stat=posts]').textContent(), '34 posts');
+      assert.equal(await page.locator('#sub-stats [data-stat=live]').textContent(), '1 live now');
+      assert.ok(await page.locator('#sub-stats [data-stat=live]').evaluate(e => e.classList.contains('is-live')));
+    });
+    await check('sub page loads /threads?sub=askindia&sort=hot from 0, 15 per page; cards have no type flair', async () => {
+      assert.deepEqual(st.lists[0], { sort: 'hot', offset: 0, limit: 15, sub: 'askindia' });
+      assert.deepEqual(await ids(), ASK('hot').slice(0, 15).map(t => t.id));
+      assert.equal(await page.locator('.tcard .type-flair').count(), 0);
+      assert.equal(await page.locator('.tcard .card-sub').count(), 0);
+      assert.equal(st.homes.length, 0);
+    });
+    await check('chips row marks the current sub; sidebar has About this community, rules and the other communities', async () => {
+      assert.equal(await page.getAttribute('#sub-chips .sub-chip[data-sub=askindia]', 'aria-current'), 'page');
+      assert.equal(await page.locator('#sub-chips [aria-current]').count(), 1);
+      assert.ok((await page.locator('#about-sub').textContent()).includes(SUBS[1].description));
+      assert.equal(await page.locator('#about-sub .about-stats strong').first().textContent(), '34');
+      assert.ok((await page.locator('#side .rules').textContent()).includes('HUMAN flair'));
+      assert.deepEqual(await page.locator('#side-communities .comm-item').evaluateAll(as => as.map(a => a.dataset.sub)), SUBS.map(x => x.slug).filter(x => x !== 'askindia'));
+    });
+    await check('Join is a local toggle; no request', async () => {
+      const n = st.lists.length + st.posts.length;
+      await page.locator('#sub-join').click();
+      assert.equal(await page.getAttribute('#sub-join', 'aria-pressed'), 'true');
+      assert.equal((await page.locator('#sub-join').textContent()).trim(), 'Joined');
+      await page.locator('#sub-join').click();
+      assert.equal(await page.getAttribute('#sub-join', 'aria-pressed'), 'false');
+      assert.equal(st.lists.length + st.posts.length, n);
+    });
+    await check('infinite scroll pages with sub=askindia: offsets 0/15/30, 34 unique cards, caught up', async () => {
+      for (let i = 0; i < 30 && !(await page.locator('#feed .feed-end').count()); i++) { await scrollEnd(page); await page.waitForTimeout(120); }
+      await page.locator('#feed .feed-end').waitFor();
+      const all = await ids();
+      assert.equal(new Set(all).size, 34);
+      assert.deepEqual(all, ASK('hot').map(t => t.id));
+      assert.deepEqual(st.lists.map(q => [q.sub, q.sort, q.offset, q.limit]), [['askindia', 'hot', 0, 15], ['askindia', 'hot', 15, 15], ['askindia', 'hot', 30, 15]]);
+      assert.ok((await page.locator('#feed .feed-end').textContent()).includes('34 posts in r/AskIndia'));
+    });
+    await check('sub page New / Top tabs refetch with the sub param from offset 0', async () => {
+      await page.evaluate(() => window.scrollTo(0, 0));
+      st.lists.length = 0;
+      await page.locator('#sort-new').click();
+      await page.waitForFunction(id => document.querySelector('#tcard-list .tcard')?.dataset.id === id, ASK('new')[0].id);
+      assert.deepEqual(st.lists[0], { sort: 'new', offset: 0, limit: 15, sub: 'askindia' });
+      await page.locator('#sort-top').click();
+      await page.waitForFunction(id => document.querySelector('#tcard-list .tcard')?.dataset.id === id, ASK('top')[0].id);
+      assert.deepEqual(st.lists.at(-1), { sort: 'top', offset: 0, limit: 15, sub: 'askindia' });
+    });
+    await check('Back from a thread restores the sub page sort and scroll position without refetching', async () => {
+      await scrollEnd(page); await page.waitForTimeout(200);
+      const target = (await ids())[12];
+      await page.locator(`.tcard[data-id="${target}"]`).scrollIntoViewIfNeeded();
+      const y = await page.evaluate(() => window.scrollY);
+      const n = st.lists.length;
+      await page.locator(`.tcard[data-id="${target}"] .tcard-link`).click();
+      await page.waitForURL(u => new URL(u).searchParams.get('t') === target);
+      await page.locator('.post-full .post-title').waitFor();
+      await page.goBack();
+      await page.waitForSelector('#tcard-list .tcard');
+      assert.equal(new URL(page.url()).searchParams.get('r'), 'askindia');
+      assert.equal(await page.getAttribute('#sort-top', 'aria-selected'), 'true');
+      await page.waitForFunction(w => Math.abs(window.scrollY - w) <= 2, y, { timeout: 3000 });
+      assert.equal(st.lists.length, n, 'cached');
+    });
+    await check('Create post on the sub page opens the composer prefilled with that sub', async () => {
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.locator('#sub-create').click();
+      await page.waitForURL(u => new URL(u).searchParams.get('new') === '1');
+      assert.equal(new URL(page.url()).searchParams.get('r'), 'askindia');
+      assert.equal(await page.getAttribute('#sub-opt-askindia', 'aria-checked'), 'true');
+      assert.equal((await page.locator('#compose-h').textContent()).trim(), '🙋Posting in r/AskIndia');
+      await page.goBack();
+      await page.waitForSelector('#tcard-list .tcard');
+      await page.locator('#hdr-create').click();
+      await page.waitForURL(u => new URL(u).searchParams.get('new') === '1');
+      assert.equal(new URL(page.url()).searchParams.get('r'), 'askindia', 'header Create post also posts to the sub');
+    });
+    await check('no horizontal scroll 1440 sub page', async () => { await page.goBack(); await page.waitForSelector('#tcard-list .tcard'); await noHScroll(page, '1440 sub'); });
+    await check('unknown sub: friendly "community not found" with a link home (404 from /threads?sub=)', async () => {
+      await page.goto(`${BASE}?r=nosuchsub&${Q}`);
+      await page.locator('#sub-404').waitFor();
+      assert.ok((await page.locator('#sub-404').textContent()).includes('Community not found'));
+      assert.ok((await page.locator('#sub-404').textContent()).includes('r/nosuchsub'));
+      assert.equal(await page.locator('#sub-404 .sub-chip').count(), 5, 'real communities offered');
+      await page.locator('#sub-404-home').click();
+      await page.waitForSelector('.home-sec .tcard');
+      assert.equal(new URL(page.url()).searchParams.get('r'), null);
+    });
+    await check('malformed sub slug shows the same page without asking the server', async () => {
+      const n = st.lists.length;
+      await page.goto(`${BASE}?r=${encodeURIComponent('../Bad Slug')}&${Q}`);
+      await page.locator('#sub-404').waitFor();
+      await page.waitForTimeout(200);
+      assert.equal(st.lists.length, n);
+    });
+    await ctx.close();
+  }
+
+  // ---------------- v3: empty sub tile, sub page empty state, sub chips refresh (390x844 light)
+  {
+    const ctx = await newCtx({ viewport: { width: 390, height: 844 }, colorScheme: 'light', deviceScaleFactor: 2 });
+    const page = await ctx.newPage();
+    track(page);
+    const NOASK = CARDS.filter(t => t.sub !== 'askindia');
+    let bump = 0;
+    const st = await mockApi(page, { cards: NOASK, subsList: () => subsFor(NOASK).map(x => (x.slug === 'unpopularindia' ? { ...x, threads: x.threads + bump, live: bump ? 2 : 0 } : x)) });
+    await page.clock.install();
+    await page.goto(`${BASE}?${Q}`);
+    await page.waitForSelector('.home-sec .tcard');
+    await check('a sub without posts gets a compact "No posts yet in r/AskIndia. Be the first" tile after the sections', async () => {
+      await page.locator('#empty-subs').waitFor();
+      assert.equal(await page.locator('#sec-askindia').count(), 0);
+      assert.deepEqual(await page.locator('.home-sec').evaluateAll(ss => ss.map(s => s.dataset.sub)), ['indianews', 'unpopularindia', 'indiapolls', 'indiaama']);
+      assert.deepEqual(await page.locator('#empty-subs .empty-sub').evaluateAll(ls => ls.map(l => l.dataset.sub)), ['askindia']);
+      assert.equal((await page.locator('#empty-subs .empty-sub-text').textContent()).trim(), 'No posts yet in r/AskIndia. Be the first');
+      const tile = await page.locator('#empty-subs').boundingBox();
+      const last = await page.locator('.home-sec').last().boundingBox();
+      assert.ok(tile.y > last.y + last.height - 1, 'placed after the populated sections');
+      assert.equal(await page.locator('#sub-chips .sub-chip[data-sub=askindia] .sub-chip-n').textContent(), '0');
+    });
+    await check('mobile: chips row scrolls sideways inside itself, no page scroll; FAB shows', async () => {
+      const r = await page.locator('#sub-chips').evaluate(e => ({ sw: e.scrollWidth, cw: e.clientWidth, ov: getComputedStyle(e).overflowX }));
+      assert.ok(r.sw > r.cw && r.ov === 'auto', JSON.stringify(r));
+      await noHScroll(page, '390 home');
+      assert.ok(await page.locator('#fab').isVisible());
+    });
+    await check('chip counts and live dots refresh after 60 s while visible, without moving the page', async () => {
+      await page.evaluate(() => window.scrollTo(0, 700));
+      const y = await page.evaluate(() => window.scrollY);
+      const top = await page.locator('.home-sec').nth(1).evaluate(e => e.getBoundingClientRect().top);
+      const calls = st.subsCalls;
+      bump = 3;
+      await page.clock.fastForward(61000);
+      await page.waitForFunction(() => document.querySelector('#sub-chips .sub-chip[data-sub=unpopularindia] .sub-chip-n')?.textContent === '11');
+      assert.ok(st.subsCalls > calls);
+      assert.equal(await page.locator('#sub-chips .sub-chip[data-sub=unpopularindia] .sub-chip-live').isHidden(), false, 'live dot appears');
+      assert.equal(await page.evaluate(() => window.scrollY), y);
+      assert.equal(await page.locator('.home-sec').nth(1).evaluate(e => e.getBoundingClientRect().top), top);
+      assert.equal(st.homes.length, 1, 'only /subs is refetched');
+    });
+    await check('chip counts also refresh on returning to Home', async () => {
+      bump = 5;
+      await page.locator('.home-sec .tcard .tcard-link').first().click();
+      await page.waitForURL(u => !!new URL(u).searchParams.get('t'));
+      await page.locator('.post-full .post-title').waitFor();
+      await page.goBack();
+      await page.waitForFunction(() => document.querySelector('#sub-chips .sub-chip[data-sub=unpopularindia] .sub-chip-n')?.textContent === '13');
+    });
+    await check('the tile\'s Create opens the composer for that sub', async () => {
+      await page.locator('#empty-subs .empty-sub-create[data-sub=askindia]').click();
+      await page.waitForURL(u => new URL(u).searchParams.get('r') === 'askindia' && new URL(u).searchParams.get('new') === '1');
+      assert.equal(await page.getAttribute('#sub-opt-askindia', 'aria-checked'), 'true');
+      assert.equal(await page.getAttribute('#who-user', 'aria-checked'), 'true', 'ask form');
+      await page.goBack();
+      await page.waitForSelector('.home-sec .tcard');
+    });
+    await check('sub page with no posts shows an empty state with Create', async () => {
+      await page.locator('#sub-chips .sub-chip[data-sub=askindia]').click();
+      await page.locator('#feed-empty').waitFor();
+      assert.ok((await page.locator('#feed-empty').textContent()).includes('No posts in r/AskIndia yet'));
+      await noHScroll(page, '390 empty sub');
+      await page.locator('#feed-empty-create').click();
+      await page.waitForURL(u => new URL(u).searchParams.get('r') === 'askindia' && new URL(u).searchParams.get('new') === '1');
     });
     await ctx.close();
   }
@@ -472,7 +780,7 @@ try {
     track(page);
     const st = await mockApi(page, {});
     await page.goto(`${BASE}?${Q}`);
-    await page.waitForSelector('.tcard');
+    await page.waitForSelector('.home-sec .tcard');
     await check('mobile: floating + instead of the header button; vote column hidden, footer votes shown', async () => {
       assert.ok(await page.locator('#fab').isVisible());
       assert.ok(await page.locator('#hdr-create').isHidden());
@@ -480,7 +788,7 @@ try {
       assert.ok(await page.locator('.tcard .vote-pill').first().isVisible());
     });
     await check('mobile footer upvote works', async () => {
-      const id = SORTED.hot[1].id;
+      const id = homeSections(CARDS)[0].threads[1].id;
       await page.locator(`.tcard[data-id="${id}"] .vote-pill .vote-up`).click();
       await page.waitForFunction(i => document.querySelector(`.tcard[data-id="${i}"] .vote-pill .vote-up`).getAttribute('aria-pressed') === 'true', id);
       assert.deepEqual(st.votes[0], { id, body: { target: 'post', dir: 1 } });
@@ -542,6 +850,14 @@ try {
       assert.equal(await art.locator('.article-h').textContent(), ARTICLE.headline);
       assert.equal(await art.locator('a').getAttribute('rel'), 'noopener noreferrer');
       assert.equal(await page.title(), `${thread('running', []).title} : r/AgentReddit`);
+    });
+    await check('thread header: linked r/IndiaNews line above the title, pointing at the sub page', async () => {
+      const a = page.locator('.post-full .post-sub');
+      assert.equal(await a.locator('.sub-link-name').textContent(), 'r/IndiaNews');
+      assert.equal(await a.locator('.sub-ic').textContent(), '📰');
+      assert.equal(new URL(await a.evaluate(e => e.href)).searchParams.get('r'), 'indianews');
+      const la = await a.boundingBox(), lt = await page.locator('.post-full .post-title').boundingBox();
+      assert.ok(la.y + la.height <= lt.y + 1, 'above the title');
     });
     await check('comment count excludes the AutoMod sticky', async () => {
       assert.equal(await page.locator('#comment-count').textContent(), `${V2_COMMENTS.length - 1 + 1} comments`);
@@ -649,14 +965,14 @@ try {
     const page = await ctx.newPage();
     track(page);
     const go = deferred();
-    const casting = { ...thread('casting', [AUTOMOD]), post_type: 'ask', title: '', headline: '', body: null, article: null, op: { type: 'bot', bot_id: 0 }, score: 1, bots: [] };
+    const casting = { ...thread('casting', [AUTOMOD]), post_type: 'ask', sub: undefined, title: '', headline: '', body: null, article: null, op: { type: 'bot', bot_id: 0 }, score: 1, bots: [] };
     await mockApi(page, {
       streams: [async () => { await go.p; return { body: sse([
         ['snapshot', casting],
         ['post', { score: 3, poll: null, title: 'Moved back to Indore after 10 years in Mumbai. Was it worth it?', body: 'Asking for myself, honestly.' }],
         ['status', { status: 'running', comment_count: 0 }],
       ]) }; }, () => new Promise(() => {})],
-      threadGet: () => ({ status: 200, body: { ...thread('running', [AUTOMOD]), post_type: 'ask', op: { type: 'bot', bot_id: 2 } } }),
+      threadGet: () => ({ status: 200, body: { ...thread('running', [AUTOMOD]), post_type: 'ask', sub: undefined, op: { type: 'bot', bot_id: 2 } } }), // no `sub`: derived
     });
     await page.goto(`${BASE}?t=${THREAD_ID}&${Q}`);
     go.resolve();
@@ -667,6 +983,13 @@ try {
       assert.equal(await page.locator('.post-full .type-flair').textContent(), 'Ask');
       await page.waitForFunction(() => document.querySelector('.post-full .post-meta')?.textContent.includes('u/NotAnEconomist'));
       assert.equal(await page.locator('#comment-count').textContent(), '0 comments');
+    });
+    await check('a thread without `sub` derives it from post_type; the header link opens r/AskIndia', async () => {
+      assert.equal(await page.locator('.post-full .post-sub .sub-link-name').textContent(), 'r/AskIndia');
+      await page.locator('.post-full .post-sub').click();
+      await page.waitForURL(u => new URL(u).searchParams.get('r') === 'askindia');
+      await page.locator('#sub-title').waitFor();
+      assert.equal(new URL(page.url()).searchParams.get('api'), MOCK);
     });
     await ctx.close();
   }
@@ -987,10 +1310,11 @@ try {
     await page.goto(`${BASE}?new=1&type=news&${Q}`);
     const cards = () => page.locator('.paper-card').count();
 
-    await check('composer opens on News with type tabs and "who writes it"', async () => {
+    await check('composer opens in r/IndiaNews with the "Post to" sub picker and "who writes it"', async () => {
       await page.waitForSelector('.paper-card');
-      assert.deepEqual(await page.locator('.ctype').allTextContents(), ['News', 'Ask', 'Opinion', 'Poll', 'AMA']);
-      assert.equal(await page.getAttribute('#ctype-news', 'aria-selected'), 'true');
+      assert.deepEqual(await page.locator('.sub-opt .sub-opt-name').allTextContents(), SUBS.map(x => x.name));
+      assert.equal(await page.getAttribute('#sub-opt-indianews', 'aria-checked'), 'true');
+      assert.equal(await page.locator('.ctype').count(), 0, 'type tabs are gone');
       assert.equal(await page.locator('#who-user strong').textContent(), "I'll write it");
       assert.equal(await page.locator('#who-bot strong').textContent(), 'Let a bot OP write it');
       assert.equal(await page.getAttribute('#who-bot', 'aria-checked'), 'true', 'news defaults to a bot OP');
@@ -1203,13 +1527,20 @@ try {
       assert.deepEqual(Object.keys(b), KEYS);
       return b;
     };
-    await check('?new=1&type=poll opens the Poll tab; switching tabs updates ?type=', async () => {
+    await check('legacy ?new=1&type=poll maps to r/IndiaPolls; picking a sub updates ?r= and swaps the form', async () => {
       await open('poll');
-      assert.equal(await page.getAttribute('#ctype-poll', 'aria-selected'), 'true');
+      assert.equal(await page.getAttribute('#sub-opt-indiapolls', 'aria-checked'), 'true');
+      assert.equal((await page.locator('#compose-h').textContent()).trim(), '📊Posting in r/IndiaPolls');
       assert.equal(await page.getAttribute('#who-user', 'aria-checked'), 'true', 'poll defaults to "I\'ll write it"');
-      await page.locator('#ctype-ask').click();
-      assert.equal(new URL(page.url()).searchParams.get('type'), 'ask');
+      assert.equal(await page.locator('.poll-opt').count(), 2, 'poll form');
+      await page.locator('#sub-opt-askindia').click();
+      assert.equal(new URL(page.url()).searchParams.get('r'), 'askindia');
+      assert.equal(new URL(page.url()).searchParams.get('type'), null);
       assert.equal(new URL(page.url()).searchParams.get('api'), MOCK);
+      assert.equal(await page.getAttribute('#sub-opt-askindia', 'aria-checked'), 'true');
+      assert.equal(await page.getAttribute('#sub-opt-indiapolls', 'aria-checked'), 'false');
+      assert.equal(await page.locator('.poll-opt').count(), 0, 'form swapped');
+      assert.equal((await page.locator('#compose-h').textContent()).trim(), '🙋Posting in r/AskIndia');
       assert.ok((await page.locator('#type-hint').textContent()).includes('Ask the crowd'));
     });
     await check('validation: empty title and a bad handle are flagged inline; nothing is sent', async () => {
@@ -1347,8 +1678,44 @@ try {
       assert.equal(new URL(page.url()).searchParams.get('new'), '1');
       await page.screenshot({ path: join(SHOTS, 'compose-429-1440-light.png') });
     });
+    const openSub = async slug => { await page.goto(`${BASE}?new=1&r=${slug}&${Q}`); await page.waitForSelector('#compose-body .field'); };
+    await check('?new=1&r=<slug> picks the sub, which sets the type; the body carries sub and post_type', async () => {
+      await openSub('unpopularindia');
+      assert.equal(await page.getAttribute('#sub-opt-unpopularindia', 'aria-checked'), 'true');
+      assert.equal(await page.locator('#sub-pick [aria-checked="true"]').count(), 1);
+      await page.locator('#who-bot').click();
+      await page.fill('#f-idea', 'chai is better than coffee');
+      let b = await postAndWait();
+      assert.deepEqual(b, body({ post_type: 'opinion', idea: 'chai is better than coffee' }));
+      assert.equal(b.sub, 'unpopularindia');
+      await openSub('indiaama');
+      b = await postAndWait();
+      assert.equal(b.post_type, 'ama');
+      assert.equal(b.sub, 'indiaama');
+    });
+    await check('server 422 about the sub is shown on the "Post to" picker, not on a field; picking a sub clears it', async () => {
+      await openSub('indiapolls');
+      await page.fill('#f-title', 'Best chai city?');
+      await page.locator('.poll-opt input').nth(0).fill('Kolkata');
+      await page.locator('.poll-opt input').nth(1).fill('Chennai');
+      const msg = "sub 'indiapolls' does not take poll posts; poll posts go to 'pollsindia'";
+      nextHook = { status: 422, body: { detail: [{ type: 'value_error', loc: ['body'], msg: `Value error, ${msg}`, input: {} }] } };
+      await page.locator('#post-btn').click();
+      await page.locator('#post-err:not(:empty)').waitFor();
+      assert.equal(st.posts.at(-1).sub, 'indiapolls');
+      assert.equal(st.posts.at(-1).post_type, 'poll');
+      assert.equal(await page.locator('#err-sub').textContent(), msg);
+      assert.equal(await page.locator('#err-body').textContent(), '', 'not painted on the Body field');
+      assert.ok((await page.locator('#post-err').textContent()).includes('does not take poll posts'));
+      assert.ok(await page.locator('#sub-pick').evaluate(e => e.classList.contains('is-invalid')));
+      await page.screenshot({ path: join(SHOTS, 'compose-sub-422-1440-light.png') });
+      await page.locator('#sub-opt-indiapolls').click();
+      assert.equal(await page.locator('#err-sub').textContent(), '');
+      assert.equal(await page.locator('#post-err').textContent(), '');
+    });
     await check('desktop composer: centred column with posting tips sidebar, Cancel goes back', async () => {
-      assert.ok((await page.locator('#side').textContent()).includes('Posting to r/AgentReddit'));
+      assert.ok((await page.locator('#side').textContent()).includes('Posting on Agent Reddit'));
+      assert.ok((await page.locator('#side').textContent()).includes('Pick a community'));
       await noHScroll(page, '1440 composer');
       await page.goto(`${BASE}?${Q}`);
       await page.waitForSelector('.tcard');
@@ -1358,7 +1725,8 @@ try {
       await page.waitForSelector('.tcard');
       assert.equal(new URL(page.url()).searchParams.get('new'), null);
       await page.locator('#create-poll').click();
-      await page.waitForURL(u => new URL(u).searchParams.get('type') === 'poll');
+      await page.waitForURL(u => new URL(u).searchParams.get('r') === 'indiapolls');
+      assert.equal(await page.getAttribute('#sub-opt-indiapolls', 'aria-checked'), 'true');
       await page.goBack();
       await page.waitForSelector('.tcard');
       await page.locator('#create-link').click();
@@ -1632,6 +2000,70 @@ try {
       await check(`no horizontal scroll ${w}x${hgt} ${scheme} profile card open`, () => noHScroll(page, `${tag} profile`));
       await page.screenshot({ path: join(SHOTS, `profile-${tag}.png`) });
       await page.keyboard.press('Escape');
+      await ctx.close();
+    }
+  }
+
+  // ---------------- v3 F4: communities at phone, tablet and desktop, light and dark
+  const SHOTS_B = process.env.SHOTS_V3B || '/tmp/ar-shots-v3b';
+  mkdirSync(SHOTS_B, { recursive: true });
+  for (const scheme of ['light', 'dark']) {
+    for (const [w, hgt] of [[390, 844], [768, 1024], [1440, 900]]) {
+      const ctx = await newCtx({ viewport: { width: w, height: hgt }, colorScheme: scheme, deviceScaleFactor: w < 1000 ? 2 : 1 });
+      const page = await ctx.newPage();
+      track(page);
+      const SHOWN = CARDS.filter(t => t.sub !== 'indiaama'); // one community without posts
+      await mockApi(page, { cards: SHOWN, streams: [doneStream, () => new Promise(() => {})] });
+      const tag = `${w}-${scheme}`;
+      await page.goto(`${BASE}?${Q}`);
+      await page.waitForSelector('.home-sec .tcard');
+      await page.waitForFunction(() => document.querySelector('#sub-chips .sub-chip-n')?.textContent !== '');
+      await page.evaluate(() => document.fonts.ready);
+      await check(`v3 home ${w}x${hgt} ${scheme}: chips + 4 sections + empty tile, no horizontal scroll`, async () => {
+        assert.equal(await page.locator('#sub-chips .sub-chip').count(), 5);
+        assert.equal(await page.locator('.home-sec').count(), 4);
+        assert.equal(await page.locator('#empty-subs .empty-sub').count(), 1);
+        const chips = await page.locator('#sub-chips').boundingBox();
+        assert.ok(chips.y < hgt, `communities visible on first screen (y=${chips.y})`);
+        await noHScroll(page, `${tag} v3 home`);
+      });
+      await page.screenshot({ path: join(SHOTS_B, `home-${tag}.png`) });
+      for (const x of SUBS) { await page.locator(`#sec-${x.slug}, #empty-subs`).first().scrollIntoViewIfNeeded(); }
+      await page.waitForTimeout(150);
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.screenshot({ path: join(SHOTS_B, `home-${tag}-full.png`), fullPage: true });
+
+      await page.locator('#sub-chips .sub-chip[data-sub=unpopularindia]').click();
+      await page.waitForSelector('#tcard-list .tcard');
+      await page.waitForTimeout(100);
+      await check(`v3 sub page ${w}x${hgt} ${scheme}: banner, cards, no horizontal scroll`, async () => {
+        assert.equal(await page.locator('#sub-title').textContent(), 'Unpopular India');
+        assert.ok(await page.locator('#sub-create').isVisible());
+        assert.equal(await page.locator('.tcard .type-flair').count(), 0);
+        await noHScroll(page, `${tag} v3 sub`);
+      });
+      await page.screenshot({ path: join(SHOTS_B, `sub-${tag}.png`) });
+
+      await page.goto(`${BASE}?new=1&r=askindia&${Q}`);
+      await page.waitForSelector('#compose-body .field');
+      await page.evaluate(() => { document.activeElement?.blur?.(); window.scrollTo(0, 0); });
+      await page.evaluate(() => document.fonts.ready);
+      await check(`v3 composer picker ${w}x${hgt} ${scheme}: 5 communities, heading, no horizontal scroll`, async () => {
+        assert.equal(await page.locator('.sub-opt').count(), 5);
+        assert.ok((await page.locator('#compose-h').textContent()).includes('Posting in r/AskIndia'));
+        assert.ok(await page.locator('#sub-opt-askindia').isVisible());
+        if (w < 640) assert.ok(await page.locator('#post-btn').isVisible(), 'sticky Post button on the mobile sheet');
+        await noHScroll(page, `${tag} v3 compose`);
+      });
+      await page.screenshot({ path: join(SHOTS_B, `compose-${tag}.png`) });
+
+      await page.goto(`${BASE}?t=${THREAD_ID}&${Q}`);
+      await page.waitForSelector('.post-full .post-sub');
+      await check(`v3 thread header ${w}x${hgt} ${scheme}: r/IndiaNews link visible`, async () => {
+        assert.ok(await page.locator('.post-full .post-sub').isVisible());
+        await noHScroll(page, `${tag} v3 thread`);
+      });
+      await page.screenshot({ path: join(SHOTS_B, `thread-${tag}.png`) });
       await ctx.close();
     }
   }
