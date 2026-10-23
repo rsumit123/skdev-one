@@ -64,6 +64,10 @@ export const ICONS = {
   joke: () => svg('0 0 20 20', [['circle', { cx: 10, cy: 10, r: 7.2, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5 }], ['circle', { cx: 7.4, cy: 8, r: .95, fill: 'currentColor' }], ['circle', { cx: 12.6, cy: 8, r: .95, fill: 'currentColor' }], stroke('M6.3 11.2h7.4a3.7 3.7 0 0 1-7.4 0z', 1.5)], 'ic'),
   confess: () => svg('0 0 20 20', [stroke('M4 4.5h12a1 1 0 0 1 1 1v7a1 1 0 0 1-1 1h-6.5L6 16.5v-3H4a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1z', 1.5), stroke('M7 9h6', 1.7)], 'ic'),
   generic: () => svg('0 0 20 20', [['rect', { x: 3.5, y: 3.5, width: 13, height: 13, rx: 3, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5 }], stroke('M7 8.5h6M7 11.5h4', 1.5)], 'ic'),
+  // v3.2: the "⋯" menu and its items.
+  more: () => svg('0 0 20 20', [['circle', { cx: 4.5, cy: 10, r: 1.6, fill: 'currentColor' }], ['circle', { cx: 10, cy: 10, r: 1.6, fill: 'currentColor' }], ['circle', { cx: 15.5, cy: 10, r: 1.6, fill: 'currentColor' }]], 'ic ic-more'),
+  copy: () => svg('0 0 20 20', [['rect', { x: 7, y: 7, width: 9.5, height: 10, rx: 1.6, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5 }], stroke('M13 4.5V4a1 1 0 0 0-1-1H4.5a1 1 0 0 0-1 1v8.5a1 1 0 0 0 1 1H5', 1.5)], 'ic'),
+  select: () => svg('0 0 20 20', [stroke('M7.5 3.5h5M7.5 16.5h5M10 3.5v13', 1.6), stroke('M3.5 7v6M16.5 7v6', 1.4)], 'ic'),
   pin: () => svg('0 0 20 20', [['path', { d: 'M12.5 2.5 17.5 7.5l-2 .8-3.2 3.2.3 3.5-1.6 1.6-3-3-3.8 3.9-.7-.7 3.9-3.8-3-3L6 8.4l3.5.3 3.2-3.2z', fill: 'currentColor' }]], 'ic'),
 };
 

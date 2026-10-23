@@ -783,3 +783,44 @@ test('v3.1 buildCreateBody: joke and confession, user and bot, exact shapes', ()
   assert.equal(buildCreateBody(base({ type: 'confession', author: 'user', body: 'y'.repeat(2500) })).body.length, 2000);
   assert.equal(buildCreateBody(base({ type: 'joke', idea: 'x x x', sub: 'indiaconfessions' })).sub, 'indiaconfessions', 'sent as picked so the server can 422');
 });
+
+// ---------------------------------------------------------------- v3.2: copy text
+import { canCopy, commentCopyText, postCopyText } from './tree.js';
+
+test('canCopy: comments with text, not deleted or removed', () => {
+  assert.equal(canCopy({ text: 'hi' }), true);
+  assert.equal(canCopy({ text: 'hi', author_type: 'automod', stickied: true }), true, 'AutoMod sticky');
+  assert.equal(canCopy({ text: 'hi', pending: true }), true, 'optimistic comment');
+  assert.equal(canCopy({ text: '', deleted: true }), false);
+  assert.equal(canCopy({ text: 'kept on server', deleted: true }), false);
+  assert.equal(canCopy({ text: 'x', removed: true }), false);
+  assert.equal(canCopy({ text: '   ' }), false);
+  assert.equal(canCopy({ text: null }), false);
+  assert.equal(canCopy(null), false);
+});
+
+test('commentCopyText: stored text, line breaks and quote lines kept, nothing else', () => {
+  const c = { author_name: 'priya_k', score: 4, text: '> flags food inflation risks\nThis is the actual story.\r\n\r\nSecond para.  \n' };
+  assert.equal(commentCopyText(c), '> flags food inflation risks\nThis is the actual story.\n\nSecond para.');
+  assert.equal(commentCopyText({ text: 'a\n\n\n\nb' }), 'a\n\nb', 'runs of blank lines fold to one');
+  assert.equal(commentCopyText({ text: '<b>x</b> & y' }), '<b>x</b> & y', 'plain text, not HTML');
+  assert.equal(commentCopyText({ text: 'gone', deleted: true }), '');
+  assert.equal(commentCopyText({ text: 'gone', removed: true }), '');
+});
+
+test('postCopyText: title, blank line, body; polls add lettered options', () => {
+  assert.equal(postCopyText({ title: 'T', body: 'Body line 1\nline 2' }), 'T\n\nBody line 1\nline 2');
+  assert.equal(postCopyText({ headline: 'Legacy', body: 'b' }), 'Legacy\n\nb', 'v1 headline');
+  assert.equal(postCopyText({ title: 'Only title', body: null }), 'Only title');
+  const poll = { options: [{ text: 'Cut', votes: 3 }, { text: ' Hold ', votes: 5 }, { text: 'Hike', votes: 0 }], total: 8 };
+  assert.equal(postCopyText({ title: 'Repo rate?', body: 'Vote below.', poll }), 'Repo rate?\n\nVote below.\n\nA) Cut\nB) Hold\nC) Hike');
+  assert.equal(postCopyText({ title: 'Q', body: '', poll }), 'Q\n\nA) Cut\nB) Hold\nC) Hike');
+  assert.equal(postCopyText({ title: 'Q', poll: { options: [] } }), 'Q', 'poll not written yet');
+  assert.equal(postCopyText({ title: 'News', body: 'Statement', article: { body: 'Article text' } }), 'News\n\nStatement', 'article block excluded');
+  assert.equal(postCopyText(null), '');
+});
+
+test('shouldBuffer: an open "more" menu counts as busy', () => {
+  assert.equal(shouldBuffer({ viewport: 800, menuOpen: true }), true);
+  assert.equal(shouldBuffer({ viewport: 800, menuOpen: false }), false);
+});

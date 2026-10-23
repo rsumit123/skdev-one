@@ -20,10 +20,12 @@ import {
   applyEdit, applyDelete, applyRemove, applyAwards, applyLock, lockedIds, awardCounts, canReply,
   reconcileComment, pollRows, opRoles,
   rankOrder, arrangeTree, shouldBuffer, mergePolicy, pillText, subOf, subInfo,
+  canCopy, commentCopyText, postCopyText,
 } from '/agent-reddit/tree.js';
 import { REG, subLink } from '/agent-reddit/subs.js';
 import { preserve, topInset } from '/agent-reddit/anchor.js';
 import { longPress } from '/agent-reddit/longpress.js';
+import { moreButton, openMenu, closeMenu, syncMenu, menuOpen, menuKey, sheetDrag, copyText, selectRange } from '/agent-reddit/more.js';
 import { aboutCard, rulesCard } from '/agent-reddit/home.js';
 
 const DISPLAY_DEPTH = 6; // comments at this nesting level sit behind "continue this thread"
@@ -67,6 +69,7 @@ const TEMP_BASE = 9e15; // optimistic ids sort after every real id
 export function leaveThread() {
   closeStream();
   closeProfile(false);
+  closeMenu(false);
 }
 
 
@@ -260,6 +263,7 @@ function renderAll() {
   statusChip(S.thread.status);
   preserve(() => { renderPost(); renderRoster(); patchComments(false); });
   renderProfile();
+  syncMenu();
   refreshPill();
 }
 
@@ -271,6 +275,7 @@ function scheduleRender() {
     if (view.name !== 'thread' || !S.els.comments?.isConnected) return;
     preserve(() => { renderPost(); renderRoster(); patchComments(false); });
     renderProfile();
+    syncMenu();
     refreshPill();
   });
 }
@@ -288,6 +293,7 @@ function readingState() {
     selecting: !!sel && !sel.isCollapsed && sel.rangeCount > 0 && !!card?.contains(sel.anchorNode),
     replyFocused: !!S.replyBox?.contains(document.activeElement),
     profileOpen: P.botId != null,
+    menuOpen: menuOpen(), // the "⋯" menu, like a profile card, holds live comments
   };
 }
 
@@ -389,6 +395,51 @@ function toast(text) {
   el.classList.add('is-on');
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => el.classList.remove('is-on'), 1400);
+}
+
+// ---------------------------------------------------------------- "⋯" menu: copy / select text
+
+const bodyEl = id => S.recs.get(id)?.part.body?.isConnected ? S.recs.get(id).part.body : document.querySelector(`#c${id} > .cm-main > .cm-body`);
+
+function openCommentMenu(id, btn) {
+  openMenu(`c${id}`, btn, { label: 'Comment actions', items: [
+    { id: 'copy', label: 'Copy text', icon: ICONS.copy, run: () => copyComment(id) },
+    { id: 'select', label: 'Select text', icon: ICONS.select, run: () => selectComment(id) },
+  ] });
+}
+
+function openPostMenu(btn) {
+  openMenu('post', btn, { label: 'Post actions', items: [{ id: 'copy', label: 'Copy text', icon: ICONS.copy, run: copyPost }] });
+}
+
+// The copy is started synchronously from the menu item's click (clipboard writes need the
+// gesture). If it fails the text is selected instead, so the OS copy is one step away.
+function finishCopy(pending, selectInstead) {
+  pending.then(ok => {
+    if (!ok) selectInstead();
+    toast(ok ? 'Copied' : 'Couldn\'t copy');
+  });
+}
+
+function copyComment(id) {
+  const text = commentCopyText(S.comments.find(c => c.id === id));
+  if (!text) return;
+  finishCopy(copyText(text), () => selectRange(bodyEl(id)));
+}
+
+function copyPost() {
+  const text = postCopyText(S.thread);
+  if (!text) return;
+  finishCopy(copyText(text), () => {
+    const title = document.querySelector('.post-full .post-title-text');
+    if (title) selectRange(title, document.querySelector('.post-full .post-text') || title);
+  });
+}
+
+// A real selection over the comment body, so the OS copy handles / Ctrl+C take over. An
+// active selection in the thread holds live comments (readingState), so nothing moves under it.
+function selectComment(id) {
+  if (selectRange(bodyEl(id))) announce('Comment text selected');
 }
 
 // Who posted: v2 `op` (bot -> its roster entry, user -> HUMAN), else the legacy
@@ -515,9 +566,10 @@ function renderPost() {
         h('span', { class: 'act' }, ICONS.users(), h('span', { text: plural(S.bots.size, 'redditor') })),
         statusTag(t.status),
         h('span', { class: 'act act-muted', text: `${t.thread_limit ?? '?'} per thread · ${t.max_comments ?? '?'} max` }),
+        postCopyText(t) ? moreButton('post', 'More actions', openPostMenu) : null,
       ),
     ),
-  ), type === 'confession' ? confessionNote() : null);
+  ), ...(type === 'confession' ? [confessionNote()] : [])); // replaceChildren(null) would print "null"
 }
 
 // v3.1: a quiet line under a confession post. AutoMod's sticky says the same at more length.
@@ -593,10 +645,11 @@ function renderComments({ resort = false, anchor = true, anchorEl = null, clamp 
   if (!S.els.comments) return;
   if (anchor) preserve(() => patchComments(resort), anchorEl ? { el: anchorEl, clamp } : undefined);
   else patchComments(resort);
+  syncMenu();
   refreshPill();
 }
 
-const FOCUS_CLS = ['cm-toggle', 'reply-btn', 'vote-up', 'vote-down', 'uname-btn', 'continue', 'act-btn', 'rail'];
+const FOCUS_CLS = ['more-btn', 'cm-toggle', 'reply-btn', 'vote-up', 'vote-down', 'uname-btn', 'continue', 'act-btn', 'rail'];
 function focusKey(el) {
   const cm = el?.closest?.('.cm');
   if (!cm || !el.closest('#comments, #sticky') || el.closest('.cbox')) return null;
@@ -792,7 +845,8 @@ function renderNode(node, level, locked, seen) {
   const replyOk = canReply(node, subLocked);
   const replyOpen = S.replyTo === node.id;
   const showFull = level === 0 && locked;
-  const actions = part('actions', JSON.stringify([!!node.pending, hidden, replyOk, replyOpen, level === 0 && node.children.length > 0, showFull]), () => {
+  const copyOk = canCopy(node);
+  const actions = part('actions', JSON.stringify([!!node.pending, hidden, replyOk, replyOpen, level === 0 && node.children.length > 0, showFull, copyOk]), () => {
     rec.score = score;
     rec.vote = node.pending
       ? h('div', { class: 'vote vote-inline', 'aria-label': `Score ${node.score}` }, ICONS.up(), h('span', { class: 'score', text: formatScore(node.score) }), ICONS.down())
@@ -803,6 +857,7 @@ function renderNode(node, level, locked, seen) {
       replyOk ? h('button', { class: 'act act-btn reply-btn', type: 'button', 'aria-expanded': String(replyOpen), on: { click: () => openReply(node.id) } }, 'Reply') : null,
       level === 0 && node.children.length ? h('button', { class: 'act act-btn', type: 'button', text: 'Collapse thread', on: { click: () => toggleCollapse(node.id) } }) : null,
       showFull ? h('span', { class: 'locked locked-full', title: 'The bots have reached this thread\'s comment limit. Humans can still reply.' }, 'thread full') : null,
+      copyOk ? moreButton(`c${node.id}`, 'More actions', btn => openCommentMenu(node.id, btn)) : null,
     );
   });
   if (!node.pending && rec.score !== score && rec.vote) {
@@ -869,29 +924,10 @@ function ensureProfileRoot() {
   root.addEventListener('keydown', profileKeys);
   // Swipe down to dismiss (bottom sheet): from the handle anywhere, or from the
   // banner/body when the card is scrolled to the top.
-  dialog.addEventListener('pointerdown', e => {
-    if (!NARROW.matches || e.button !== 0) return;
-    const fromHandle = handle.contains(e.target);
-    if (!fromHandle && (body.scrollTop > 0 || !e.target.closest('.pf-banner, .pf-head'))) return;
-    P.drag = { y: e.clientY, dy: 0, id: e.pointerId };
-    dialog.setPointerCapture?.(e.pointerId);
+  P.drag = sheetDrag(dialog, {
+    canStart: e => NARROW.matches && (handle.contains(e.target) || (body.scrollTop <= 0 && !!e.target.closest('.pf-banner, .pf-head'))),
+    onClose: () => closeProfile(),
   });
-  dialog.addEventListener('pointermove', e => {
-    if (!P.drag || e.pointerId !== P.drag.id) return;
-    P.drag.dy = Math.max(0, e.clientY - P.drag.y);
-    dialog.style.transition = 'none';
-    dialog.style.transform = `translateY(${P.drag.dy}px)`;
-  });
-  const endDrag = e => {
-    if (!P.drag || e.pointerId !== P.drag.id) return;
-    const { dy } = P.drag;
-    P.drag = null;
-    dialog.style.transition = '';
-    dialog.style.transform = '';
-    if (dy > Math.min(120, dialog.offsetHeight * 0.25)) closeProfile();
-  };
-  dialog.addEventListener('pointerup', endDrag);
-  dialog.addEventListener('pointercancel', endDrag);
   document.body.append(root);
   Object.assign(P, { root, dialog, body });
 }
@@ -917,10 +953,10 @@ function closeProfile(returnFocus = true) {
   if (P.botId == null) return;
   const key = P.key;
   const trigger = P.trigger;
-  P.botId = null; P.key = null; P.trigger = null; P.drag = null;
+  P.botId = null; P.key = null; P.trigger = null;
+  P.drag?.reset();
   P.root.hidden = true;
   P.root.classList.remove('is-in');
-  P.dialog.style.transform = '';
   document.documentElement.classList.remove('pf-lock');
   if (!returnFocus) return;
   const target = trigger?.isConnected ? trigger : key ? document.querySelector(`[data-pf="${CSS.escape(key)}"]`) : null;
@@ -1088,6 +1124,7 @@ function openStream(id) {
     S.comments = fn(S.comments, d);
     if (name === 'lock' && S.replyTo != null && lockedIds(S.comments).has(S.replyTo)) { S.replyTo = null; S.replyBox = null; }
     if ((name === 'delete' || name === 'remove') && S.replyTo === d.comment_id) { S.replyTo = null; S.replyBox = null; }
+    if ((name === 'delete' || name === 'remove') && menuKey() === `c${d.comment_id}`) closeMenu(false); // nothing left to copy
     scheduleRender();
   });
   onPatch('edit', (cs, d) => applyEdit(cs, d));
@@ -1177,4 +1214,4 @@ async function onStreamClosed(id) {
 }
 
 // keep relative times fresh, in place
-setInterval(() => { if (view.name === 'thread' && S.thread) { preserve(refreshTimes); renderProfile(); } }, 60000);
+setInterval(() => { if (view.name === 'thread' && S.thread) { preserve(refreshTimes); renderProfile(); syncMenu(); } }, 60000);

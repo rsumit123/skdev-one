@@ -676,8 +676,8 @@ export function arrangeTree(roots, rank, mode = 'best') {
 // the live edge (more than 1.5 viewports below the top of the comments) or busy:
 // selecting text in the thread, typing a reply, or looking at a profile card.
 export const BUFFER_VIEWPORTS = 1.5;
-export function shouldBuffer({ distance = 0, viewport = 0, selecting = false, replyFocused = false, profileOpen = false } = {}) {
-  return distance > viewport * BUFFER_VIEWPORTS || !!selecting || !!replyFocused || !!profileOpen;
+export function shouldBuffer({ distance = 0, viewport = 0, selecting = false, replyFocused = false, profileOpen = false, menuOpen = false } = {}) {
+  return distance > viewport * BUFFER_VIEWPORTS || !!selecting || !!replyFocused || !!profileOpen || !!menuOpen;
 }
 
 // What to do with one arriving comment: 'show' it in place or 'hold' it for the pill.
@@ -741,4 +741,24 @@ export function pressReducer(state, ev) {
     default:
       return { state: s, effect: null };
   }
+}
+
+// ---------------------------------------------------------------- v3.2: copy text
+// The "⋯" menu copies what a comment says: its stored text with line breaks and `>` quote
+// lines kept (no username, flair or score). Deleted and removed comments have nothing to copy.
+const cleanText = s => String(s).replace(/\r\n?/g, '\n').split('\n').map(l => l.replace(/\s+$/, '')).join('\n').replace(/\n{3,}/g, '\n\n').trim();
+export function canCopy(c) {
+  return !!c && !c.deleted && !c.removed && typeof c.text === 'string' && c.text.trim() !== '';
+}
+export function commentCopyText(c) {
+  return canCopy(c) ? cleanText(c.text) : '';
+}
+// A post: title, a blank line, the body, then poll options as "A) ..." lines (the letters the
+// poll shows). A v2 news article is a separate block, not the body, so it is not included.
+export function postCopyText(t) {
+  if (!t || typeof t !== 'object') return '';
+  const title = String(t.title || t.headline || '').trim();
+  const body = typeof t.body === 'string' ? cleanText(t.body) : '';
+  const opts = pollSummary(t.poll).options.map((o, i) => `${String.fromCharCode(65 + i)}) ${o.text.trim()}`);
+  return [title, body, opts.join('\n')].filter(Boolean).join('\n\n');
 }

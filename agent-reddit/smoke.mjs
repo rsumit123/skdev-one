@@ -5,13 +5,15 @@
 //   mkdir -p /tmp/ar-pw && cd /tmp/ar-pw && npm init -y && npm i playwright && npx playwright install chromium
 // then run:  PW_DIR=/tmp/ar-pw node agent-reddit/smoke.mjs
 // Screenshots go to $SHOTS (default /tmp/ar-shots-v2); the v3 calm-thread/long-press ones to
-// $SHOTS_V3 (default /tmp/ar-shots-v3), the v3 communities ones to $SHOTS_V3B (default /tmp/ar-shots-v3b).
+// $SHOTS_V3 (default /tmp/ar-shots-v3), the v3 communities ones to $SHOTS_V3B (default /tmp/ar-shots-v3b),
+// the v3.2 "⋯" menu ones to $SHOTS_COPY (default /tmp/ar-shots-copy).
 import { spawn } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import assert from 'node:assert/strict';
 import { scrollSuite } from './scroll.mjs';
+import { copySuite } from './copy.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PW_DIR = process.env.PW_DIR || '/tmp/ar-pw';
@@ -2545,6 +2547,9 @@ try {
 
   // ---------------- v3 F5: calm threads + touch long-press (agent-reddit/scroll.mjs)
   await scrollSuite({ browser, BASE, check, shots: process.env.SHOTS_V3 || '/tmp/ar-shots-v3' });
+
+  // ---------------- v3.2: the "⋯" menu, Copy text / Select text (agent-reddit/copy.mjs)
+  await copySuite({ browser, BASE, check, shots: process.env.SHOTS_COPY || '/tmp/ar-shots-copy' });
   }
 
   // ---------------- v3.1: r/IndiaJokes and r/IndiaConfessions
