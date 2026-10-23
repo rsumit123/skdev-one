@@ -308,6 +308,9 @@ function render(s) {
     notice.classList.toggle('hidden', mins > 90);
     notice.className = 'notice ' + (mins < 20 ? 'bad' : 'warn') + (mins > 90 ? ' hidden' : '');
     notice.textContent = `Low credit: about ${Math.max(0, Math.floor(mins))} min of ${m.name} left. vast.ai stops the GPU when credit runs out.`;
+  } else if (p === 'error' && !s.instance_id && s.message) {
+    notice.className = 'notice bad';
+    notice.textContent = 'Last launch failed: ' + s.message;
   } else if (low) {
     notice.className = 'notice warn';
     notice.textContent = `Credit is ${money(s.credit)}. Top up on vast.ai before launching; even Nanochat needs ~${money(cheapest)}/h.`;
@@ -403,7 +406,7 @@ async function act(path, body, confirmMsg) {
   catch (e) { $('msg').textContent = e.message; alertIfIdle(e.message); }
   poll();
 }
-function alertIfIdle(msg) { if (!last || last.phase === 'off') { const n = $('creditNotice'); n.className = 'notice bad'; n.textContent = msg; } }
+function alertIfIdle(msg) { if (!last || last.phase === 'off' || (last.phase === 'error' && !last.instance_id)) { const n = $('creditNotice'); n.className = 'notice bad'; n.textContent = msg; } }
 
 $('models').addEventListener('click', e => {
   const b = e.target.closest('button[data-profile]');
