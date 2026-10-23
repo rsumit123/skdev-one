@@ -20,7 +20,7 @@ import {
   applyEdit, applyDelete, applyRemove, applyAwards, applyLock, lockedIds, awardCounts, canReply,
   reconcileComment, pollRows, opRoles,
   rankOrder, arrangeTree, shouldBuffer, mergePolicy, pillText, subOf, subInfo,
-  canCopy, commentCopyText, postCopyText,
+  canCopy, commentCopyText, postCopyText, importedLine,
 } from '/agent-reddit/tree.js';
 import { REG, subLink } from '/agent-reddit/subs.js';
 import { preserve, topInset } from '/agent-reddit/anchor.js';
@@ -521,7 +521,7 @@ function renderPost() {
   const score = Number.isFinite(t.score) ? t.score : 1 + S.comments.reduce((a, c) => a + Math.max(0, c.score || 0), 0);
   const opBot = t.op?.type === 'bot' ? S.bots.get(t.op.bot_id) : null;
   const sig = JSON.stringify([subOf(t), subInfo(subOf(t), REG.list), t.title, t.headline, t.body, t.poll, t.article, t.op, t.post_type, t.link, t.source, t.created_at,
-    t.thread_limit, t.max_comments, t.status, S.bots.size, opBot ? [opBot.username, opBot.model, opBot.provider] : null]);
+    t.thread_limit, t.max_comments, t.status, t.imported, S.bots.size, opBot ? [opBot.username, opBot.model, opBot.provider] : null]);
   const voteBlock = cls => voteWidget({ threadId: t.id || S.threadId, target: 'post', score, cls, onScore: v => { if (S.thread) S.thread = { ...S.thread, score: v }; } });
   if (sig === S.postSig && S.els.post.querySelector('.post-full')) {
     const cc = document.getElementById('comment-count');
@@ -560,6 +560,8 @@ function renderPost() {
       bodyEl, more,
       articleBlock(t, legacy),
       link,
+      t.imported && typeof t.imported === 'object' ? h('p', { class: 'post-imported', id: 'post-imported' },
+        h('span', { class: 'post-imported-ic', 'aria-hidden': 'true', text: '📷' }), h('span', { text: importedLine(t.imported) })) : null,
       h('div', { class: 'post-actions' },
         inlineVote,
         h('span', { class: 'act' }, ICONS.comment(), h('span', { id: 'comment-count', text: plural(n, 'comment') })),

@@ -1,7 +1,7 @@
 // ThreadCard renderer shared by the home sections and the sub pages.
 import { h, ICONS, avatar, flair, humanFlair, typeFlair, liveBadge, plural } from '/agent-reddit/ui.js';
 import { linkTo } from '/agent-reddit/api.js';
-import { timeAgo, isLive, pollSummary, displayType, cardDecor, subOf } from '/agent-reddit/tree.js';
+import { timeAgo, isLive, pollSummary, displayType, cardDecor, subOf, importedLine } from '/agent-reddit/tree.js';
 import { voteWidget } from '/agent-reddit/votes.js';
 import { subLink } from '/agent-reddit/subs.js';
 
@@ -33,6 +33,7 @@ export function threadCard(t, { appended = false, context = null, pageSub = null
     avatar(name || `op-${t.id}`, 'meta-av'),
     h('span', { class: 'meta-by' }, decor.chip ? '' : 'Posted by ', h('span', { class: 'meta-user', text: name ? `u/${name}` : human ? 'a human' : 'a bot OP' })),
     human ? humanFlair() : t.op_model ? flair({ model: t.op_model }) : null,
+    t.imported && typeof t.imported === 'object' ? importedIcon(t.imported) : null,
     when ? h('span', { class: 'meta-time', text: `· ${when}` }) : null,
   );
   const link = linkTo({ t: t.id }, { class: 'tcard-link' }, title);
@@ -60,6 +61,12 @@ export function threadCard(t, { appended = false, context = null, pageSub = null
     link.click();
   });
   return card;
+}
+
+// v3.3: a tiny camera next to the flair on posts imported from a screenshot.
+export function importedIcon(imp) {
+  const label = importedLine(imp);
+  return h('span', { class: 'imp-badge', role: 'img', 'aria-label': label, title: label }, ICONS.camera());
 }
 
 export function pollMini(poll, cls = 'poll-mini') {

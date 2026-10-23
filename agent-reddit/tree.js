@@ -406,6 +406,8 @@ export function buildCreateBody(st) {
   if (type === 'ama') out.ama_host = clean(st.amaHost) || null;
   // v3: the sub the post goes to. The picker sets it; otherwise the post type's sub.
   out.sub = typeof st.sub === 'string' && SUB_SLUG_RE.test(st.sub) ? st.sub : subForType(type);
+  // v3.3: only a post that came from a screenshot import carries the key.
+  if (st.imported && typeof st.imported === 'object') out.imported = { kind: 'screenshot', source_sub: st.imported.source_sub ?? null };
   return out;
 }
 
@@ -761,4 +763,185 @@ export function postCopyText(t) {
   const body = typeof t.body === 'string' ? cleanText(t.body) : '';
   const opts = pollSummary(t.poll).options.map((o, i) => `${String.fromCharCode(65 + i)}) ${o.text.trim()}`);
   return [title, body, opts.join('\n')].filter(Boolean).join('\n\n');
+}
+
+// ---------------------------------------------------------------- v3.3: import from a screenshot
+// POST /reddit/import returns a draft; the composer fills its form from it, the user reviews
+// and edits, and only their tap on Post creates a thread. Form values travel as one object
+// FV = {title, body, options, headline, text}: news fills the paste tab (headline + article
+// text), every other type title + body (+ options for polls).
+
+export const IMPORT_MAX_EDGE = 1600;
+export const IMPORT_MAX_FILE = 15 * 1024 * 1024;
+export const IMPORT_TIMEOUT_MS = 100000;
+export const IMPORT_FIELDS = ['title', 'body', 'options', 'headline', 'text'];
+export const emptyFields = () => ({ title: '', body: '', options: ['', ''], headline: '', text: '' });
+
+// Canvas target size: long edge at most `max`, aspect kept, never upscaled, whole pixels >= 1.
+export function downscaleSize(w, h, max = IMPORT_MAX_EDGE) {
+  const W = Math.max(1, Math.round(Number(w) || 0));
+  const H = Math.max(1, Math.round(Number(h) || 0));
+  const long = Math.max(W, H);
+  if (long <= max) return { width: W, height: H, scale: 1 };
+  const scale = max / long;
+  return { width: Math.max(1, Math.round(W * scale)), height: Math.max(1, Math.round(H * scale)), scale };
+}
+
+// What the client checks before it reads a file at all. null = fine.
+export function importFileProblem(file) {
+  if (!file || typeof file !== 'object') return 'type';
+  if (typeof file.type === 'string' && file.type && !file.type.startsWith('image/')) return 'type';
+  if (!file.type && !/\.(png|jpe?g|webp|gif|heic|heif|bmp)$/i.test(String(file.name || ''))) return 'type';
+  if (Number(file.size) > IMPORT_MAX_FILE) return 'size';
+  return null;
+}
+
+const t0 = v => (typeof v === 'string' ? v.trim() : '');
+const LIST_MARK = /^(?:[-*•·]\s+|[A-Fa-f][).:]\s+|\d{1,2}[).:]\s+|\(\s*[A-Fa-f1-6]\s*\)\s+)/;
+
+// A block of 2..6 short lines, each a list item ("A) x", "1. x", "- x") or all of them short
+// labels without a full stop. Returns the items, or null when it does not look like a list.
+export function listItems(block) {
+  const lines = String(block ?? '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  if (lines.length < 2 || lines.length > 6) return null;
+  const marked = lines.every(l => LIST_MARK.test(l));
+  const items = lines.map(l => (marked ? l.replace(LIST_MARK, '').trim() : l));
+  if (items.some(i => !i || i.length > 80)) return null;
+  if (!marked && !items.every(i => i.length <= 40 && !/[.!?:;,]$/.test(i))) return null;
+  return items;
+}
+
+const optsOf = a => (Array.isArray(a) ? a.map(t0).filter(Boolean) : []);
+const lettered = opts => opts.map((o, i) => `${String.fromCharCode(65 + i)}) ${o}`).join('\n');
+const join2 = (...parts) => parts.map(t0).filter(Boolean).join('\n\n');
+
+// Form values -> what they say, independent of the form: {title, body, options}.
+function canon(f, type) {
+  const x = { ...emptyFields(), ...(f || {}) };
+  if (type === 'news') return { title: t0(x.headline) || t0(x.title), body: join2(x.text, x.body), options: [] };
+  return { title: t0(x.title), body: t0(x.body), options: type === 'poll' ? optsOf(x.options) : [] };
+}
+
+// {title, body, options} -> form values for `type`. Nothing is dropped: options that a form
+// has no place for become lettered body lines, a missing title is taken from the first line.
+function place(c, type) {
+  let { title, body } = c;
+  let options = c.options.slice(0, 6);
+  const out = emptyFields();
+  if (c.options.length > 6) body = join2(body, lettered(c.options.slice(6)));
+  if (type === 'poll') {
+    if (options.length < 2) {
+      const blocks = body.split(/\n\s*\n/);
+      const items = listItems(blocks[blocks.length - 1]);
+      if (items) { options = [...options, ...items].slice(0, 6); body = blocks.slice(0, -1).join('\n\n').trim(); }
+    }
+    if (!title && body) [title, body] = firstLine(body);
+    return { ...out, title, body, options: options.length >= 2 ? options : [...options, '', ''].slice(0, Math.max(2, options.length)) };
+  }
+  if (options.length) body = join2(body, lettered(options));
+  if (type === 'confession') {
+    if (!body && title) return { ...out, body: title };
+    return { ...out, title, body };
+  }
+  if (!title && body) [title, body] = firstLine(body);
+  if (type === 'news') return { ...out, headline: title, text: body };
+  return { ...out, title, body };
+}
+function firstLine(s) {
+  const i = s.indexOf('\n');
+  const head = (i === -1 ? s : s.slice(0, i)).trim();
+  if (!head || head.length > 300) return ['', s];
+  return [head, i === -1 ? '' : s.slice(i + 1).trim()];
+}
+
+// Re-maps form values when the user moves an imported draft to another sub (type).
+export function remapFields(fields, from, to) {
+  if (from === to) return { ...emptyFields(), ...fields, options: [...(fields?.options || ['', ''])] };
+  return place(canon(fields, from), to);
+}
+
+// The draft's post type (a type this client knows), else ask/opinion like the backend does.
+export function draftType(draft) {
+  if (knownType(draft?.post_type)) return draft.post_type;
+  return t0(draft?.title).endsWith('?') ? 'ask' : 'opinion';
+}
+
+// Draft -> {type, sub, fields}. The sub comes from our own registry for the type, never
+// straight from the draft.
+export function draftToForm(draft, subs = SUBS) {
+  const type = draftType(draft);
+  const options = type === 'poll' ? optsOf(draft?.poll_options).map(o => o.slice(0, 80)) : [];
+  const c = { title: t0(draft?.title).slice(0, 300), body: t0(draft?.body), options };
+  return { type, sub: subForType(type, subs), fields: place(c, type) };
+}
+
+function sameValue(a, b) {
+  if (Array.isArray(a) || Array.isArray(b)) return optsOf(a).join('\n') === optsOf(b).join('\n');
+  return t0(a) === t0(b);
+}
+// Fields whose value differs from what the import put there (the user edited them).
+export function dirtyFields(current, baseline) {
+  return IMPORT_FIELDS.filter(k => !sameValue(current?.[k], baseline?.[k]));
+}
+// Re-read: take the new reading for every field the user has not edited, keep the rest.
+export function mergeReread(current, baseline, next) {
+  const dirty = new Set(dirtyFields(current, baseline));
+  const fields = {};
+  for (const k of IMPORT_FIELDS) {
+    const v = dirty.has(k) ? current[k] : next[k];
+    fields[k] = Array.isArray(v) ? [...v] : v ?? '';
+  }
+  return { fields, kept: [...dirty] };
+}
+
+// POST /reddit/threads "imported": source_sub passes through as read ("r/india") or null.
+export const SOURCE_SUB_RE = /^[A-Za-z0-9_/]{1,40}$/;
+export function importedPayload(draft) {
+  const s = typeof draft?.source_sub === 'string' ? draft.source_sub : '';
+  return { kind: 'screenshot', source_sub: SOURCE_SUB_RE.test(s) ? s : null };
+}
+
+// Which fields get an amber "Check this": the ones the notes name, title and body when the
+// notes say something was cut off or blurry without naming a field, and title and body (and
+// the options of a poll) when confidence is low.
+export function importHints(notes, confidence, type) {
+  const n = String(notes || '').toLowerCase();
+  const out = new Set();
+  if (/\b(title|headline|question|heading)\b/.test(n)) out.add('title');
+  if (/\b(body|text|characters?|description|paragraph|caption|punchline|confession|intro)\b/.test(n)) out.add('body');
+  if (/\b(options?|choices?|answers?|poll)\b/.test(n)) out.add(type === 'poll' ? 'options' : 'body');
+  if (!out.size && /cut off|cropped|truncated|blurry|blurred|hard to read|unclear|partly|partially|illegible/.test(n)) { out.add('title'); out.add('body'); }
+  if (confidence === 'low') { out.add('title'); out.add('body'); if (type === 'poll') out.add('options'); }
+  return [...out];
+}
+// A hint key -> the form field it sits on for this type.
+export function hintField(key, type) {
+  if (type === 'news') return key === 'title' ? 'headline' : 'text';
+  if (key === 'options') return type === 'poll' ? 'options' : 'body';
+  return key;
+}
+
+export const IMPORT_ERRORS = {
+  size: 'That image is too big',
+  type: "That doesn't look like an image we can read (PNG, JPEG or WebP)",
+  none: "We couldn't find a Reddit post in that image",
+  rate: 'Too many imports, try again in a minute',
+  fail: "Couldn't read the screenshot right now, try again",
+};
+// Inline message for a failed import: {status, message} from api(), {timeout: true}, or a
+// network error (no status).
+export function importErrorText(err) {
+  const s = err?.status;
+  if (s === 413) return IMPORT_ERRORS.size;
+  if (s === 415) return IMPORT_ERRORS.type;
+  if (s === 422) return typeof err.message === 'string' && err.message.trim() && !/^Request failed/.test(err.message) ? err.message.trim() : IMPORT_ERRORS.none;
+  if (s === 429) return IMPORT_ERRORS.rate;
+  return IMPORT_ERRORS.fail;
+}
+
+// "📷 Imported from a screenshot of r/india" (or "of a Reddit post").
+export function importedLine(imp) {
+  if (!imp || typeof imp !== 'object') return '';
+  const s = typeof imp.source_sub === 'string' && SOURCE_SUB_RE.test(imp.source_sub) ? imp.source_sub : '';
+  return `Imported from a screenshot of ${s ? (s.startsWith('r/') ? s : `r/${s}`) : 'a Reddit post'}`;
 }

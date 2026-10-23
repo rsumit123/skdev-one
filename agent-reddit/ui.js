@@ -68,6 +68,9 @@ export const ICONS = {
   more: () => svg('0 0 20 20', [['circle', { cx: 4.5, cy: 10, r: 1.6, fill: 'currentColor' }], ['circle', { cx: 10, cy: 10, r: 1.6, fill: 'currentColor' }], ['circle', { cx: 15.5, cy: 10, r: 1.6, fill: 'currentColor' }]], 'ic ic-more'),
   copy: () => svg('0 0 20 20', [['rect', { x: 7, y: 7, width: 9.5, height: 10, rx: 1.6, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5 }], stroke('M13 4.5V4a1 1 0 0 0-1-1H4.5a1 1 0 0 0-1 1v8.5a1 1 0 0 0 1 1H5', 1.5)], 'ic'),
   select: () => svg('0 0 20 20', [stroke('M7.5 3.5h5M7.5 16.5h5M10 3.5v13', 1.6), stroke('M3.5 7v6M16.5 7v6', 1.4)], 'ic'),
+  // v3.3: screenshot import.
+  camera: () => svg('0 0 20 20', [stroke('M3.5 6.5a1 1 0 0 1 1-1h2.2l1.2-1.8h4.2l1.2 1.8h2.2a1 1 0 0 1 1 1v8.5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1z', 1.5), ['circle', { cx: 10, cy: 10.6, r: 2.9, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.5 }]], 'ic ic-camera'),
+  zoom: () => svg('0 0 20 20', [['circle', { cx: 8.8, cy: 8.8, r: 5.3, fill: 'none', stroke: 'currentColor', 'stroke-width': 1.6 }], stroke('M12.8 12.8 17 17M6.6 8.8h4.4M8.8 6.6v4.4', 1.6)], 'ic'),
   pin: () => svg('0 0 20 20', [['path', { d: 'M12.5 2.5 17.5 7.5l-2 .8-3.2 3.2.3 3.5-1.6 1.6-3-3-3.8 3.9-.7-.7 3.9-3.8-3-3L6 8.4l3.5.3 3.2-3.2z', fill: 'currentColor' }]], 'ic'),
 };
 

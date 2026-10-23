@@ -824,3 +824,137 @@ test('shouldBuffer: an open "more" menu counts as busy', () => {
   assert.equal(shouldBuffer({ viewport: 800, menuOpen: true }), true);
   assert.equal(shouldBuffer({ viewport: 800, menuOpen: false }), false);
 });
+
+// ---------------------------------------------------------------- v3.3: screenshot import
+import {
+  downscaleSize, importFileProblem, listItems, remapFields, draftToForm, draftType, dirtyFields, mergeReread,
+  importedPayload, importHints, hintField, importErrorText, importedLine, emptyFields, IMPORT_ERRORS,
+} from './tree.js';
+
+const F = over => ({ ...emptyFields(), ...over });
+
+test('downscaleSize: long edge capped at 1600, aspect kept, never upscaled', () => {
+  assert.deepEqual(downscaleSize(3200, 1600), { width: 1600, height: 800, scale: 0.5 });
+  assert.deepEqual(downscaleSize(1170, 2532), { width: 739, height: 1600, scale: 1600 / 2532 });
+  assert.deepEqual(downscaleSize(800, 600), { width: 800, height: 600, scale: 1 }, 'small images keep their size');
+  assert.deepEqual(downscaleSize(1600, 1600), { width: 1600, height: 1600, scale: 1 });
+  assert.equal(downscaleSize(10000, 3).height, 1, 'at least one pixel');
+  assert.deepEqual(downscaleSize(0, NaN), { width: 1, height: 1, scale: 1 });
+  assert.equal(downscaleSize(2000, 1000, 1000).width, 1000, 'custom max');
+});
+
+test('importFileProblem: non-images and files over 15 MB are refused before reading', () => {
+  assert.equal(importFileProblem({ type: 'image/png', size: 1000, name: 'a.png' }), null);
+  assert.equal(importFileProblem({ type: 'image/heic', size: 1000 }), null, 'decoded later; may still fail');
+  assert.equal(importFileProblem({ type: 'application/pdf', size: 10, name: 'a.pdf' }), 'type');
+  assert.equal(importFileProblem({ type: '', size: 10, name: 'notes.txt' }), 'type');
+  assert.equal(importFileProblem({ type: '', size: 10, name: 'shot.JPG' }), null, 'no MIME type, image extension');
+  assert.equal(importFileProblem({ type: 'image/jpeg', size: 15 * 1024 * 1024 + 1 }), 'size');
+  assert.equal(importFileProblem(null), 'type');
+});
+
+test('draftToForm: every type lands in its own form fields and sub', () => {
+  const d = (post_type, extra = {}) => ({ post_type, sub: 'whatever', title: 'A title here', body: 'Some body', poll_options: null, source_sub: 'r/india', confidence: 'high', notes: null, ...extra });
+  assert.deepEqual(draftToForm(d('ask')), { type: 'ask', sub: 'askindia', fields: F({ title: 'A title here', body: 'Some body' }) });
+  assert.deepEqual(draftToForm(d('opinion')).sub, 'unpopularindia');
+  assert.deepEqual(draftToForm(d('joke')), { type: 'joke', sub: 'indiajokes', fields: F({ title: 'A title here', body: 'Some body' }) }, 'setup + punchline');
+  assert.deepEqual(draftToForm(d('ama')), { type: 'ama', sub: 'indiaama', fields: F({ title: 'A title here', body: 'Some body' }) }, 'AMA title + intro');
+  assert.deepEqual(draftToForm(d('news')), { type: 'news', sub: 'indianews', fields: F({ headline: 'A title here', text: 'Some body' }) }, 'paste tab: headline + article text');
+  assert.deepEqual(draftToForm(d('news', { body: null })).fields, F({ headline: 'A title here' }));
+  assert.deepEqual(draftToForm(d('confession')).fields, F({ title: 'A title here', body: 'Some body' }));
+  assert.deepEqual(draftToForm(d('confession', { body: null })).fields, F({ body: 'A title here' }), 'a confession without body text: the title becomes the confession');
+  assert.deepEqual(draftToForm(d('poll', { poll_options: [' Delhi ', 'Mumbai', '', 'Kolkata'] })), { type: 'poll', sub: 'indiapolls', fields: F({ title: 'A title here', body: 'Some body', options: ['Delhi', 'Mumbai', 'Kolkata'] }) });
+  assert.equal(draftToForm(d('poll', { poll_options: ['x'.repeat(90), 'b'] })).fields.options[0].length, 80);
+  assert.deepEqual(draftToForm(d('ask'), [{ slug: 'myask', post_type: 'ask' }]).sub, 'myask', 'the live registry wins');
+  assert.equal(draftType({ post_type: 'haiku', title: 'Is it?' }), 'ask');
+  assert.equal(draftType({ post_type: 'haiku', title: 'It is' }), 'opinion');
+  assert.equal(draftToForm({ post_type: 'news', title: 't'.repeat(400) }).fields.headline.length, 300);
+});
+
+test('listItems: only list-shaped blocks become poll options', () => {
+  assert.deepEqual(listItems('A) Delhi\nB) Mumbai\nC) Kolkata'), ['Delhi', 'Mumbai', 'Kolkata']);
+  assert.deepEqual(listItems('1. Yes\n2. No'), ['Yes', 'No']);
+  assert.deepEqual(listItems('- Tea\n- Coffee'), ['Tea', 'Coffee']);
+  assert.deepEqual(listItems('Tea\nCoffee\nNeither'), ['Tea', 'Coffee', 'Neither'], 'short labels');
+  assert.equal(listItems('I moved here in 2019.\nIt was fine.'), null, 'sentences are not options');
+  assert.equal(listItems('Just one line'), null);
+  assert.equal(listItems('a\nb\nc\nd\ne\nf\ng'), null, 'more than six');
+  assert.equal(listItems(`- ${'x'.repeat(81)}\n- y`), null, 'too long for an option');
+});
+
+test('remapFields: switching sub after an import never drops text', () => {
+  const poll = F({ title: 'Best street food city?', body: 'Asking for a trip', options: ['Delhi', 'Indore', 'Kolkata'] });
+  const op = remapFields(poll, 'poll', 'opinion');
+  assert.deepEqual(op, F({ title: 'Best street food city?', body: 'Asking for a trip\n\nA) Delhi\nB) Indore\nC) Kolkata' }), 'options become lettered body lines');
+  assert.deepEqual(remapFields(op, 'opinion', 'poll'), poll, 'and come back as options');
+  assert.deepEqual(remapFields(F({ title: 'Q?', body: 'Tea\nCoffee' }), 'ask', 'poll'), F({ title: 'Q?', options: ['Tea', 'Coffee'] }), 'list-like body -> options');
+  assert.deepEqual(remapFields(F({ title: 'Q?', body: 'I like tea. A lot.\nReally.' }), 'ask', 'poll'), F({ title: 'Q?', body: 'I like tea. A lot.\nReally.' }), 'prose stays as context');
+  assert.deepEqual(remapFields(F({ title: 'Headline', body: 'Text' }), 'ask', 'news'), F({ headline: 'Headline', text: 'Text' }));
+  assert.deepEqual(remapFields(F({ headline: 'Headline', text: 'Article', body: 'My take' }), 'news', 'ask'), F({ title: 'Headline', body: 'Article\n\nMy take' }), 'article and take both kept');
+  assert.deepEqual(remapFields(F({ title: 'Confession: x', body: '' }), 'opinion', 'confession'), F({ body: 'Confession: x' }), 'title is the confession when there is no body');
+  assert.deepEqual(remapFields(F({ body: 'I hide biscuits.\nFrom everyone.' }), 'confession', 'ask'), F({ title: 'I hide biscuits.', body: 'From everyone.' }), 'first line becomes the title');
+  assert.deepEqual(remapFields(F({ title: 'T', body: 'B' }), 'joke', 'ama'), F({ title: 'T', body: 'B' }));
+  assert.deepEqual(remapFields(F({ title: 'T', options: ['a', 'b'] }), 'poll', 'poll').options, ['a', 'b'], 'same type: unchanged');
+  const many = F({ title: 'Q', body: '', options: ['1', '2', '3', '4', '5', '6'] });
+  const all = remapFields(remapFields(many, 'poll', 'joke'), 'joke', 'news');
+  for (const o of many.options) assert.ok(all.text.includes(`) ${o}`), 'every option survives two hops');
+});
+
+test('dirtyFields + mergeReread: a re-read only replaces fields the user has not edited', () => {
+  const base = F({ title: 'Old title', body: 'Old body', options: ['A', 'B'] });
+  const cur = F({ title: 'My own title', body: 'Old body ', options: ['A', 'B', ''] });
+  assert.deepEqual(dirtyFields(cur, base), ['title'], 'whitespace and empty options are not edits');
+  const next = F({ title: 'New title', body: 'New body', options: ['A', 'C'] });
+  const { fields, kept } = mergeReread(cur, base, next);
+  assert.deepEqual(fields, F({ title: 'My own title', body: 'New body', options: ['A', 'C'] }));
+  assert.deepEqual(kept, ['title']);
+  assert.deepEqual(mergeReread(base, base, next).fields, next, 'nothing edited: all new');
+});
+
+test('importedPayload: source_sub passes through unchanged, else null (never "")', () => {
+  assert.deepEqual(importedPayload({ source_sub: 'r/india' }), { kind: 'screenshot', source_sub: 'r/india' });
+  assert.deepEqual(importedPayload({ source_sub: null }), { kind: 'screenshot', source_sub: null });
+  assert.deepEqual(importedPayload({ source_sub: '' }), { kind: 'screenshot', source_sub: null });
+  assert.deepEqual(importedPayload({ source_sub: 'r/in dia<script>' }), { kind: 'screenshot', source_sub: null });
+  assert.deepEqual(importedPayload({}), { kind: 'screenshot', source_sub: null });
+  const st = { type: 'ask', author: 'user', title: 'Hello there', body: '', handle: 'guest_0042', crowd: 'medium', length: 'normal', limit: 6 };
+  assert.equal('imported' in buildCreateBody(st), false, 'normal posts: no key at all');
+  assert.deepEqual(buildCreateBody({ ...st, imported: importedPayload({ source_sub: 'r/india' }) }).imported, { kind: 'screenshot', source_sub: 'r/india' });
+  assert.deepEqual(buildCreateBody({ ...st, imported: importedPayload({}) }).imported, { kind: 'screenshot', source_sub: null });
+});
+
+test('importHints: notes and low confidence mark the fields to check', () => {
+  assert.deepEqual(importHints(null, 'high', 'ask'), []);
+  assert.deepEqual(importHints('Title was cut off at the edge', 'high', 'ask'), ['title']);
+  assert.deepEqual(importHints('Confessions need at least 20 characters of text', 'medium', 'confession'), ['body'], 'the code-added note');
+  assert.deepEqual(importHints('Third option was hard to read', 'medium', 'poll'), ['options']);
+  assert.deepEqual(importHints('Third option was hard to read', 'medium', 'ask'), ['body'], 'options folded into the body elsewhere');
+  assert.deepEqual(importHints('Part of it was cut off', 'medium', 'ask').sort(), ['body', 'title'], 'cut off, no field named');
+  assert.deepEqual(importHints('Image is blurry', 'high', 'joke').sort(), ['body', 'title']);
+  assert.deepEqual(importHints(null, 'low', 'ask').sort(), ['body', 'title']);
+  assert.deepEqual(importHints(null, 'low', 'poll').sort(), ['body', 'options', 'title']);
+  assert.equal(hintField('title', 'news'), 'headline');
+  assert.equal(hintField('body', 'news'), 'text');
+  assert.equal(hintField('options', 'poll'), 'options');
+  assert.equal(hintField('options', 'ask'), 'body');
+  assert.equal(hintField('body', 'confession'), 'body');
+});
+
+test('importErrorText: each failure has its own inline message', () => {
+  assert.equal(importErrorText({ status: 413, message: 'x' }), 'That image is too big');
+  assert.equal(importErrorText({ status: 415, message: 'x' }), "That doesn't look like an image we can read (PNG, JPEG or WebP)");
+  assert.equal(importErrorText({ status: 422, message: "We couldn't find a Reddit post in that image" }), "We couldn't find a Reddit post in that image");
+  assert.equal(importErrorText({ status: 422, message: 'Only one post per image, please' }), 'Only one post per image, please', "the server's detail");
+  assert.equal(importErrorText({ status: 422, message: 'Request failed (422)' }), IMPORT_ERRORS.none);
+  assert.equal(importErrorText({ status: 429, message: 'Import limit reached. Try again in a bit.' }), 'Too many imports, try again in a minute');
+  assert.equal(importErrorText({ status: 502, message: 'x' }), "Couldn't read the screenshot right now, try again");
+  assert.equal(importErrorText({ timeout: true }), "Couldn't read the screenshot right now, try again");
+  assert.equal(importErrorText(new TypeError('Failed to fetch')), "Couldn't read the screenshot right now, try again", 'network');
+});
+
+test('importedLine: the thread line names the source sub when known', () => {
+  assert.equal(importedLine({ kind: 'screenshot', source_sub: 'r/india' }), 'Imported from a screenshot of r/india');
+  assert.equal(importedLine({ kind: 'screenshot', source_sub: 'india' }), 'Imported from a screenshot of r/india');
+  assert.equal(importedLine({ kind: 'screenshot', source_sub: null }), 'Imported from a screenshot of a Reddit post');
+  assert.equal(importedLine(null), '');
+});

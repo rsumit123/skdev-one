@@ -10,7 +10,10 @@ import {
   mergeItems, nextOffset, paperSource, paperDate, relTime, POST_TYPES, typeInfo,
   CROWDS, LENGTHS, LIMIT_RANGE, DEFAULT_LIMIT, validateCreate, buildCreateBody, validHandle,
   validSlug, subForType, typeForSub, CONFESSION_RANGE,
+  IMPORT_TIMEOUT_MS, importFileProblem, draftToForm, remapFields, mergeReread, dirtyFields, importedPayload,
+  importHints, hintField, importErrorText, IMPORT_ERRORS, emptyFields,
 } from '/agent-reddit/tree.js';
+import { prepareImage, openViewer, closeViewer } from '/agent-reddit/shot.js';
 import { REG, loadSubs, onSubs, sub as subOfSlug, subIcon } from '/agent-reddit/subs.js';
 import { getHandle, setHandle } from '/agent-reddit/local.js';
 import { rulesCard } from '/agent-reddit/home.js';
@@ -68,6 +71,7 @@ const C = {
   handle: '', crowd: 'medium', length: 'normal', limit: DEFAULT_LIMIT, advOpen: false,
   tried: false, errors: {}, serverErr: '', posting: false,
   papers: null, feeds: { paper: null, news: null }, gen: 0,
+  imp: null, // v3.3 screenshot import, see "import from a screenshot" below
 };
 let IO = null;
 let ELS = null;
@@ -107,6 +111,7 @@ export function showComposer({ r, type, src } = {}) {
       h('h1', { class: 'compose-h', id: 'compose-h' }),
     ),
     h('section', { class: 'card compose-card', 'aria-labelledby': 'compose-h' },
+      h('div', { class: 'imp-slot', id: 'imp-slot' }),
       h('div', { class: 'field sub-field', id: 'sub-field' },
         h('div', { class: 'sub-pick-head' },
           h('span', { class: 'field-label sub-pick-label', id: 'sub-pick-label', text: 'Post to' }),
@@ -119,10 +124,12 @@ export function showComposer({ r, type, src } = {}) {
       composeFoot(),
     ),
   );
-  document.getElementById('side').replaceChildren(tipsCard(), rulesCard());
+  document.getElementById('side').replaceChildren(h('div', { class: 'imp-side-slot', id: 'imp-side-slot' }), tipsCard(), rulesCard());
+  listenForImages();
   renderHeading();
   renderPicker();
   renderBody();
+  renderImport();
   loadPapers();
   loadHosts();
   loadSubs();
@@ -131,6 +138,10 @@ export function showComposer({ r, type, src } = {}) {
 export function leaveComposer() {
   document.body.classList.remove('is-compose');
   disconnect();
+  LISTEN?.abort();
+  LISTEN = null;
+  dropImage(); // the screenshot never outlives the composer; the draft text (and its imported tag) does
+  finishUndo();
 }
 
 function leave() {
@@ -191,6 +202,11 @@ function setSub(slug) {
   renderHeading();
   if (same) { paintErrors(); updateFoot(); return; }
   if (C.type !== t) {
+    if (C.imp?.draft) { // an imported draft moves with the user: nothing is dropped
+      setFields(remapFields(curFields(), C.type, t));
+      C.imp.baseline = remapFields(C.imp.baseline, C.type, t);
+      if (t === 'news') C.src = 'paste';
+    }
     C.type = t;
     if (!C.authorChosen) C.author = defaultAuthor(t);
   }
@@ -516,7 +532,7 @@ function renderSourcePanel() {
   disconnect();
   const src = activeSource();
   panel.setAttribute('aria-labelledby', `tab-${src}`);
-  if (src === 'paste') { panel.replaceChildren(pasteForm()); return; }
+  if (src === 'paste') { panel.replaceChildren(pasteForm()); paintHints(); return; }
   if (C.picked && C.pickedFeed === src && !C.listOpen) { panel.replaceChildren(pickedSummary()); return; }
   const f = C.feeds[src];
   if (src === 'paper' && C.papers === null) { panel.replaceChildren(skeletonList(3)); return; }
@@ -809,6 +825,7 @@ function validate() {
   C.errors = validateCreate(formState());
   if (subErr) C.errors.sub = subErr; // the server's sub/type mismatch stays until another sub is picked
   paintErrors();
+  paintHints();
   updateFoot();
   return C.errors;
 }
@@ -858,7 +875,7 @@ async function post() {
     (first?.matches?.('input, textarea') ? first : focusable)?.focus({ preventScroll: true });
     return;
   }
-  const body = buildCreateBody(formState());
+  const body = buildCreateBody({ ...formState(), imported: C.imp?.draft ? importedPayload(C.imp.draft) : null });
   C.posting = true; C.serverErr = ''; updateFoot();
   try {
     const res = await api('/reddit/threads', { method: 'POST', body: JSON.stringify(body) });
@@ -887,6 +904,7 @@ function resetDraft() {
     paste: { headline: '', link: '', text: '' }, title: '', body: '', idea: '', options: ['', ''],
     tried: false, errors: {}, serverErr: '',
   });
+  clearImport();
 }
 
 function tipsCard() {
@@ -898,4 +916,359 @@ function tipsCard() {
   return h('section', { class: 'card side-card tips-card' },
     h('h2', { class: 'side-head', text: 'Posting on Agent Reddit' }),
     h('ol', { class: 'tips' }, tips.map(([k, v]) => h('li', {}, h('strong', { text: k }), h('span', { text: v })))));
+}
+
+// ---------------------------------------------------------------- v3.3: import from a screenshot
+// The import only fills a draft: nothing posts until the user taps Post. C.imp holds
+//   status 'reading' | 'error' | 'done'; url (object URL of the downscaled image) + dataUrl,
+//   both dropped when the composer closes; draft (the last reading); baseline (the form values
+//   the import put there: a field that differs was edited and a re-read keeps it); sub (the sub
+//   the import picked); before (the form before the import, which Remove import restores);
+//   hints (fields to check); err + canRetry; seq/ctrl/timer for the request in flight.
+let LISTEN = null;
+let IMP_SEQ = 0;
+let UNDO = null;
+
+const curFields = () => ({ title: C.title, body: C.body, options: [...C.options], headline: C.paste.headline, text: C.paste.text });
+function setFields(f) {
+  C.title = f.title ?? '';
+  C.body = f.body ?? '';
+  C.options = Array.isArray(f.options) && f.options.length >= 2 ? [...f.options] : [...(f.options || []), '', ''].slice(0, 2);
+  C.paste = { ...C.paste, headline: f.headline ?? '', text: f.text ?? '' };
+}
+const snapshot = () => ({ fields: curFields(), sub: C.sub, type: C.type, author: C.author, authorChosen: C.authorChosen, src: C.src });
+const isMac = () => /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
+
+// Paste and drag-and-drop anywhere in the composer, set up once per composer view.
+function listenForImages() {
+  LISTEN?.abort();
+  LISTEN = new AbortController();
+  const opts = { signal: LISTEN.signal };
+  const hasFiles = e => [...(e.dataTransfer?.types || [])].includes('Files');
+  let depth = 0;
+  const lit = on => document.getElementById('imp-card')?.classList.toggle('is-drop', on);
+  document.addEventListener('paste', e => {
+    if (view.name !== 'compose') return;
+    const cd = e.clipboardData;
+    const file = [...(cd?.files || [])].find(f => f.type.startsWith('image/'))
+      || [...(cd?.items || [])].find(i => i.kind === 'file' && i.type.startsWith('image/'))?.getAsFile();
+    if (!file) return;
+    // In a text field, a clipboard that also has text pastes that text as usual.
+    const el = document.activeElement;
+    const typing = el && (el.matches?.('textarea, input:not([type]), input[type=text], input[type=url], input[type=search]') || el.isContentEditable);
+    if (typing && (cd.getData('text/plain') || '').trim()) return;
+    e.preventDefault();
+    importFile(file);
+  }, opts);
+  document.addEventListener('dragenter', e => { if (view.name === 'compose' && hasFiles(e)) { depth++; lit(true); } }, opts);
+  document.addEventListener('dragover', e => { if (view.name === 'compose' && hasFiles(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; lit(true); } }, opts);
+  document.addEventListener('dragleave', e => { if (view.name === 'compose' && hasFiles(e) && --depth <= 0) { depth = 0; lit(false); } }, opts);
+  document.addEventListener('drop', e => {
+    if (view.name !== 'compose' || !hasFiles(e)) return;
+    e.preventDefault(); // never let the browser open the file instead
+    depth = 0;
+    lit(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) importFile(file);
+  }, opts);
+  window.addEventListener('pagehide', () => dropImage(), opts);
+}
+
+function pickFile() {
+  const input = document.getElementById('imp-file');
+  if (input) { input.value = ''; input.click(); }
+}
+
+// A new screenshot (picker, paste or drop): a fresh import.
+async function importFile(file) {
+  finishUndo();
+  const problem = importFileProblem(file);
+  if (problem) { showImportError(problem === 'size' ? `${IMPORT_ERRORS.size} (over 15 MB). Try a smaller screenshot.` : IMPORT_ERRORS.type, false); return; }
+  const seq = ++IMP_SEQ;
+  abortInFlight();
+  const start = { fields: curFields(), sub: C.sub, type: C.type }; // edits from here on are the user's
+  if (!C.imp) C.imp = { status: 'reading', url: null, dataUrl: null, draft: null, baseline: curFields(), sub: C.sub, before: snapshot(), hints: [], err: '' };
+  Object.assign(C.imp, { status: 'reading', err: '', seq, preparing: true });
+  renderImport();
+  let img;
+  try { img = await prepareImage(file); } catch {
+    if (seq !== IMP_SEQ || !C.imp) return;
+    C.imp.preparing = false;
+    showImportError(IMPORT_ERRORS.type, false);
+    return;
+  }
+  if (seq !== IMP_SEQ || !C.imp || view.name !== 'compose') return;
+  if (C.imp.url) URL.revokeObjectURL(C.imp.url);
+  Object.assign(C.imp, { url: URL.createObjectURL(img.blob), dataUrl: img.dataUrl, preparing: false });
+  sendImport({ fresh: true, start });
+}
+
+function showImportError(msg, canRetry) {
+  if (!C.imp) C.imp = { status: 'error', url: null, dataUrl: null, draft: null, baseline: curFields(), sub: C.sub, before: snapshot(), hints: [] };
+  Object.assign(C.imp, { status: C.imp.draft ? 'done' : 'error', err: msg, canRetry, preparing: false });
+  renderImport();
+}
+
+// fresh: a new screenshot overwrites the imported fields (edits made while it reads stay);
+// a re-read keeps every field the user changed since the last reading.
+async function sendImport({ fresh = false, start = null } = {}) {
+  const imp = C.imp;
+  if (!imp?.dataUrl) return;
+  abortInFlight();
+  const seq = ++IMP_SEQ;
+  if (fresh) { const s = start || { fields: curFields(), sub: C.sub, type: C.type }; imp.baseline = s.fields; imp.sub = s.sub; imp.baseType = s.type; }
+  Object.assign(imp, { status: 'reading', err: '', seq, timedOut: false, ctrl: new AbortController() });
+  imp.timer = setTimeout(() => { imp.timedOut = true; imp.ctrl?.abort(); }, IMPORT_TIMEOUT_MS);
+  renderImport();
+  let res;
+  try {
+    res = await api('/reddit/import', { method: 'POST', body: JSON.stringify({ image: imp.dataUrl }), signal: imp.ctrl.signal });
+  } catch (err) {
+    if (seq !== IMP_SEQ || C.imp !== imp) return; // cancelled, removed or replaced
+    clearTimeout(imp.timer);
+    imp.ctrl = null;
+    showImportError(importErrorText(imp.timedOut ? { timeout: true } : err), true);
+    return;
+  }
+  if (seq !== IMP_SEQ || C.imp !== imp) return;
+  clearTimeout(imp.timer);
+  imp.ctrl = null;
+  if (!res?.draft || typeof res.draft !== 'object') { showImportError(IMPORT_ERRORS.fail, true); return; }
+  applyDraft(res.draft);
+}
+
+function applyDraft(draft) {
+  const imp = C.imp;
+  const form = draftToForm(draft, REG.list);
+  const keepSub = C.sub !== imp.sub && !!typeForSub(C.sub, REG.list); // the user picked another sub meanwhile
+  const type = keepSub ? C.type : form.type;
+  const sub = keepSub ? C.sub : form.sub;
+  const next = remapFields(form.fields, form.type, type);
+  const baseType = imp.baseType || C.type;
+  const { fields } = mergeReread(remapFields(curFields(), C.type, type), remapFields(imp.baseline, baseType, type), next);
+  setFields(fields);
+  Object.assign(imp, { status: 'done', draft, baseline: next, baseType: type, sub, err: '', canRetry: false,
+    hints: importHints(draft.notes, draft.confidence, form.type), named: importHints(draft.notes, 'high', form.type) });
+  C.type = type;
+  C.sub = sub;
+  C.author = 'user';
+  C.authorChosen = true;
+  if (type === 'news') C.src = 'paste';
+  delete C.errors.sub;
+  C.serverErr = '';
+  try { history.replaceState(history.state, '', hrefFor({ new: '1', r: sub })); } catch { /* ignore */ }
+  renderHeading();
+  renderPicker();
+  renderBody();
+  renderImport();
+}
+
+function abortInFlight() {
+  const imp = C.imp;
+  if (!imp) return;
+  clearTimeout(imp.timer);
+  imp.ctrl?.abort();
+  imp.ctrl = null;
+}
+
+function cancelImport() {
+  IMP_SEQ++;
+  abortInFlight();
+  const imp = C.imp;
+  if (!imp) return;
+  if (imp.draft) { Object.assign(imp, { status: 'done', err: '' }); renderImport(); return; }
+  clearImport();
+  renderImport();
+}
+
+// Drops the image (object URL revoked, data URL released); the draft text stays.
+function dropImage() {
+  const imp = C.imp;
+  closeViewer();
+  if (!imp) return;
+  IMP_SEQ++;
+  abortInFlight();
+  if (imp.url) URL.revokeObjectURL(imp.url);
+  imp.url = null;
+  imp.dataUrl = null;
+  if (!imp.draft) C.imp = null;
+  else if (imp.status !== 'done') Object.assign(imp, { status: 'done', err: '' });
+}
+
+function clearImport() {
+  dropImage();
+  C.imp = null;
+}
+
+// "Remove import": back to the form as it was before the import, with an Undo for 5 s.
+function removeImport() {
+  const imp = C.imp;
+  if (!imp) return;
+  finishUndo();
+  IMP_SEQ++;
+  abortInFlight();
+  closeViewer();
+  const removed = { ...snapshot(), imp: { ...imp, status: 'done', err: '' } };
+  const b = imp.before;
+  if (C.sub === imp.sub && b) { // the sub is still the import's pick: restore the old one too
+    C.sub = b.sub; C.type = b.type; C.author = b.author; C.authorChosen = b.authorChosen; C.src = b.src;
+    setFields(b.fields);
+  } else setFields(remapFields(b?.fields || emptyFields(), b?.type || C.type, C.type));
+  C.imp = null;
+  C.serverErr = '';
+  try { history.replaceState(history.state, '', hrefFor({ new: '1', r: C.sub })); } catch { /* ignore */ }
+  renderHeading();
+  renderPicker();
+  renderBody();
+  renderImport();
+  UNDO = { removed, timer: setTimeout(finishUndo, 5000) };
+  undoToast(true);
+}
+
+function undoRemove() {
+  const u = UNDO;
+  if (!u) return;
+  clearTimeout(u.timer);
+  UNDO = null;
+  undoToast(false);
+  if (C.imp) return; // a new import started meanwhile
+  const r = u.removed;
+  Object.assign(C, { sub: r.sub, type: r.type, author: r.author, authorChosen: r.authorChosen, src: r.src, imp: r.imp });
+  setFields(r.fields);
+  try { history.replaceState(history.state, '', hrefFor({ new: '1', r: C.sub })); } catch { /* ignore */ }
+  renderHeading();
+  renderPicker();
+  renderBody();
+  renderImport();
+}
+
+// The removed import's image is released once Undo is no longer offered.
+function finishUndo() {
+  const u = UNDO;
+  if (!u) return;
+  clearTimeout(u.timer);
+  UNDO = null;
+  if (u.removed.imp?.url) URL.revokeObjectURL(u.removed.imp.url);
+  u.removed.imp = null;
+  undoToast(false);
+}
+
+function undoToast(on) {
+  let el = document.getElementById('imp-toast');
+  if (!on) { el?.remove(); return; }
+  el?.remove();
+  el = h('div', { class: 'imp-toast', id: 'imp-toast', role: 'status' },
+    h('span', { text: 'Import removed' }),
+    h('button', { class: 'imp-toast-undo', type: 'button', id: 'imp-undo', text: 'Undo', on: { click: undoRemove } }));
+  document.body.append(el);
+}
+
+// ---- view
+
+const CONF_LABEL = { high: 'High confidence', medium: 'Medium confidence', low: 'Low confidence' };
+
+function thumbButton(cls) {
+  const imp = C.imp;
+  if (!imp?.url) return null;
+  return h('button', { class: `imp-thumb ${cls}`, type: 'button', 'aria-label': 'View the screenshot full screen', on: { click: () => openViewer(imp.url) } },
+    h('img', { src: imp.url, alt: '' }),
+    h('span', { class: 'imp-zoom', 'aria-hidden': 'true' }, ICONS.zoom()));
+}
+
+function renderImport() {
+  const slot = document.getElementById('imp-slot');
+  if (!slot) return;
+  const imp = C.imp;
+  const file = h('input', { type: 'file', id: 'imp-file', class: 'sr-only', accept: 'image/*', tabindex: '-1', 'aria-hidden': 'true',
+    on: { change: e => { const f = e.target.files?.[0]; if (f) importFile(f); e.target.value = ''; } } });
+  let card;
+  if (!imp) {
+    card = h('div', { class: 'imp imp-idle', id: 'imp-card' },
+      h('button', { class: 'imp-open', type: 'button', id: 'imp-open', 'aria-describedby': 'imp-sub', on: { click: pickFile } },
+        h('span', { class: 'imp-ic', 'aria-hidden': 'true' }, ICONS.camera()),
+        h('span', { class: 'imp-text' },
+          h('strong', { class: 'imp-h', text: 'Import from screenshot' }),
+          h('span', { class: 'imp-sub', id: 'imp-sub', text: "Got a Reddit screenshot? We'll turn it into a post you can edit" }),
+          h('span', { class: 'imp-desk', text: `or paste it (${isMac() ? '⌘V' : 'Ctrl+V'}) or drop it here` })),
+        h('span', { class: 'imp-cta', 'aria-hidden': 'true', text: 'Choose image' })),
+      h('span', { class: 'imp-drop-msg', 'aria-hidden': 'true', text: 'Drop the screenshot to import it' }),
+      file);
+  } else {
+    const reading = imp.status === 'reading';
+    const parts = [];
+    if (reading) {
+      parts.push(h('div', { class: 'imp-busy', id: 'imp-busy', role: 'status', 'aria-live': 'polite' },
+        h('p', { class: 'imp-busy-h' }, h('span', { class: 'spinner', 'aria-hidden': 'true' }), h('strong', { text: 'Reading your screenshot…' })),
+        h('p', { class: 'imp-busy-sub', text: imp.draft ? 'Fields you edited stay as they are.' : 'This usually takes a few seconds. Nothing is posted until you tap Post.' }),
+        h('div', { class: 'imp-sk', 'aria-hidden': 'true' }, h('span', { class: 'sk sk-label' }), h('span', { class: 'sk sk-input' }), h('span', { class: 'sk sk-label' }), h('span', { class: 'sk sk-area' })),
+        h('div', { class: 'imp-actions' }, h('button', { class: 'btn btn-outline btn-sm', type: 'button', id: 'imp-cancel', text: 'Cancel', on: { click: cancelImport } }))));
+    }
+    if (imp.err) {
+      parts.push(h('div', { class: 'imp-err', id: 'imp-err', role: 'alert' },
+        h('p', { class: 'imp-err-msg', id: 'imp-err-msg', text: imp.err }),
+        h('div', { class: 'imp-actions' },
+          imp.canRetry && imp.dataUrl ? h('button', { class: 'btn btn-outline btn-sm', type: 'button', id: 'imp-retry', on: { click: () => sendImport({ fresh: !imp.draft }) } }, ICONS.retry(), 'Retry') : null,
+          h('button', { class: 'btn btn-text btn-sm', type: 'button', id: 'imp-another', text: 'Choose another image', on: { click: pickFile } }),
+          imp.draft ? null : h('button', { class: 'btn btn-text btn-sm', type: 'button', id: 'imp-dismiss', text: 'Dismiss', on: { click: () => { clearImport(); renderImport(); } } }))));
+    }
+    if (imp.draft && !reading) {
+      const d = imp.draft;
+      const src = typeof d.source_sub === 'string' && d.source_sub ? d.source_sub : null;
+      const conf = CONF_LABEL[d.confidence] ? d.confidence : 'medium';
+      parts.push(h('div', { class: 'imp-banner', id: 'imp-banner', role: 'status' },
+        h('p', { class: 'imp-done-h' },
+          h('span', { class: 'imp-ok', 'aria-hidden': 'true' }, ICONS.camera()),
+          h('strong', { id: 'imp-banner-text', text: src ? `Imported from ${src}. Check the text before posting` : 'Imported from a screenshot. Check the text before posting' })),
+        h('p', { class: 'imp-meta' },
+          h('span', { class: `imp-conf conf-${conf}`, id: 'imp-conf', text: CONF_LABEL[conf] }),
+          d.notes ? h('span', { class: 'imp-notes', id: 'imp-notes', text: d.notes }) : null),
+        h('div', { class: 'imp-actions' },
+          imp.dataUrl ? h('button', { class: 'btn btn-outline btn-sm', type: 'button', id: 'imp-reread', on: { click: () => sendImport() } }, ICONS.retry(), 'Re-read screenshot') : null,
+          h('button', { class: 'btn btn-text btn-sm', type: 'button', id: 'imp-remove', text: 'Remove import', on: { click: removeImport } })),
+        imp.dataUrl ? null : h('p', { class: 'imp-gone', text: 'The screenshot is not kept once you leave this page; the text stays.' })));
+    }
+    card = h('div', { class: `imp imp-${imp.status}${imp.err ? ' has-err' : ''}`, id: 'imp-card', 'aria-busy': reading ? 'true' : null },
+      thumbButton('imp-thumb-inline'), h('div', { class: 'imp-body' }, ...parts),
+      h('span', { class: 'imp-drop-msg', 'aria-hidden': 'true', text: 'Drop the screenshot to import it' }),
+      file);
+  }
+  slot.replaceChildren(card);
+  renderImportSide();
+  paintHints();
+}
+
+// Desktop: the screenshot sits in the right column, sticky, next to the form.
+function renderImportSide() {
+  const slot = document.getElementById('imp-side-slot');
+  if (!slot) return;
+  const url = C.imp?.url;
+  document.getElementById('side')?.classList.toggle('has-import', !!url);
+  if (!url) { slot.replaceChildren(); return; }
+  slot.replaceChildren(h('section', { class: 'card side-card imp-side', id: 'imp-side', 'aria-label': 'Your screenshot' },
+    h('h2', { class: 'side-head', text: 'Your screenshot' }),
+    h('button', { class: 'imp-side-img', type: 'button', 'aria-label': 'View the screenshot full size', on: { click: () => openViewer(url) } }, h('img', { src: url, alt: 'The screenshot you imported' })),
+    h('p', { class: 'imp-side-note', text: 'Compare it with the draft. It is only used to read the text and is never stored.' })));
+}
+
+// Amber "Check this" on the fields the reading was unsure about, until the user edits them.
+function paintHints() {
+  document.querySelectorAll('.needs-check').forEach(el => el.classList.remove('needs-check'));
+  document.querySelectorAll('.check-hint').forEach(el => el.remove());
+  const imp = C.imp;
+  if (!imp?.draft || imp.status === 'reading' || C.author !== 'user') return;
+  const dirty = new Set(dirtyFields(curFields(), imp.baseline));
+  const named = new Set((imp.named || []).map(k => hintField(k, C.type)));
+  for (const key of new Set(imp.hints.map(k => hintField(k, C.type)))) {
+    if (dirty.has(key)) continue;
+    const v = imp.baseline?.[key];
+    const empty = Array.isArray(v) ? !v.some(x => String(x).trim()) : !String(v ?? '').trim();
+    if (empty && !named.has(key)) continue; // low confidence alone: nothing to check in an empty field
+    const ctl = key === 'options' ? document.getElementById('poll-opts') : document.getElementById(`f-${key}`);
+    const field = ctl?.closest('.field');
+    const label = field?.querySelector('.field-label');
+    if (!label) continue;
+    field.classList.add('needs-check');
+    const counter = label.querySelector('.counter');
+    label.insertBefore(h('span', { class: 'check-hint', 'data-hint': key }, h('span', { 'aria-hidden': 'true', text: '⚠ ' }), 'Check this'), counter);
+  }
 }

@@ -14,6 +14,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import assert from 'node:assert/strict';
 import { scrollSuite } from './scroll.mjs';
 import { copySuite } from './copy.mjs';
+import { importSuite } from './import.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PW_DIR = process.env.PW_DIR || '/tmp/ar-pw';
@@ -229,9 +230,9 @@ function deferred() { let resolve; const p = new Promise(r => { resolve = r; });
 // `subsList` overrides the /subs answer (a function of the call number).
 async function mockApi(page, { streams = [doneStream], threadGet = () => ({ status: 200, body: thread('running', V2_COMMENTS) }), down = false,
   papers = PAPERS, paperItems = PAPER, liveItems = NEWS, newsHook = null, cards = CARDS, listHook = null, createHook = null, newId = THREAD_ID,
-  commentHook = null, hosts = null, homeHook = null, subsList = null, extraSubs = [] } = {}) {
+  commentHook = null, hosts = null, homeHook = null, subsList = null, extraSubs = [], importHook = null } = {}) {
   const ALL = [...SUBS, ...extraSubs]; // v3.1: subs this client may not know yet
-  const st = { streamCalls: 0, posts: [], news: [], lists: [], homes: [], subsCalls: 0, votes: [], surprises: 0, comments: [], hostsCalls: 0 };
+  const st = { streamCalls: 0, posts: [], news: [], lists: [], homes: [], subsCalls: 0, votes: [], surprises: 0, comments: [], hostsCalls: 0, imports: [] };
   await page.route(`${MOCK}/**`, async route => {
     const req = route.request();
     const url = new URL(req.url());
@@ -269,6 +270,14 @@ async function mockApi(page, { streams = [doneStream], threadGet = () => ({ stat
       const next = q.offset + q.limit < all.length ? q.offset + q.limit : null;
       return json(200, { cached_age_s: 120, items, total: all.length, next_offset: next, feed: isPaper ? 'paper' : 'live',
         paper: isPaper ? { slug: papers.papers[0]?.slug, label: papers.papers[0]?.label } : null });
+    }
+    if (p === '/reddit/import' && req.method() === 'POST') { // v3.3: screenshot -> draft
+      const b = req.postDataJSON();
+      const n = st.imports.push(b) - 1;
+      const r = importHook ? await importHook(b, n) : null;
+      if (r === 'abort') return route.abort('connectionreset');
+      if (r) return json(r.status, r.body);
+      return json(404, { detail: 'Not Found' });
     }
     if (p === '/reddit/surprise' && req.method() === 'POST') { st.surprises++; return json(201, { id: SURPRISE_ID }); }
     if (p === '/reddit/threads' && req.method() === 'POST') {
@@ -335,7 +344,7 @@ const body = over => {
 
 // ------------------------------------------------------------ v3.1: jokes and confessions
 // Run alone with SMOKE_ONLY=v31. Screenshots to $SHOTS_V31 (default /tmp/ar-shots-v31).
-const ONLY_V31 = process.env.SMOKE_ONLY === 'v31';
+const ONLY = process.env.SMOKE_ONLY || '';
 const SHOTS_V31 = process.env.SHOTS_V31 || '/tmp/ar-shots-v31';
 const HELPLINE = 'If you are struggling, Tele-MANAS 14416 is free, 24x7';
 const CONF_NOTE = 'Anonymous confession. No real names. Tele-MANAS 14416 is free, 24x7';
@@ -785,7 +794,7 @@ const track = page => page.on('pageerror', e => errors.push(String(e)));
 
 try {
   await new Promise(r => setTimeout(r, 600));
-  if (!ONLY_V31) { // the whole v2/v3 suite; SMOKE_ONLY=v31 runs just the v3.1 block below
+  if (!ONLY) { // the whole v2/v3 suite; SMOKE_ONLY=v31 or SMOKE_ONLY=import runs just that block below
   // ---------------- front page (desktop, light): v3 community sections
   {
     const ctx = await newCtx({ viewport: { width: 1440, height: 900 }, colorScheme: 'light' });
@@ -2553,7 +2562,11 @@ try {
   }
 
   // ---------------- v3.1: r/IndiaJokes and r/IndiaConfessions
-  await v31Suite();
+  if (!ONLY || ONLY === 'v31') await v31Suite();
+
+  // ---------------- v3.3: import a post from a screenshot (agent-reddit/import.mjs)
+  if (!ONLY || ONLY === 'import') await importSuite({ browser, BASE, Q, check, track, mockApi, newCtx, noHScroll, deferred, KEYS, body, THREAD_ID, thread, CARDS, SUBS, SUB_OF, sse, BASE_COMMENTS,
+    shots: process.env.SHOTS_IMPORT || '/tmp/ar-shots-import' });
 
   await check('no uncaught page errors', async () => { assert.deepEqual(errors, []); });
   console.log(`\nPASS: ${results.length} checks. Screenshots in ${SHOTS}`);
