@@ -73,7 +73,7 @@ export async function importSuite(T) {
       const order = await page.evaluate(() => { const a = document.getElementById('imp-card'); const b = document.getElementById('sub-field'); return !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING); });
       assert.ok(order, 'import card before the picker');
       assert.equal(await page.locator('#imp-card .imp-h').textContent(), 'Import from screenshot');
-      assert.equal(await page.locator('#imp-sub').textContent(), "Got a Reddit screenshot? We'll turn it into a post you can edit");
+      assert.equal(await page.locator('#imp-sub').textContent(), "Got a screenshot of a Reddit post, news article, tweet or forward? We'll turn it into a post you can edit");
       assert.equal(await page.getAttribute('#imp-file', 'type'), 'file');
       assert.equal(await page.getAttribute('#imp-file', 'accept'), 'image/*');
       assert.ok(await page.locator('#imp-card .imp-desk').isVisible(), 'desktop says paste or drop');
@@ -323,7 +323,7 @@ export async function importSuite(T) {
       const ERR = [
         [{ status: 413, body: { detail: 'Image too large' } }, 'That image is too big'],
         [{ status: 415, body: { detail: 'Unsupported image' } }, "That doesn't look like an image we can read (PNG, JPEG or WebP)"],
-        [{ status: 422, body: { detail: "We couldn't find a Reddit post in that image" } }, "We couldn't find a Reddit post in that image"],
+        [{ status: 422, body: { detail: "We couldn't find a post or story in that image" } }, "We couldn't find a post or story in that image"],
         [{ status: 429, body: { detail: 'Import limit reached. Try again in a bit.' } }, 'Too many imports, try again in a minute'],
         [{ status: 502, body: { detail: "Couldn't read the screenshot right now, try again" } }, "Couldn't read the screenshot right now, try again"],
         ['abort', "Couldn't read the screenshot right now, try again"],
@@ -441,6 +441,72 @@ export async function importSuite(T) {
     await ctx.close();
   }
 
+  // ---------------- v3.4: news, social, chat and meme screenshots (1440 light, 390 dark)
+  for (const [vw, vh, scheme, mobile] of [[1440, 900, 'light', false], [390, 844, 'dark', true]]) {
+    const tag = `${vw}-${scheme}`;
+    const { ctx, page, st, q, go, upload, filled, val, checked } = await setup({ width: vw, height: vh }, { colorScheme: scheme, mobile });
+    const FACTS = 'Looks like a forward: check facts before posting';
+    const HEAD = "How much has UP's crime declined under Yogi Adityanath?";
+    const cases = [
+      ['news', D('news', { title: HEAD, body: 'Murders fell from 4,889 in 2016 to 3,491 in 2023, NCRB data show.', source_sub: null, source_kind: 'news', source_label: 'Indian Express' }), 'indianews',
+        'Imported from a news screenshot (Indian Express). Check the text before posting', { source_kind: 'news', source_label: 'Indian Express' }],
+      ['social', D('opinion', { title: 'The new metro line is a waste of money', body: null, source_sub: null, source_kind: 'social', source_label: 'X post' }), 'unpopularindia',
+        'Imported from an X post. Check the text before posting', { source_kind: 'social', source_label: 'X post' }],
+      ['chat', D('news', { title: 'From tomorrow all ATMs will be closed for 5 days', body: 'Share with everyone!', source_sub: null, source_kind: 'chat', source_label: 'WhatsApp forward', notes: `${FACTS}. Some text was blurry` }), 'indianews',
+        'Imported from a WhatsApp forward. Check the text before posting', { source_kind: 'chat', source_label: 'WhatsApp forward' }],
+      ['meme', D('joke', { title: 'Me explaining to my mom', body: 'that I work from home', source_sub: null, source_kind: 'meme', source_label: null }), 'indiajokes',
+        'Imported from a meme. Check the text before posting', { source_kind: 'meme' }],
+      ['other', D('opinion', { title: 'Water supply cut on Sunday in Sector 5', body: null, source_sub: null, source_kind: 'other', source_label: 'Govt notice' }), 'unpopularindia',
+        'Imported from a screenshot. Check the text before posting', { source_kind: 'other', source_label: 'Govt notice' }],
+    ];
+    for (const [kind, d, slug, banner, imp] of cases) {
+      await check(`import v3.4 ${tag}: a ${kind} screenshot fills a ${d.post_type} draft with its own banner and posts source_kind/label`, async () => {
+        await go('askindia');
+        q.push(ok(d));
+        await upload();
+        await filled();
+        assert.equal(await checked(slug), 'true', 'sub switched');
+        assert.equal(await page.locator('#imp-banner-text').textContent(), banner);
+        if (kind === 'chat') {
+          assert.equal(await page.locator('#imp-facts').textContent(), FACTS);
+          assert.ok(await page.locator('#imp-facts').isVisible());
+          assert.equal(await page.locator('#imp-notes').textContent(), 'Some text was blurry', 'the facts note is not repeated');
+          assert.deepEqual(await page.locator('.check-hint').evaluateAll(es => es.map(e => e.dataset.hint).sort()), ['text'], 'the note names the text: only the article text is flagged, not by the facts note');
+        } else {
+          assert.equal(await page.locator('#imp-facts').count(), 0);
+        }
+        if (d.post_type === 'news') {
+          assert.equal(await val('#f-headline'), d.title, 'the headline as printed');
+          assert.equal(await val('#f-text'), d.body);
+        } else assert.equal(await val('#f-title'), d.title);
+        if (kind === 'news' || kind === 'chat') await page.screenshot({ path: join(shots, `v34-${kind}-${tag}.png`) });
+        await noHScroll(page, `v3.4 ${kind} ${tag}`);
+        await page.waitForTimeout(150);
+        const n = st.posts.length;
+        await page.locator('#post-btn').click();
+        await page.waitForURL(u => new URL(u).searchParams.get('t') === THREAD_ID);
+        assert.equal(st.posts.length, n + 1);
+        const b = st.posts.at(-1);
+        assert.equal(b.post_type, d.post_type);
+        assert.deepEqual(b.imported, { kind: 'screenshot', source_sub: null, ...imp });
+        if (d.post_type === 'news') assert.deepEqual(b.article, { headline: d.title, body: d.body, link: null, source: null });
+      });
+    }
+    await check(`import v3.4 ${tag}: 422 shows "We couldn't find a post or story in that image"`, async () => {
+      await go('askindia');
+      q.push({ status: 422, body: { detail: "We couldn't find a post or story in that image" } });
+      await upload();
+      await page.waitForSelector('#imp-err');
+      assert.equal(await page.locator('#imp-err-msg').textContent(), "We couldn't find a post or story in that image");
+      q.push({ status: 422, body: {} });
+      await page.locator('#imp-retry').click();
+      await page.waitForFunction(() => document.querySelector('#imp-err-msg')?.textContent === "We couldn't find a post or story in that image" && !document.querySelector('#imp-busy'));
+      if (mobile) await page.screenshot({ path: join(shots, `v34-error-422-${tag}.png`) });
+      await noHScroll(page, `v3.4 422 ${tag}`);
+    });
+    await ctx.close();
+  }
+
   // ---------------- thread line + card badge
   {
     const ctx = await newCtx({ viewport: { width: 1440, height: 900 }, colorScheme: 'light' });
@@ -449,7 +515,7 @@ export async function importSuite(T) {
     const base = { ...thread('done', BASE_COMMENTS.slice(0, 4)), post_type: 'ask', sub: 'askindia', article: null, link: null, source: null, op: { type: 'user', name: 'priya_k' },
       title: 'Is it worth moving back to Kochi after 10 years in Bengaluru?', headline: null };
     let T = { ...base, imported: { kind: 'screenshot', source_sub: 'r/india' } };
-    const cards = CARDS.map((c, i) => (i === 1 ? { ...c, imported: { kind: 'screenshot', source_sub: 'r/india' } } : i === 6 ? { ...c, imported: { kind: 'screenshot', source_sub: null } } : { ...c, imported: null }));
+    const cards = CARDS.map((c, i) => (i === 1 ? { ...c, imported: { kind: 'screenshot', source_sub: 'r/india' } } : i === 6 ? { ...c, imported: { kind: 'screenshot', source_sub: null } } : i === 2 ? { ...c, imported: { kind: 'screenshot', source_sub: null, source_kind: 'news', source_label: 'Indian Express' } } : { ...c, imported: null }));
     await mockApi(page, { cards, threadGet: () => ({ status: 200, body: T }), streams: [() => ({ body: sse([['snapshot', T], ['status', { status: 'done', comment_count: 4 }]]) })] });
     await check('import: thread shows "📷 Imported from a screenshot of r/india" under the post', async () => {
       await page.goto(`${BASE}?t=${THREAD_ID}&${Q}`);
@@ -469,6 +535,23 @@ export async function importSuite(T) {
       await page.waitForTimeout(200);
       assert.equal(await page.locator('#post-imported').count(), 0);
     });
+    await check('import v3.4: the thread line names the source by kind', async () => {
+      const LINES = [
+        [{ source_kind: 'news', source_label: 'Indian Express' }, 'Imported from a screenshot of a news article (Indian Express)'],
+        [{ source_kind: 'social', source_label: 'X post' }, 'Imported from a screenshot of an X post'],
+        [{ source_kind: 'chat', source_label: 'WhatsApp forward' }, 'Imported from a screenshot of a WhatsApp forward'],
+        [{ source_kind: 'meme' }, 'Imported from a screenshot of a meme'],
+        [{ source_kind: 'other', source_label: 'Govt notice' }, 'Imported from a screenshot'],
+        [{ source_kind: 'reddit', source_sub: 'r/india', source_label: 'r/india' }, 'Imported from a screenshot of r/india'],
+      ];
+      for (const [imp, line] of LINES) {
+        T = { ...base, imported: { kind: 'screenshot', source_sub: null, ...imp } };
+        await page.goto(`${BASE}?t=${THREAD_ID}&${Q}`);
+        await page.waitForSelector('#post-imported');
+        assert.equal(await page.locator('#post-imported').textContent(), `📷${line}`);
+      }
+      await page.screenshot({ path: join(shots, 'thread-line-v34-1440-light.png') });
+    });
     await check('import: cards show a labelled camera icon only on imported posts', async () => {
       await page.goto(`${BASE}?${Q}`);
       await page.waitForSelector('.home-sec .tcard');
@@ -478,7 +561,9 @@ export async function importSuite(T) {
       assert.equal(await card1.locator('.imp-badge').getAttribute('role'), 'img');
       const flairThenBadge = await card1.locator('.post-meta').evaluate(m => { const f = m.querySelector('.flair'); const b = m.querySelector('.imp-badge'); return !!f && f.nextElementSibling === b; });
       assert.ok(flairThenBadge, 'right after the flair');
-      const others = await page.locator('.tcard:not([data-id="t001"]):not([data-id="t006"]) .imp-badge').count();
+      const news = page.locator('.tcard[data-id="t002"] .imp-badge');
+      assert.equal(await news.getAttribute('aria-label'), 'Imported from a screenshot of a news article (Indian Express)');
+      const others = await page.locator('.tcard:not([data-id="t001"]):not([data-id="t006"]):not([data-id="t002"]) .imp-badge').count();
       assert.equal(others, 0);
       await page.goto(`${BASE}?r=askindia&${Q}`);
       await page.waitForSelector('.tcard[data-id="t006"]');

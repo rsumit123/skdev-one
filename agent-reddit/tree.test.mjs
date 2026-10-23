@@ -958,3 +958,74 @@ test('importedLine: the thread line names the source sub when known', () => {
   assert.equal(importedLine({ kind: 'screenshot', source_sub: null }), 'Imported from a screenshot of a Reddit post');
   assert.equal(importedLine(null), '');
 });
+
+// ---------------------------------------------------------------- v3.4: any screenshot (news, social, chat, meme)
+import { importBannerSource, importFactsNote, importNotesText, FORWARD_NOTE, SOURCE_LABEL_RE } from './tree.js';
+
+test('importedPayload v3.4: source_kind and source_label pass through when valid', () => {
+  assert.deepEqual(importedPayload({ source_sub: null, source_kind: 'news', source_label: 'Indian Express' }),
+    { kind: 'screenshot', source_sub: null, source_kind: 'news', source_label: 'Indian Express' });
+  assert.deepEqual(importedPayload({ source_sub: 'r/india', source_kind: 'reddit', source_label: 'r/india' }),
+    { kind: 'screenshot', source_sub: 'r/india', source_kind: 'reddit', source_label: 'r/india' });
+  assert.deepEqual(importedPayload({ source_kind: 'meme', source_label: null }), { kind: 'screenshot', source_sub: null, source_kind: 'meme' });
+  assert.deepEqual(importedPayload({ source_kind: 'tiktok', source_label: 'x'.repeat(41) }), { kind: 'screenshot', source_sub: null }, 'bad kind and too-long label dropped');
+  assert.deepEqual(importedPayload({ source_kind: 'news', source_label: '<b>@ndtv' }), { kind: 'screenshot', source_sub: null, source_kind: 'news' });
+  assert.deepEqual(importedPayload({ source_kind: 'news', source_label: 'दैनिक भास्कर' }).source_label, 'दैनिक भास्कर');
+  assert.ok(SOURCE_LABEL_RE.test("O'Neil Daily & Co. r/x_y-z") && !SOURCE_LABEL_RE.test('a;b') && !SOURCE_LABEL_RE.test('a\nb'));
+  const st = { type: 'news', author: 'user', headline: 'How much has crime declined?', text: '', handle: 'guest_0042', crowd: 'medium', length: 'normal', limit: 6 };
+  const imp = importedPayload({ source_kind: 'chat', source_label: 'WhatsApp forward' });
+  assert.deepEqual(buildCreateBody({ ...st, imported: imp }).imported, { kind: 'screenshot', source_sub: null, source_kind: 'chat', source_label: 'WhatsApp forward' }, 'buildCreateBody keeps the new keys');
+  assert.deepEqual(buildCreateBody({ ...st, imported: { kind: 'screenshot', source_kind: 'bad', source_label: '<x>' } }).imported, { kind: 'screenshot', source_sub: null }, 'and validates them');
+});
+
+test('importBannerSource: the composer banner names the source by kind', () => {
+  const b = d => `Imported from ${importBannerSource(d)}`;
+  assert.equal(b({ source_kind: 'reddit', source_sub: 'r/india', source_label: 'r/india' }), 'Imported from r/india');
+  assert.equal(b({ source_kind: 'reddit', source_sub: null }), 'Imported from a Reddit post');
+  assert.equal(b({ source_kind: 'news', source_label: 'Indian Express' }), 'Imported from a news screenshot (Indian Express)');
+  assert.equal(b({ source_kind: 'news', source_label: null }), 'Imported from a news screenshot');
+  assert.equal(b({ source_kind: 'social', source_label: 'X post' }), 'Imported from an X post');
+  assert.equal(b({ source_kind: 'social', source_label: 'Instagram post' }), 'Imported from an Instagram post');
+  assert.equal(b({ source_kind: 'social', source_label: 'Threads post' }), 'Imported from a Threads post');
+  assert.equal(b({ source_kind: 'social', source_label: 'Social media post' }), 'Imported from a social media post');
+  assert.equal(b({ source_kind: 'social', source_label: null }), 'Imported from a social media post');
+  assert.equal(b({ source_kind: 'chat', source_label: 'WhatsApp forward' }), 'Imported from a WhatsApp forward');
+  assert.equal(b({ source_kind: 'chat', source_label: 'Forwarded message' }), 'Imported from a forwarded message');
+  assert.equal(b({ source_kind: 'meme', source_label: 'Meme page' }), 'Imported from a meme');
+  assert.equal(b({ source_kind: 'other', source_label: 'Govt notice' }), 'Imported from a screenshot');
+  // v3.3 drafts (no source_kind) read as before
+  assert.equal(b({ source_sub: 'r/india' }), 'Imported from r/india');
+  assert.equal(b({ source_sub: null }), 'Imported from a screenshot');
+  assert.equal(b({ source_kind: 'news', source_label: '<script>' }), 'Imported from a news screenshot', 'invalid label ignored');
+});
+
+test('importedLine v3.4: the thread line names the source by kind', () => {
+  const L = (source_kind, source_label = null, source_sub = null) => importedLine({ kind: 'screenshot', source_sub, source_kind, source_label });
+  assert.equal(L('reddit', 'r/india', 'r/india'), 'Imported from a screenshot of r/india');
+  assert.equal(L('reddit'), 'Imported from a screenshot of a Reddit post');
+  assert.equal(L('news', 'Indian Express'), 'Imported from a screenshot of a news article (Indian Express)');
+  assert.equal(L('news'), 'Imported from a screenshot of a news article');
+  assert.equal(L('social', 'X post'), 'Imported from a screenshot of an X post');
+  assert.equal(L('social'), 'Imported from a screenshot of a social media post');
+  assert.equal(L('chat', 'WhatsApp forward'), 'Imported from a screenshot of a WhatsApp forward');
+  assert.equal(L('chat'), 'Imported from a screenshot of a forwarded message');
+  assert.equal(L('meme'), 'Imported from a screenshot of a meme');
+  assert.equal(L('other', 'Govt notice'), 'Imported from a screenshot');
+  assert.equal(L('weird'), 'Imported from a screenshot of a Reddit post', 'unknown kind: as a v3.3 row');
+});
+
+test('importFactsNote / importNotesText: forwards get the facts note once', () => {
+  assert.equal(FORWARD_NOTE, 'Looks like a forward: check facts before posting');
+  assert.equal(importFactsNote({ source_kind: 'chat' }), FORWARD_NOTE);
+  for (const k of ['reddit', 'news', 'social', 'meme', 'other', undefined]) assert.equal(importFactsNote({ source_kind: k }), null);
+  assert.equal(importNotesText({ source_kind: 'chat', notes: `${FORWARD_NOTE}. Some text was blurry` }), 'Some text was blurry', 'not shown twice');
+  assert.equal(importNotesText({ source_kind: 'chat', notes: FORWARD_NOTE }), null);
+  assert.equal(importNotesText({ source_kind: 'news', notes: 'Title was cut off' }), 'Title was cut off');
+  assert.equal(importNotesText({ notes: null }), null);
+  assert.deepEqual(importHints(FORWARD_NOTE, 'high', 'opinion'), [], 'the facts note marks no field');
+});
+
+test('IMPORT_ERRORS v3.4: the new 422 wording', () => {
+  assert.equal(IMPORT_ERRORS.none, "We couldn't find a post or story in that image");
+  assert.equal(importErrorText({ status: 422, message: 'Request failed (422)' }), "We couldn't find a post or story in that image");
+});

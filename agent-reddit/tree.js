@@ -407,7 +407,8 @@ export function buildCreateBody(st) {
   // v3: the sub the post goes to. The picker sets it; otherwise the post type's sub.
   out.sub = typeof st.sub === 'string' && SUB_SLUG_RE.test(st.sub) ? st.sub : subForType(type);
   // v3.3: only a post that came from a screenshot import carries the key.
-  if (st.imported && typeof st.imported === 'object') out.imported = { kind: 'screenshot', source_sub: st.imported.source_sub ?? null };
+  // v3.4: plus source_kind / source_label when the import read them (validated again here).
+  if (st.imported && typeof st.imported === 'object') out.imported = importedPayload(st.imported);
   return out;
 }
 
@@ -896,9 +897,54 @@ export function mergeReread(current, baseline, next) {
 
 // POST /reddit/threads "imported": source_sub passes through as read ("r/india") or null.
 export const SOURCE_SUB_RE = /^[A-Za-z0-9_/]{1,40}$/;
+// v3.4: source_kind (reddit|news|social|chat|meme|other) and source_label ("Indian Express",
+// "X post"; never a person) ride along when valid; v3.3 drafts keep the old two-key shape.
+export const SOURCE_KINDS = ['reddit', 'news', 'social', 'chat', 'meme', 'other'];
+export const SOURCE_LABEL_RE = /^[\p{L}\p{M}\p{N} _./&'-]{1,40}$/u;
+const kindOf = d => (SOURCE_KINDS.includes(d?.source_kind) ? d.source_kind : null);
+const labelOf = d => (typeof d?.source_label === 'string' && SOURCE_LABEL_RE.test(d.source_label) ? d.source_label : null);
+const subOfImport = d => (typeof d?.source_sub === 'string' && SOURCE_SUB_RE.test(d.source_sub) ? d.source_sub : null);
 export function importedPayload(draft) {
-  const s = typeof draft?.source_sub === 'string' ? draft.source_sub : '';
-  return { kind: 'screenshot', source_sub: SOURCE_SUB_RE.test(s) ? s : null };
+  const out = { kind: 'screenshot', source_sub: subOfImport(draft) };
+  const k = kindOf(draft), l = labelOf(draft);
+  if (k) out.source_kind = k;
+  if (l) out.source_label = l;
+  return out;
+}
+
+// "an X post", "an Instagram post", "a WhatsApp forward"; our generic labels read lower case.
+const GENERIC_LABELS = { 'Social media post': 'social media post', 'Forwarded message': 'forwarded message' };
+function withArticle(label) {
+  const l = GENERIC_LABELS[label] || label;
+  return `${/^(?:[aeiou]|x\b)/i.test(l) ? 'an' : 'a'} ${l}`;
+}
+const rSub = s => (s.startsWith('r/') ? s : `r/${s}`);
+
+// What the composer banner says after "Imported from ": by source kind. Drafts from before
+// source_kind read as before ("r/india", else "a screenshot").
+export function importBannerSource(d) {
+  const sub = subOfImport(d), label = labelOf(d);
+  switch (kindOf(d)) {
+    case 'reddit': return sub ? rSub(sub) : 'a Reddit post';
+    case 'news': return label ? `a news screenshot (${label})` : 'a news screenshot';
+    case 'social': return withArticle(label || 'Social media post');
+    case 'chat': return withArticle(label || 'Forwarded message');
+    case 'meme': return 'a meme';
+    case 'other': return 'a screenshot';
+    default: return sub ? rSub(sub) : 'a screenshot';
+  }
+}
+
+// Forwards carry a fixed facts note (the backend also puts it first in notes).
+export const FORWARD_NOTE = 'Looks like a forward: check facts before posting';
+export function importFactsNote(d) {
+  return kindOf(d) === 'chat' ? FORWARD_NOTE : null;
+}
+// The model's notes without the facts note (shown on its own line).
+export function importNotesText(d) {
+  let n = typeof d?.notes === 'string' ? d.notes.trim() : '';
+  if (n.startsWith(FORWARD_NOTE)) n = n.slice(FORWARD_NOTE.length).replace(/^[.\s]+/, '');
+  return n || null;
 }
 
 // Which fields get an amber "Check this": the ones the notes name, title and body when the
@@ -924,7 +970,7 @@ export function hintField(key, type) {
 export const IMPORT_ERRORS = {
   size: 'That image is too big',
   type: "That doesn't look like an image we can read (PNG, JPEG or WebP)",
-  none: "We couldn't find a Reddit post in that image",
+  none: "We couldn't find a post or story in that image",
   rate: 'Too many imports, try again in a minute',
   fail: "Couldn't read the screenshot right now, try again",
 };
@@ -939,9 +985,18 @@ export function importErrorText(err) {
   return IMPORT_ERRORS.fail;
 }
 
-// "📷 Imported from a screenshot of r/india" (or "of a Reddit post").
+// "📷 Imported from a screenshot of r/india" (or "of a Reddit post"); v3.4 by source kind:
+// "of a news article (Indian Express)", "of an X post", "of a WhatsApp forward", "of a meme".
+// Rows without source_kind came from v3.3, which only imported Reddit posts.
 export function importedLine(imp) {
   if (!imp || typeof imp !== 'object') return '';
-  const s = typeof imp.source_sub === 'string' && SOURCE_SUB_RE.test(imp.source_sub) ? imp.source_sub : '';
-  return `Imported from a screenshot of ${s ? (s.startsWith('r/') ? s : `r/${s}`) : 'a Reddit post'}`;
+  const sub = subOfImport(imp), label = labelOf(imp), pre = 'Imported from a screenshot';
+  switch (kindOf(imp)) {
+    case 'news': return `${pre} of a news article${label ? ` (${label})` : ''}`;
+    case 'social': return `${pre} of ${withArticle(label || 'Social media post')}`;
+    case 'chat': return `${pre} of ${withArticle(label || 'Forwarded message')}`;
+    case 'meme': return `${pre} of a meme`;
+    case 'other': return pre;
+    default: return `${pre} of ${sub ? rSub(sub) : 'a Reddit post'}`;
+  }
 }

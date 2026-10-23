@@ -30,7 +30,7 @@ POST /reddit/import   JSON {"image": "data:image/(png|jpeg|webp);base64,..."}
       "confidence": "high"|"medium"|"low",
       "notes": str|null             // short, e.g. "Title was cut off at the edge"
     }}
- 413 image too large (> 4 MB decoded); 415 not png/jpeg/webp or not decodable; 422 no Reddit post found
+ 413 image too large (> 4 MB decoded); 415 not png/jpeg/webp or not decodable; 422 no Reddit post found (v3.4: no postable content, see below)
  ({"detail": "We couldn't find a Reddit post in that image"}); 429 rate limit (10/hour/IP, 3/min/IP);
  502 model failure ({"detail": "Couldn't read the screenshot right now, try again"}).
 
@@ -55,3 +55,55 @@ Thread and ThreadCard gain "imported": {...}|null.  For news drafts the client s
 - POST includes `imported` (kind screenshot, source_sub).
 - Thread view: a small muted line under the post "📷 Imported from a screenshot of r/india" (or "of a Reddit post" when source_sub is null). Cards: tiny camera icon next to the flair.
 - Tests: pure helpers (draft-to-form mapping, imported payload, downscale target size math), Playwright smoke with the API mocked: file upload, paste event, drag and drop, preview, loading state, fields filled, sub switched, banner, edits kept, Remove import, each error state, posted body includes `imported`, thread line and card icon, mobile + desktop, light + dark, no horizontal scroll.
+
+## v3.4: any screenshot with a postable story (additive)
+
+Why: a user uploaded a phone screenshot of a news infographic ("How Much Has UP's Crime Declined Under Yogi Adityanath", photo plus a chart/table) and got 422 "We couldn't find a Reddit post in that image". Screenshots of news articles, headlines, infographics, X/Threads/Instagram/Facebook posts, WhatsApp forwards and memes are all good post material, so the importer now accepts any screenshot with a story, claim, question, joke or confession in it.
+
+### Contract changes
+```
+POST /reddit/import -> 200 {"draft": {...as before...,
+      "source_kind": "reddit"|"news"|"social"|"chat"|"meme"|"other",
+      "source_label": str|null   // "r/india", "Indian Express", "X post", "WhatsApp forward"; <= 40 chars
+    }}
+ 422 only when there is no usable text (plain photo, blank/unreadable image, app UI with nothing postable):
+ {"detail": "We couldn't find a post or story in that image"}
+
+Model JSON: "has_postable_content" replaces "is_reddit_post" (the old key is still accepted; when both
+are present the new key wins). source_sub stays and is only set for source_kind "reddit".
+
+POST /reddit/threads "imported" gains optional "source_kind" (the enum above) and "source_label"
+(1..40 chars, letters/marks/digits, space and . _ / & - ' only). Thread and ThreadCard return them;
+rows and payloads without them keep exactly the old two-key shape {kind, source_sub}.
+```
+
+### Mapping (the model picks, code enforces)
+| source_kind | what it is | post_type | title / body |
+|---|---|---|---|
+| reddit | a Reddit post | as in v3.3 (poll/ama/joke/confession/opinion/ask/news) | as in v3.3 |
+| news | news article, headline, newspaper cutting, infographic or chart/table with a headline | always news | title = headline as printed (no publication, section or date); body = visible standfirst/first paragraphs, or the key figures of a chart/table in one or two plain sentences, only numbers printed in the image, else null |
+| social | X/Twitter, Threads, Instagram, Facebook, LinkedIn | opinion (claim/take), news (reports an event), joke (humour), ask (question), poll (visible options); anything else falls back to ask if the title ends with "?" else opinion | title = first sentence; body = the rest |
+| chat | WhatsApp/Telegram forward or chat message | opinion or news only (else opinion) | title = first sentence; body = the rest; note "Looks like a forward: check facts before posting" is always put first in notes |
+| meme | meme / captioned image | always joke | title = main caption; body = other captions, one per line |
+| other | anything else with postable text | the model's type, unknown -> ask/opinion | as read |
+
+Kind normalisation: synonyms map in code (article/headline/infographic -> news; x/tweet/twitter/instagram/threads/facebook -> social; whatsapp/forward/telegram -> chat); unknown -> other; a missing kind is reddit when a subreddit is named or the reply uses the old key, else other.
+
+Labels: reddit -> the source_sub; news/meme/other -> the publication or page name, cleaned (allowed characters only, <= 40, never anything with a handle, else null); social and chat -> the platform only, chosen by code ("X post", "Instagram post", "Threads post", "Facebook post", "LinkedIn post", else "Social media post"; "WhatsApp forward", "Telegram forward", else "Forwarded message"), so a person's name can never become a label.
+
+### Privacy (extended)
+- The model is told to omit handles and names of private individuals (tweet authors, forwarders, commenters, reporters' bylines). Publication names, public figures named in the story and headlines are fine.
+- Code, for social and chat: drops author lines ("Name @handle · 2h", a handle alone), signatures ("~ Sunita Aunty") and forward marks ("Forwarded many times"); every remaining u/... or @... handle becomes "someone" (all kinds, as before). If the title was only an author line, it is taken from the text.
+- Untrusted-text / ignore-instructions rules unchanged; a new rule forbids inventing, estimating or computing numbers.
+
+### Frontend wording
+| kind | composer banner | thread line (📷) |
+|---|---|---|
+| reddit | Imported from r/india (or a Reddit post) | Imported from a screenshot of r/india (or of a Reddit post) |
+| news | Imported from a news screenshot (Indian Express) | Imported from a screenshot of a news article (Indian Express) |
+| social | Imported from an X post | Imported from a screenshot of an X post |
+| chat | Imported from a WhatsApp forward, plus an amber "Looks like a forward: check facts before posting" line (not repeated in the notes) | Imported from a screenshot of a WhatsApp forward |
+| meme | Imported from a meme | Imported from a screenshot of a meme |
+| other | Imported from a screenshot | Imported from a screenshot |
+
+Banners end with ". Check the text before posting". Rows/drafts without source_kind (v3.3) read as before. The import card line is "Got a screenshot of a Reddit post, news article, tweet or forward? We'll turn it into a post you can edit"; the 422 message is the server's new detail (fallback text is the same). Review-before-posting, hints, re-read, remove and privacy behaviour are unchanged. The card camera icon's label uses the thread line.

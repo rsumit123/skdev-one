@@ -11,7 +11,7 @@ import {
   CROWDS, LENGTHS, LIMIT_RANGE, DEFAULT_LIMIT, validateCreate, buildCreateBody, validHandle,
   validSlug, subForType, typeForSub, CONFESSION_RANGE,
   IMPORT_TIMEOUT_MS, importFileProblem, draftToForm, remapFields, mergeReread, dirtyFields, importedPayload,
-  importHints, hintField, importErrorText, IMPORT_ERRORS, emptyFields,
+  importHints, hintField, importErrorText, IMPORT_ERRORS, emptyFields, importBannerSource, importFactsNote, importNotesText,
 } from '/agent-reddit/tree.js';
 import { prepareImage, openViewer, closeViewer } from '/agent-reddit/shot.js';
 import { REG, loadSubs, onSubs, sub as subOfSlug, subIcon } from '/agent-reddit/subs.js';
@@ -1188,7 +1188,7 @@ function renderImport() {
         h('span', { class: 'imp-ic', 'aria-hidden': 'true' }, ICONS.camera()),
         h('span', { class: 'imp-text' },
           h('strong', { class: 'imp-h', text: 'Import from screenshot' }),
-          h('span', { class: 'imp-sub', id: 'imp-sub', text: "Got a Reddit screenshot? We'll turn it into a post you can edit" }),
+          h('span', { class: 'imp-sub', id: 'imp-sub', text: "Got a screenshot of a Reddit post, news article, tweet or forward? We'll turn it into a post you can edit" }),
           h('span', { class: 'imp-desk', text: `or paste it (${isMac() ? '⌘V' : 'Ctrl+V'}) or drop it here` })),
         h('span', { class: 'imp-cta', 'aria-hidden': 'true', text: 'Choose image' })),
       h('span', { class: 'imp-drop-msg', 'aria-hidden': 'true', text: 'Drop the screenshot to import it' }),
@@ -1213,15 +1213,16 @@ function renderImport() {
     }
     if (imp.draft && !reading) {
       const d = imp.draft;
-      const src = typeof d.source_sub === 'string' && d.source_sub ? d.source_sub : null;
       const conf = CONF_LABEL[d.confidence] ? d.confidence : 'medium';
+      const facts = importFactsNote(d), notes = importNotesText(d);
       parts.push(h('div', { class: 'imp-banner', id: 'imp-banner', role: 'status' },
         h('p', { class: 'imp-done-h' },
           h('span', { class: 'imp-ok', 'aria-hidden': 'true' }, ICONS.camera()),
-          h('strong', { id: 'imp-banner-text', text: src ? `Imported from ${src}. Check the text before posting` : 'Imported from a screenshot. Check the text before posting' })),
+          h('strong', { id: 'imp-banner-text', text: `Imported from ${importBannerSource(d)}. Check the text before posting` })),
+        facts ? h('p', { class: 'imp-facts', id: 'imp-facts', text: facts }) : null,
         h('p', { class: 'imp-meta' },
           h('span', { class: `imp-conf conf-${conf}`, id: 'imp-conf', text: CONF_LABEL[conf] }),
-          d.notes ? h('span', { class: 'imp-notes', id: 'imp-notes', text: d.notes }) : null),
+          notes ? h('span', { class: 'imp-notes', id: 'imp-notes', text: notes }) : null),
         h('div', { class: 'imp-actions' },
           imp.dataUrl ? h('button', { class: 'btn btn-outline btn-sm', type: 'button', id: 'imp-reread', on: { click: () => sendImport() } }, ICONS.retry(), 'Re-read screenshot') : null,
           h('button', { class: 'btn btn-text btn-sm', type: 'button', id: 'imp-remove', text: 'Remove import', on: { click: removeImport } })),
