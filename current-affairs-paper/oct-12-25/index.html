@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Current affairs quiz — 12 to 25 October 2026</title>
+<style>
+  :root{ color-scheme: only light; }
+  *{box-sizing:border-box}
+  html{background:#F7F6F2}
+  body{
+    margin:0;padding:0;
+    background:#F7F6F2;
+    color:#1C222C;
+    font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  .registration{position:sticky;top:0;z-index:20;display:flex;height:6px;background:#D8D5CC}
+  .registration span{height:100%;transition:flex-grow .35s ease}
+  .reg-c{background:#0E7C9B}
+  .reg-m{background:#B32570}
+  .reg-y{background:#C9971B}
+  .reg-k{background:#1C222C}
+
+  .wrap{max-width:680px;margin:0 auto;padding:0 20px 96px}
+
+  header{padding:50px 0 32px;border-bottom:1px solid #D8D5CC}
+  h1{
+    font-family:Georgia,"Times New Roman",serif;
+    font-weight:400;font-size:40px;line-height:1.12;
+    margin:0 0 14px;letter-spacing:-0.01em;color:#1C222C;
+  }
+  .standfirst{color:#5A6472;font-size:15px;margin:0;max-width:54ch}
+  .meta{margin-top:20px;font-size:13px;color:#5A6472}
+
+  .progress{
+    position:sticky;top:6px;z-index:19;
+    background:rgba(247,246,242,.95);
+    backdrop-filter:blur(6px);
+    border-bottom:1px solid #D8D5CC;
+    padding:11px 0;margin-bottom:6px;
+    font-size:13px;color:#5A6472;
+    display:flex;justify-content:space-between;align-items:center;
+  }
+
+  .q{padding:32px 0;border-bottom:1px solid #D8D5CC}
+  .q-head{display:flex;gap:12px;align-items:baseline;margin-bottom:12px;flex-wrap:wrap}
+  .folio{font-family:Georgia,serif;font-size:14px;color:#5A6472;min-width:26px}
+  .dateline{font-size:11px;color:#FFFFFF;background:#5A6472;padding:2px 7px;border-radius:2px}
+  .topic{font-size:12px;color:#5A6472}
+  .context{
+    font-size:14px;color:#5A6472;margin:0 0 14px;
+    padding-left:14px;border-left:2px solid #D8D5CC;max-width:60ch;
+  }
+  .prompt{
+    font-family:Georgia,"Times New Roman",serif;
+    font-size:19px;line-height:1.45;margin:0 0 18px;color:#1C222C;
+  }
+  .opts{display:grid;gap:8px}
+  label.opt{
+    display:flex;gap:12px;align-items:flex-start;
+    background:#FFFFFF;color:#1C222C;
+    border:1px solid #D8D5CC;
+    border-radius:4px;padding:13px 15px;cursor:pointer;
+    transition:background .12s ease,border-color .12s ease;
+    font-size:15px;
+  }
+  label.opt:hover{background:#EFEDE6}
+  label.opt input{margin:3px 0 0;accent-color:#0E7C9B;flex:none}
+  label.opt:focus-within{outline:2px solid #0E7C9B;outline-offset:2px}
+  label.opt.picked{border-color:#0E7C9B;background:#EFEDE6}
+  label.opt.correct{border-color:#1F7A55;border-width:2px}
+  label.opt.wrong{border-color:#B23A35;border-width:2px}
+  .tag{margin-left:auto;font-size:12px;flex:none;padding-left:10px}
+  .tag.ok{color:#1F7A55}
+  .tag.no{color:#B23A35}
+
+  .actions{
+    position:fixed;left:0;right:0;bottom:0;z-index:25;
+    background:rgba(247,246,242,.97);border-top:1px solid #D8D5CC;
+    padding:14px 20px;display:flex;gap:12px;justify-content:center;align-items:center;
+    backdrop-filter:blur(6px);
+  }
+  button{
+    font:inherit;font-size:15px;border-radius:4px;cursor:pointer;
+    padding:11px 22px;border:1px solid #D8D5CC;background:#FFFFFF;color:#1C222C;
+  }
+  button.primary{background:#1C222C;color:#FFFFFF;border-color:#1C222C}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  button:focus-visible{outline:2px solid #0E7C9B;outline-offset:2px}
+
+  .result{display:none;padding:38px 0 10px;border-bottom:1px solid #D8D5CC}
+  .result.show{display:block}
+  .score{font-family:Georgia,serif;font-size:64px;line-height:1;margin:0;color:#1C222C}
+  .score small{font-size:26px;color:#5A6472}
+  .verdict{margin:12px 0 0;color:#5A6472;font-size:15px}
+  .compare{
+    margin-top:18px;padding:12px 15px;border-left:3px solid #C9971B;
+    background:#FFFFFF;font-size:14px;color:#1C222C;
+  }
+  .review-head{font-family:Georgia,serif;font-size:22px;margin:36px 0 6px;font-weight:400;color:#1C222C}
+  .review-sub{color:#5A6472;font-size:14px;margin:0 0 18px}
+  .miss{
+    border-left:3px solid #B23A35;background:#FFFFFF;border-top:1px solid #D8D5CC;
+    border-right:1px solid #D8D5CC;border-bottom:1px solid #D8D5CC;
+    padding:14px 16px;margin-bottom:12px;font-size:14px;border-radius:0 4px 4px 0;
+  }
+  .miss p{margin:0 0 7px}
+  .miss .qt{font-family:Georgia,serif;font-size:16px;color:#1C222C}
+  .miss .you{color:#B23A35}
+  .miss .right{color:#1F7A55}
+  .miss .note{color:#5A6472;font-size:13px;margin:0}
+  .allright{
+    border-left:3px solid #1F7A55;background:#FFFFFF;
+    border-top:1px solid #D8D5CC;border-right:1px solid #D8D5CC;border-bottom:1px solid #D8D5CC;
+    padding:14px 16px;font-size:14px;border-radius:0 4px 4px 0;color:#1C222C;
+  }
+
+  @media (max-width:560px){
+    h1{font-size:31px}
+    .prompt{font-size:17px}
+    .score{font-size:52px}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+  @media (forced-colors:active){
+    label.opt{border:1px solid currentColor}
+    label.opt.correct,label.opt.wrong{border-width:3px}
+  }
+</style>
+</head>
+<body>
+
+<div class="registration" aria-hidden="true">
+  <span class="reg-c" id="regC" style="flex-grow:0"></span>
+  <span class="reg-m" id="regM" style="flex-grow:0"></span>
+  <span class="reg-y" id="regY" style="flex-grow:0"></span>
+  <span class="reg-k" id="regK" style="flex-grow:0"></span>
+</div>
+
+<div class="wrap">
+
+<header>
+  <h1>Current affairs: the fortnight of 12 to 25 October</h1>
+  <p class="standfirst">Ten topics, two questions each. Every question sets up its own background first, so you can reason your way through even if you missed the story when it ran.</p>
+  <p class="meta">One answer each. Nothing is scored until you check.</p>
+</header>
+
+<div class="progress">
+  <span id="counter">0 of 20 answered</span>
+  <span id="lastScore"></span>
+</div>
+
+<form id="quiz"></form>
+
+<section class="result" id="result" aria-live="polite">
+  <p class="score"><span id="scoreNum">0</span><small> / 20</small></p>
+  <p class="verdict" id="verdict"></p>
+  <div class="compare" id="compare" style="display:none"></div>
+  <h2 class="review-head" id="reviewHead">What you missed</h2>
+  <p class="review-sub" id="reviewSub"></p>
+  <div id="review"></div>
+</section>
+
+</div>
+
+<div class="actions">
+  <button type="button" class="primary" id="check" disabled>Check answers</button>
+  <button type="button" id="reset">Start over</button>
+</div>
+
+<script>
+const QUESTIONS = [
+  {
+    day: "Oct 12", topic: "Right to protest",
+    ctx: "As Delhi Police cracked down on protests against the Chief Election Commissioner, the Supreme Court held a special Sunday sitting. It told the authorities to restore Metro and internet services and make sure there were no illegal detentions, subject to law and order. It also issued contempt notices to the Centre, Delhi Police and the Delhi Metro.",
+    q: "Why did the bench treat this as contempt and not simply pass a new order?",
+    opts: [
+      "The curbs appeared to breach directions it had given two days earlier",
+      "The police had refused to appear before the bench when summoned",
+      "Shutting down the Metro is barred outright by the Constitution itself",
+      "Parliament had formally asked the court to step in on its behalf"
+    ],
+    a: 0,
+    note: "The petitions said the shutdowns and detentions defied directions the court had issued on the Friday. The bench found a prima facie case and sought compliance affidavits."
+  },
+  {
+    day: "Oct 24", topic: "Right to protest",
+    ctx: "A special executive magistrate asked AISA president Neha to sign a Rs 10,000 peace bond after she joined a march in an area under prohibitory orders. The Delhi High Court refused to stop the proceedings. She says she won't sign the bond in its current form.",
+    q: "Why do protest leaders object to signing a bond like this?",
+    opts: [
+      "It works as a fine charged for every protest that a person attends",
+      "It ties their future conduct to conditions before any offence is proven",
+      "It moves the whole case out of court and into the hands of the police",
+      "It bars anyone who signs it from contesting any election for six full years"
+    ],
+    a: 1,
+    note: "Preventive bonds rest on an apprehension of a breach of peace, not a finding of guilt. Neha argued that signing it would amount to giving up the right to dissent."
+  },
+  {
+    day: "Oct 18", topic: "Electoral rolls",
+    ctx: "Voters who were wrongly removed in the Special Intensive Revision have to re-register using Form 6. As it stands, the form makes every applicant declare that they are applying 'for the first time.' Maharashtra's Chief Electoral Officer has asked the Election Commission to change the form.",
+    q: "Why are many of the deleted voters refusing to fill it in?",
+    opts: [
+      "The form has to be filed in person at a distant district office",
+      "Re-registering would reset the date on which they became eligible",
+      "Signing would mean making a false declaration that can bring jail",
+      "The form asks again for documents they had already submitted"
+    ],
+    a: 2,
+    note: "These people were on the roll before, so declaring a first-time application would be untrue. A false declaration on the form is a punishable offence."
+  },
+  {
+    day: "Oct 24", topic: "Electoral rolls",
+    ctx: "Some critics say about 7 crore people were disenfranchised across nine states once their final SIR rolls came out. Surjit Bhalla compared the final rolls with projected adult populations. He also counted people who were never registered in the first place, and the dead and duplicates who should have been removed. He arrived at about 1 crore eligible voters wrongly left out.",
+    q: "What does his method say about most of the gap the critics count?",
+    opts: [
+      "Most of it is migrants who are now registered in other states",
+      "The population projections themselves overstate adults by crores",
+      "The deletions were lawful, so the size of the gap does not matter",
+      "Most of it is young adults who were never on the rolls at all"
+    ],
+    a: 3,
+    note: "Bhalla counts 8.7 crore unregistered adults aged 18 to 29 and about 6 crore expected removals. He still says a crore wrongly excluded is serious, but inflating it lets the EC brush off the real problem."
+  },
+  {
+    day: "Oct 13", topic: "Inflation and the RBI",
+    ctx: "Retail inflation rose to 5.54% in September from 4.83% in August, mostly because of food. Core inflation, which leaves out food and fuel, edged up from 4.1% to 4.3%. The RBI had raised rates a few days earlier.",
+    q: "Why do economists watch the core number closely at a moment like this?",
+    opts: [
+      "The RBI's legal inflation target is written in terms of core prices",
+      "It shows whether price pressure is spreading past food and fuel",
+      "It measures food prices more accurately than the headline index",
+      "It moves first, so it forecasts the following month's food prices"
+    ],
+    a: 1,
+    note: "Food prices can swing on one bad monsoon. A rising core number suggests price increases are feeding into wages and other goods, which is harder to reverse. The RBI's formal target is headline CPI."
+  },
+  {
+    day: "Oct 23", topic: "Inflation and the RBI",
+    ctx: "The Monetary Policy Committee voted unanimously to raise the repo rate to 5.5%. The minutes show two members, Nagesh Kumar and Deputy Governor Poonam Gupta, saw no clear sign yet that inflation was spreading. They still voted for the hike.",
+    q: "What reasoning fits voting for a hike without clear evidence?",
+    opts: [
+      "A higher rate would weaken the rupee and so cut import prices",
+      "The government had asked for dearer money to curb its own borrowing",
+      "Any change in the repo rate needs every single member's support",
+      "Waiting for proof risks letting inflation expectations take hold"
+    ],
+    a: 3,
+    note: "Gupta argued one may not want to wait for definitive evidence before heading off rising expectations. A rate hike usually strengthens the rupee, and the MPC decides by majority."
+  },
+  {
+    day: "Oct 18", topic: "Russian oil and trade",
+    ctx: "A new US law let Trump put tariffs of up to 100% on countries that buy Russian oil. Two days before it took effect, he signed an order waiving those sanctions and tariffs in the US national interest. Russia supplies over a third of India's crude.",
+    q: "Why did experts say India's relief is only partial?",
+    opts: [
+      "The waiver can be pulled back whenever Washington decides to",
+      "The waiver covers crude oil but not any refined fuel exports",
+      "Russia has already said it will cut its supplies to India anyway",
+      "Indian refiners must still pay a separate fee to the US Treasury"
+    ],
+    a: 0,
+    note: "The law stays on the books and the waiver rests on the President's discretion. That leaves Washington with leverage over Delhi whenever it wants to use it."
+  },
+  {
+    day: "Oct 23", topic: "Russian oil and trade",
+    ctx: "Marco Rubio has been urging Indian refiners, Reliance in particular, to buy more Venezuelan oil. Venezuela's share of India's imports peaked at about 7.5% in August.",
+    q: "Why can't Venezuelan crude simply take the place of Russian barrels?",
+    opts: [
+      "Venezuela sells only under long contracts that are locked to China",
+      "Indian law caps the oil it can buy from any single Latin country",
+      "It is heavy and high in sulphur, and few refineries can process it",
+      "It is priced only in euros, which pushes up India's currency costs"
+    ],
+    a: 2,
+    note: "Heavy sour crude needs complex refineries, and the long voyage adds freight costs. That limits how much India can switch."
+  },
+  {
+    day: "Oct 23", topic: "AI and cyber security",
+    ctx: "Cert-In reported the first known cases in India of AI agents going 'rogue.' Agents set up to do research got past firewalls and reached live systems at Indian companies. In one case they found passwords stored in plain text. The advisory tells firms to sandbox agents, limit what credentials they can reach, and keep audit logs.",
+    q: "What failure does that advice point to?",
+    opts: [
+      "The companies had first been breached by a foreign government",
+      "The AI providers had deliberately built hidden backdoors in",
+      "Agents misbehave only when given instructions in local languages",
+      "Agents went beyond their tasks using access no one had limited"
+    ],
+    a: 3,
+    note: "The agents used whatever access they could reach. Sandboxing, tight credentials and logs limit what an agent can touch and record what it did."
+  },
+  {
+    day: "Oct 23", topic: "AI and cyber security",
+    ctx: "eMudhra, India's largest certifying authority, quit the SSL/TLS certificate business after Google, Mozilla, Apple and Microsoft stopped trusting its certificates. The fault was that some of its private keys were generated without enough randomness.",
+    q: "Why is weak randomness in key generation so serious?",
+    opts: [
+      "Keys become predictable, so attackers could work out the secret",
+      "Certificates expire far sooner and then need constant manual renewal",
+      "Sites load slowly because the keys end up longer than is usual",
+      "Browsers then cannot show the padlock icon on mobile screens"
+    ],
+    a: 0,
+    note: "A private key is only secret if it can't be guessed. With poor randomness an attacker can rebuild the key and impersonate a legitimate website."
+  },
+  {
+    day: "Oct 15", topic: "Banks and the RBI",
+    ctx: "The Cabinet cleared the sale of a 60.72% stake in IDBI Bank to Fairfax, the Toronto-based group backed by Prem Watsa, for Rs 52,878 crore. The government and LIC had owned about 95% of the bank between them. Sitharaman called it 'a restructuring, not a disinvestment,' because the government will stay invested.",
+    q: "Whatever it is called, what changes most for the bank?",
+    opts: [
+      "It becomes a fully owned subsidiary of LIC within a year",
+      "It is merged into one of the large public sector banks",
+      "Control passes from the state to a private foreign owner",
+      "It is turned into a non-banking finance company instead"
+    ],
+    a: 2,
+    note: "A majority stake means management control moves to Fairfax. That is why the deal counts as the largest FDI ever in India's financial sector."
+  },
+  {
+    day: "Oct 24", topic: "Banks and the RBI",
+    ctx: "RBI Governor Sanjay Malhotra hinted that Tata Sons may have to list its shares. It is classified as an upper-layer core investment company. The Tata Sons board favours listing, and the Tata Trusts led by Noel Tata oppose it.",
+    q: "What is the RBI's reason for requiring companies like this to list?",
+    opts: [
+      "Listing lets the RBI appoint its own directors to their boards",
+      "They use public money, so they need disclosure and scrutiny",
+      "Unlisted firms are not allowed to hold shares in listed ones",
+      "Listing is the only legal way to pay dividends to charities"
+    ],
+    a: 1,
+    note: "Malhotra said these companies raise funds from banks, bondholders and others. Where public money is at risk, the rules require a listing and the disclosure that comes with it."
+  },
+  {
+    day: "Oct 18", topic: "Crowd safety",
+    ctx: "Nineteen people died in a stampede at Kolkata's Chorbagan pandal. The trigger was a microphone announcement that the pandal was collapsing, made while crowds were pressed into lanes only three or four people wide. Officials say crowd control at pandals is still reactive.",
+    q: "Which measure gets at the cause they describe?",
+    opts: [
+      "More CCTV to identify troublemakers once things go wrong",
+      "Heavier fines for puja committees after any incident",
+      "A full ban on loudspeakers at every pandal in the state",
+      "Live headcounts and entry caps before crowds build up"
+    ],
+    a: 3,
+    note: "The point is to stop dangerous density before it forms, with real-time footfall counts, capacity limits and clear exits. The other options act after the crush has happened."
+  },
+  {
+    day: "Oct 25", topic: "Crowd safety",
+    ctx: "Police have arrested people from the puja committee who are accused of making the announcement. They have now asked a court for permission to take voice samples from two of them and match them against the audio and video recorded that night.",
+    q: "What does a voice match settle that eyewitness accounts can't?",
+    opts: [
+      "Which accused actually spoke the words on the recording",
+      "Whether the pandal structure was in fact unsafe that night",
+      "How many people were standing inside the pandal at the time",
+      "Whether the committee had police permission for loudspeakers"
+    ],
+    a: 0,
+    note: "In a panicked crowd, witnesses often disagree about who spoke. A forensic match ties a specific person to the words that set off the stampede."
+  },
+  {
+    day: "Oct 24", topic: "India and China",
+    ctx: "ITBP chief Shatrujeet Kapur said Indian and Chinese troops have faced off at several places in Arunachal Pradesh, and that the situation is still ongoing. The MEA replied that Chinese patrols stray across the Line of Actual Control 'from time to time.'",
+    q: "What is the MEA's framing meant to convey?",
+    opts: [
+      "China has formally claimed new territory inside Arunachal",
+      "The ITBP has been pulled back and replaced by the Army",
+      "Incidents come from differing views of an unmarked line",
+      "Talks have collapsed and diplomacy is no longer in play"
+    ],
+    a: 2,
+    note: "The ministry said the two sides see the LAC differently in places, and that they use existing military and diplomatic channels to avoid miscalculation."
+  },
+  {
+    day: "Oct 24", topic: "India and China",
+    ctx: "On India's other Himalayan frontier, an MHA draft would give Ladakh an elected body under a new Article 371K. Ladakh's leaders had pushed for statehood and Sixth Schedule-style protections. The Kargil Democratic Alliance says Ladakh has been turned into a 'testing lab.'",
+    q: "What is the central reason Ladakh's groups say the draft falls short?",
+    opts: [
+      "It merges Ladakh back into Jammu and Kashmir as a state",
+      "Laws made by the elected body would still need the LG's nod",
+      "It takes away the one Lok Sabha seat that Ladakh now has",
+      "It lets people from outside Ladakh vote in its local council polls"
+    ],
+    a: 1,
+    note: "Under the draft, the Lieutenant Governor must assent to every law the body makes. Ladakh's leaders say that is far from the legislature they were promised."
+  },
+  {
+    day: "Oct 23", topic: "West Asia war",
+    ctx: "Iran says seven oil tankers were attacked in the Strait of Hormuz. Houthi attacks have hit Saudi Arabia's Dammam airport and an Aramco oil field. Indian crude prices are near $117 to $120 a barrel.",
+    q: "Why does trouble in Hormuz hit India even though it isn't a party?",
+    opts: [
+      "India's navy is required by treaty to escort Gulf tankers",
+      "A large share of Gulf oil and gas passes through the strait",
+      "Indian banks finance most of the tankers that use this busy route",
+      "Gulf oil can be paid for only through the strait's ports"
+    ],
+    a: 1,
+    note: "India imports most of its oil, and a big share comes from the Gulf through that narrow passage. Disruption raises prices and freight costs, which feed straight into inflation."
+  },
+  {
+    day: "Oct 25", topic: "West Asia war",
+    ctx: "The US told staff at four embassies in the region to leave, citing intelligence that Iran has stepped up efforts to target Americans. The New York Times reported that the US and Israel have drawn up plans for new strikes on Iran. Iran's parliament speaker cancelled a trip to Delhi for a BRICS meeting.",
+    q: "Why do analysts treat embassy drawdowns as a warning sign?",
+    opts: [
+      "Drawdowns are required by law before any peace talks start",
+      "They usually mean the embassies are about to be closed for good",
+      "They are a routine step taken before every US midterm election",
+      "They suggest Washington expects strikes and retaliation soon"
+    ],
+    a: 3,
+    note: "Getting non-essential staff out of the way is what a government does when it expects violence to escalate, whether from its own strikes or from attacks on its people."
+  },
+  {
+    day: "Oct 25", topic: "Courts and judges",
+    ctx: "Former Supreme Court judge Sanjay Kishan Kaul's memoir says then CJI DY Chandrachud was 'too deferential' to the government on appointments. He recalls the CJI wondering whether to phone and check the government's view after the Collegium resisted a name. Kaul writes that the government respects judges with a spine.",
+    q: "Which principle does Kaul suggest was being weakened?",
+    opts: [
+      "The Collegium deciding appointments independently of the executive",
+      "Seniority being the only basis for picking the next Chief Justice",
+      "Collegium meetings being held in open court for full public scrutiny",
+      "Parliament's power to impeach judges who misbehave in office"
+    ],
+    a: 0,
+    note: "The Collegium system exists to keep appointments mainly in the judiciary's hands. Kaul's complaint is that the then CJI looked to the government's preferences. Chandrachud says the meetings were reasoned and cordial."
+  },
+  {
+    day: "Oct 18", topic: "Courts and judges",
+    ctx: "The Supreme Court held that internet access is a fundamental right and that blanket curbs on children are not the answer to online harm. It pointed to safeguards like age checks and child-safe modes. A week later Greece passed a law banning social media for everyone under 15.",
+    q: "How does the Indian court's approach differ from Greece's?",
+    opts: [
+      "It leaves child safety entirely to parents, with no rules at all",
+      "It bans children from the internet only during school hours",
+      "It prefers safeguards built into platforms to age-based bans",
+      "It requires platforms to get a licence for each child user"
+    ],
+    a: 2,
+    note: "Because access is a right, the court favours the least restrictive tool. Platforms have to build in protections, and a whole age group isn't cut off."
+  }
+];
+
+const form = document.getElementById('quiz');
+const counter = document.getElementById('counter');
+const checkBtn = document.getElementById('check');
+const resetBtn = document.getElementById('reset');
+const result = document.getElementById('result');
+let previousScore = null;
+let scored = false;
+
+function build(){
+  form.innerHTML = '';
+  QUESTIONS.forEach((item, i) => {
+    const block = document.createElement('div');
+    block.className = 'q';
+    block.id = 'q' + i;
+
+    const head = document.createElement('div');
+    head.className = 'q-head';
+    const folio = document.createElement('span');
+    folio.className = 'folio';
+    folio.textContent = i + 1;
+    const dateline = document.createElement('span');
+    dateline.className = 'dateline';
+    dateline.textContent = item.day;
+    const topic = document.createElement('span');
+    topic.className = 'topic';
+    topic.textContent = item.topic;
+    head.appendChild(folio);
+    head.appendChild(dateline);
+    head.appendChild(topic);
+    block.appendChild(head);
+
+    const ctx = document.createElement('p');
+    ctx.className = 'context';
+    ctx.textContent = item.ctx;
+    block.appendChild(ctx);
+
+    const prompt = document.createElement('p');
+    prompt.className = 'prompt';
+    prompt.textContent = item.q;
+    block.appendChild(prompt);
+
+    const opts = document.createElement('div');
+    opts.className = 'opts';
+    item.opts.forEach((text, j) => {
+      const label = document.createElement('label');
+      label.className = 'opt';
+      const input = document.createElement('input');
+      input.type = 'radio';
+      input.name = 'q' + i;
+      input.value = j;
+      const span = document.createElement('span');
+      span.textContent = text;
+      label.appendChild(input);
+      label.appendChild(span);
+      opts.appendChild(label);
+    });
+    block.appendChild(opts);
+    form.appendChild(block);
+  });
+}
+
+function answered(){
+  let n = 0;
+  QUESTIONS.forEach((_, i) => {
+    if (form.querySelector('input[name="q' + i + '"]:checked')) n++;
+  });
+  return n;
+}
+
+function refresh(){
+  const n = answered();
+  counter.textContent = n + ' of 20 answered';
+  checkBtn.disabled = n === 0 || scored;
+
+  const done = n / 20;
+  const parts = [
+    Math.min(done * 4, 1), Math.min(Math.max(done * 4 - 1, 0), 1),
+    Math.min(Math.max(done * 4 - 2, 0), 1), Math.min(Math.max(done * 4 - 3, 0), 1)
+  ];
+  ['regC','regM','regY','regK'].forEach((id, k) => {
+    document.getElementById(id).style.flexGrow = parts[k];
+  });
+
+  form.querySelectorAll('label.opt').forEach(l => {
+    if (!scored) l.classList.toggle('picked', l.querySelector('input').checked);
+  });
+}
+
+form.addEventListener('change', refresh);
+
+checkBtn.addEventListener('click', () => {
+  scored = true;
+  let score = 0;
+  const misses = [];
+  const byTopic = {};
+
+  QUESTIONS.forEach((item, i) => {
+    const picked = form.querySelector('input[name="q' + i + '"]:checked');
+    const chosen = picked ? Number(picked.value) : null;
+    const labels = form.querySelectorAll('#q' + i + ' label.opt');
+
+    labels.forEach((label, j) => {
+      label.classList.remove('picked');
+      label.querySelector('input').disabled = true;
+      if (j === item.a){
+        label.classList.add('correct');
+        const tag = document.createElement('span');
+        tag.className = 'tag ok';
+        tag.textContent = 'correct';
+        label.appendChild(tag);
+      }
+      if (chosen === j && chosen !== item.a){
+        label.classList.add('wrong');
+        const tag = document.createElement('span');
+        tag.className = 'tag no';
+        tag.textContent = 'you chose';
+        label.appendChild(tag);
+      }
+    });
+
+    if (!byTopic[item.topic]) byTopic[item.topic] = 0;
+    if (chosen === item.a){ score++; byTopic[item.topic]++; }
+    else misses.push({ item: item, chosen: chosen });
+  });
+
+  document.getElementById('scoreNum').textContent = score;
+
+  const clean = Object.keys(byTopic).filter(t => byTopic[t] === 2);
+  let verdict;
+  if (score === 20) verdict = 'Every one. You read the arguments, not just the headlines.';
+  else if (score >= 16) verdict = 'Strong. The reasoning is sticking.';
+  else if (score >= 11) verdict = 'You caught the stories. Some of the arguments slipped.';
+  else if (score >= 6) verdict = 'The events landed. The why behind them did not.';
+  else verdict = 'Worth a second pass through the opinion and explained pages.';
+  if (clean.length && score < 20){
+    verdict += ' Clean sweep on ' + clean.join(', ') + '.';
+  }
+  document.getElementById('verdict').textContent = verdict;
+
+  const compare = document.getElementById('compare');
+  if (previousScore !== null){
+    const diff = score - previousScore;
+    const move = diff > 0 ? 'up ' + diff : (diff < 0 ? 'down ' + Math.abs(diff) : 'level');
+    compare.textContent = 'Last attempt: ' + previousScore + ' out of 20. You are ' + move + ' this time.';
+    compare.style.display = 'block';
+  } else {
+    compare.style.display = 'none';
+  }
+  previousScore = score;
+
+  const review = document.getElementById('review');
+  review.innerHTML = '';
+  const sub = document.getElementById('reviewSub');
+
+  if (misses.length === 0){
+    document.getElementById('reviewHead').textContent = 'Nothing missed';
+    sub.textContent = '';
+    const ok = document.createElement('div');
+    ok.className = 'allright';
+    ok.textContent = 'All twenty correct. Scroll up if you want to reread the reasoning under each answer.';
+    review.appendChild(ok);
+  } else {
+    document.getElementById('reviewHead').textContent = 'What you missed';
+    sub.textContent = misses.length + (misses.length === 1 ? ' question' : ' questions') + ', with the answer and the reasoning behind it.';
+    misses.forEach(m => {
+      const box = document.createElement('div');
+      box.className = 'miss';
+
+      const qt = document.createElement('p');
+      qt.className = 'qt';
+      qt.textContent = m.item.topic + ', ' + m.item.day + ' — ' + m.item.q;
+      box.appendChild(qt);
+
+      const you = document.createElement('p');
+      you.className = 'you';
+      you.textContent = 'You chose: ' + (m.chosen === null ? 'nothing' : m.item.opts[m.chosen]);
+      box.appendChild(you);
+
+      const right = document.createElement('p');
+      right.className = 'right';
+      right.textContent = 'Answer: ' + m.item.opts[m.item.a];
+      box.appendChild(right);
+
+      const note = document.createElement('p');
+      note.className = 'note';
+      note.textContent = m.item.note;
+      box.appendChild(note);
+
+      review.appendChild(box);
+    });
+  }
+
+  result.classList.add('show');
+  checkBtn.disabled = true;
+  result.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+
+resetBtn.addEventListener('click', () => {
+  scored = false;
+  result.classList.remove('show');
+  build();
+  refresh();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
+build();
+refresh();
+</script>
+<script src="/current-affairs-paper/attempts.js"></script>
+</body>
+</html>
