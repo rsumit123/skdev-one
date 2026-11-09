@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Current affairs quiz — 3 to 8 November 2026</title>
+<style>
+  :root{ color-scheme: only light; }
+  *{box-sizing:border-box}
+  html{background:#F7F6F2}
+  body{
+    margin:0;padding:0;
+    background:#F7F6F2;
+    color:#1C222C;
+    font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  .registration{position:sticky;top:0;z-index:20;display:flex;height:6px;background:#D8D5CC}
+  .registration span{height:100%;transition:flex-grow .35s ease}
+  .reg-c{background:#0E7C9B}
+  .reg-m{background:#B32570}
+  .reg-y{background:#C9971B}
+  .reg-k{background:#1C222C}
+
+  .wrap{max-width:680px;margin:0 auto;padding:0 20px 96px}
+
+  header{padding:50px 0 32px;border-bottom:1px solid #D8D5CC}
+  h1{
+    font-family:Georgia,"Times New Roman",serif;
+    font-weight:400;font-size:40px;line-height:1.12;
+    margin:0 0 14px;letter-spacing:-0.01em;color:#1C222C;
+  }
+  .standfirst{color:#5A6472;font-size:15px;margin:0;max-width:54ch}
+  .meta{margin-top:20px;font-size:13px;color:#5A6472}
+
+  .progress{
+    position:sticky;top:6px;z-index:19;
+    background:rgba(247,246,242,.95);
+    backdrop-filter:blur(6px);
+    border-bottom:1px solid #D8D5CC;
+    padding:11px 0;margin-bottom:6px;
+    font-size:13px;color:#5A6472;
+    display:flex;justify-content:space-between;align-items:center;
+  }
+
+  .q{padding:32px 0;border-bottom:1px solid #D8D5CC}
+  .q-head{display:flex;gap:12px;align-items:baseline;margin-bottom:12px;flex-wrap:wrap}
+  .folio{font-family:Georgia,serif;font-size:14px;color:#5A6472;min-width:26px}
+  .dateline{font-size:11px;color:#FFFFFF;background:#5A6472;padding:2px 7px;border-radius:2px}
+  .topic{font-size:12px;color:#5A6472}
+  .context{
+    font-size:14px;color:#5A6472;margin:0 0 14px;
+    padding-left:14px;border-left:2px solid #D8D5CC;max-width:60ch;
+  }
+  .prompt{
+    font-family:Georgia,"Times New Roman",serif;
+    font-size:19px;line-height:1.45;margin:0 0 18px;color:#1C222C;
+  }
+  .opts{display:grid;gap:8px}
+  label.opt{
+    display:flex;gap:12px;align-items:flex-start;
+    background:#FFFFFF;color:#1C222C;
+    border:1px solid #D8D5CC;
+    border-radius:4px;padding:13px 15px;cursor:pointer;
+    transition:background .12s ease,border-color .12s ease;
+    font-size:15px;
+  }
+  label.opt:hover{background:#EFEDE6}
+  label.opt input{margin:3px 0 0;accent-color:#0E7C9B;flex:none}
+  label.opt:focus-within{outline:2px solid #0E7C9B;outline-offset:2px}
+  label.opt.picked{border-color:#0E7C9B;background:#EFEDE6}
+  label.opt.correct{border-color:#1F7A55;border-width:2px}
+  label.opt.wrong{border-color:#B23A35;border-width:2px}
+  .tag{margin-left:auto;font-size:12px;flex:none;padding-left:10px}
+  .tag.ok{color:#1F7A55}
+  .tag.no{color:#B23A35}
+
+  .actions{
+    position:fixed;left:0;right:0;bottom:0;z-index:25;
+    background:rgba(247,246,242,.97);border-top:1px solid #D8D5CC;
+    padding:14px 20px;display:flex;gap:12px;justify-content:center;align-items:center;
+    backdrop-filter:blur(6px);
+  }
+  button{
+    font:inherit;font-size:15px;border-radius:4px;cursor:pointer;
+    padding:11px 22px;border:1px solid #D8D5CC;background:#FFFFFF;color:#1C222C;
+  }
+  button.primary{background:#1C222C;color:#FFFFFF;border-color:#1C222C}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  button:focus-visible{outline:2px solid #0E7C9B;outline-offset:2px}
+
+  .result{display:none;padding:38px 0 10px;border-bottom:1px solid #D8D5CC}
+  .result.show{display:block}
+  .score{font-family:Georgia,serif;font-size:64px;line-height:1;margin:0;color:#1C222C}
+  .score small{font-size:26px;color:#5A6472}
+  .verdict{margin:12px 0 0;color:#5A6472;font-size:15px}
+  .compare{
+    margin-top:18px;padding:12px 15px;border-left:3px solid #C9971B;
+    background:#FFFFFF;font-size:14px;color:#1C222C;
+  }
+  .review-head{font-family:Georgia,serif;font-size:22px;margin:36px 0 6px;font-weight:400;color:#1C222C}
+  .review-sub{color:#5A6472;font-size:14px;margin:0 0 18px}
+  .miss{
+    border-left:3px solid #B23A35;background:#FFFFFF;border-top:1px solid #D8D5CC;
+    border-right:1px solid #D8D5CC;border-bottom:1px solid #D8D5CC;
+    padding:14px 16px;margin-bottom:12px;font-size:14px;border-radius:0 4px 4px 0;
+  }
+  .miss p{margin:0 0 7px}
+  .miss .qt{font-family:Georgia,serif;font-size:16px;color:#1C222C}
+  .miss .you{color:#B23A35}
+  .miss .right{color:#1F7A55}
+  .miss .note{color:#5A6472;font-size:13px;margin:0}
+  .allright{
+    border-left:3px solid #1F7A55;background:#FFFFFF;
+    border-top:1px solid #D8D5CC;border-right:1px solid #D8D5CC;border-bottom:1px solid #D8D5CC;
+    padding:14px 16px;font-size:14px;border-radius:0 4px 4px 0;color:#1C222C;
+  }
+
+  @media (max-width:560px){
+    h1{font-size:31px}
+    .prompt{font-size:17px}
+    .score{font-size:52px}
+  }
+  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+  @media (forced-colors:active){
+    label.opt{border:1px solid currentColor}
+    label.opt.correct,label.opt.wrong{border-width:3px}
+  }
+</style>
+</head>
+<body>
+
+<div class="registration" aria-hidden="true">
+  <span class="reg-c" id="regC" style="flex-grow:0"></span>
+  <span class="reg-m" id="regM" style="flex-grow:0"></span>
+  <span class="reg-y" id="regY" style="flex-grow:0"></span>
+  <span class="reg-k" id="regK" style="flex-grow:0"></span>
+</div>
+
+<div class="wrap">
+
+<header>
+  <h1>Current affairs: the week of 3 to 8 November</h1>
+  <p class="standfirst">Ten topics, two questions each. Every question sets up its own background first, so you can reason your way through even if you missed the story when it ran.</p>
+  <p class="meta">One answer each. Nothing is scored until you check.</p>
+</header>
+
+<div class="progress">
+  <span id="counter">0 of 20 answered</span>
+  <span id="lastScore"></span>
+</div>
+
+<form id="quiz"></form>
+
+<section class="result" id="result" aria-live="polite">
+  <p class="score"><span id="scoreNum">0</span><small> / 20</small></p>
+  <p class="verdict" id="verdict"></p>
+  <div class="compare" id="compare" style="display:none"></div>
+  <h2 class="review-head" id="reviewHead">What you missed</h2>
+  <p class="review-sub" id="reviewSub"></p>
+  <div id="review"></div>
+</section>
+
+</div>
+
+<div class="actions">
+  <button type="button" class="primary" id="check" disabled>Check answers</button>
+  <button type="button" id="reset">Start over</button>
+</div>
+
+<script>
+const QUESTIONS = [
+  {
+    day: "Nov 4", topic: "Election Commission",
+    ctx: "The online version of Form 6, used by first-time voters to register, had started asking applicants whether their own names and their parents' names were on the roll during the last SIR. Two Election Commissioners objected in writing, and one called it illegal. The Commission has now dropped the question.",
+    q: "Why would a question like that be objectionable on a registration form?",
+    opts: [
+      "It asked for data only the census office is allowed to hold",
+      "It made the form far too long to fill in easily on mobile phones",
+      "It added an eligibility test that the law itself doesn't set",
+      "It made applicants pay a verification fee to the Commission"
+    ],
+    a: 2,
+    note: "Who can register is set by law: citizenship, age and residence. Making registration depend on past SIR status adds a condition through a form, with no legal basis."
+  },
+  {
+    day: "Nov 6", topic: "Election Commission",
+    ctx: "A July 28 order had removed a senior deputy's oversight of the Commission's IT division, which runs ERONet. The two Election Commissioners objected. A new order puts the IT chief back under a Senior Deputy Election Commissioner, and the Commission says the July order was never implemented.",
+    q: "Why does oversight of the IT division matter so much in the voter roll dispute?",
+    opts: [
+      "It runs the system where voters are added to and struck off rolls",
+      "It decides the dates on which every state election will be held",
+      "It controls the salaries paid to all of the booth-level officers",
+      "It prints the ballot papers used in by-elections across the states"
+    ],
+    a: 0,
+    note: "ERONet is the platform election officers use to add and delete voters. Whoever supervises it decides who can see and check those changes."
+  },
+  {
+    day: "Nov 5", topic: "US midterms",
+    ctx: "The Democrats won both houses of Congress in the midterms, though Trump stays president until 2029. C Raja Mohan argues Delhi should build ties across Congress, business and campuses instead of relying only on the White House.",
+    q: "Why does a Democratic Congress matter for India even with Trump still in office?",
+    opts: [
+      "Congress will now get to appoint India's ambassador in Washington",
+      "A lame-duck President loses all his powers over trade policy",
+      "Congress can block India's purchases of Russian oil by itself",
+      "Congress controls laws and budgets that shape tariffs and visas"
+    ],
+    a: 3,
+    note: "Congress writes laws, holds the purse and runs oversight, so it can push back on tariffs and immigration curbs. Trump still keeps wide room on foreign policy."
+  },
+  {
+    day: "Nov 8", topic: "US midterms",
+    ctx: "After the midterm defeat, Trump named Stephen Miller, the architect of his immigration crackdown, as White House chief of staff, replacing Susie Wiles. The incoming Democratic Speaker called Miller a 'reckless extremist.'",
+    q: "What does the choice signal about how Trump will deal with the new Congress?",
+    opts: [
+      "He plans to hand all domestic policy over to his Vice President",
+      "He is more likely to confront Congress than to seek compromise",
+      "He intends to step down before the 2028 presidential election",
+      "He wants to move his entire staff out of the White House itself"
+    ],
+    a: 1,
+    note: "Picking one of his most combative aides suggests a fight, not a reset. Democrats read it as a sign he won't change course."
+  },
+  {
+    day: "Nov 5", topic: "Agnipath",
+    ctx: "Under the original Agnipath scheme, only 25% of Agniveers were kept on after four years. The Cabinet now offers the rest a two-year extension, followed by another chance to join as regular soldiers.",
+    q: "Which grievance with the original scheme does this most directly address?",
+    opts: [
+      "It was costing the forces far more in pensions than the old system",
+      "Most recruits faced leaving after four years with no clear path",
+      "Women had been barred from joining any of the three services",
+      "Recruits were not being paid anything during their training"
+    ],
+    a: 1,
+    note: "The sharpest criticism was that three in four would be sent home at about 25. A longer stint and a second shot at permanent service go straight at that."
+  },
+  {
+    day: "Nov 7", topic: "Agnipath",
+    ctx: "Sudhir Pillai, a former naval aviator, points out that the Navy's old apprenticeship for technicians alone lasted as long as an Agniveer's whole tenure. Ships, radars and aircraft need skills built over many years.",
+    q: "What is his main worry about the revised scheme?",
+    opts: [
+      "Agniveers are much too old by the time they join the forces",
+      "The Navy will hand some of its ships over to the Army instead",
+      "Agniveers will now earn more than the regular officers above them",
+      "Short tenures can't build the deep skills complex kit demands"
+    ],
+    a: 3,
+    note: "He says the revision should be judged by what it does to fighting effectiveness. Technical trades can't be learned in four or even six years."
+  },
+  {
+    day: "Nov 6", topic: "Courts and liberty",
+    ctx: "The Constitution says anyone arrested must be produced before a magistrate within 24 hours. The Supreme Court ruled the clock starts when a person is detained, not when the arrest is formally recorded. In the case before it, police had held the accused for 18 hours before recording an arrest.",
+    q: "What practice is this ruling aimed at?",
+    opts: [
+      "Holding people informally first and recording the arrest later",
+      "Magistrates refusing to sit on weekends and public holidays",
+      "Lawyers delaying bail hearings to keep their clients in custody",
+      "Courts granting bail without first hearing the police version"
+    ],
+    a: 0,
+    note: "If the clock only started at formal arrest, police could keep someone for hours or days off the books. The court said the safeguard protects liberty from the moment it is curtailed."
+  },
+  {
+    day: "Nov 3", topic: "Courts and liberty",
+    ctx: "The Bombay High Court told actor Imran Khan, a US citizen with an OCI card, that OCI holders have no right to protest or criticise the country. He apologised and promised not to join future protests. An editorial called the court's remarks 'disquieting.'",
+    q: "What is the editorial's core objection?",
+    opts: [
+      "OCI cardholders ought to be allowed to vote in Indian elections",
+      "The actor should have been deported without any court hearing",
+      "The diaspora can't be courted for money but silenced for views",
+      "The court should have referred the whole case to the top court"
+    ],
+    a: 2,
+    note: "India actively courts the diaspora for investment and goodwill. The paper argues it can't then deny that same community a voice."
+  },
+  {
+    day: "Nov 5", topic: "Energy and minerals",
+    ctx: "The Cabinet approved Rs 2,814 crore for four plants to process lithium and nickel, with a 30% capital subsidy. China controls about 90% of global critical mineral processing and has used that as leverage in trade fights.",
+    q: "Why fund processing instead of only mining?",
+    opts: [
+      "India already has more lithium mines than it could ever use",
+      "Processing plants need no imported raw material whatsoever",
+      "Even mined ore must be refined, and China dominates that step",
+      "Mining is banned in all four of the states chosen for the plants"
+    ],
+    a: 2,
+    note: "Raw ore is useless for batteries until it is refined. Without processing capacity, India would still depend on China even with its own mines."
+  },
+  {
+    day: "Nov 5", topic: "Energy and minerals",
+    ctx: "The Cabinet approved Rs 17,500 crore to support 92 GWh of grid batteries and pumped hydro storage. Last week, states were paying up to Rs 41.50 a unit for evening power while solar power was in surplus at midday.",
+    q: "How does storage address that mismatch?",
+    opts: [
+      "It shifts cheap midday solar power into the costly evening peak",
+      "It lets coal plants shut down completely during daytime hours",
+      "It raises the output of solar panels after the sun has gone down",
+      "It allows states to sell all their surplus power to neighbours"
+    ],
+    a: 0,
+    note: "Batteries and pumped hydro soak up the daytime surplus and release it after sunset, when demand peaks and supply is short."
+  },
+  {
+    day: "Nov 7", topic: "Air pollution",
+    ctx: "With Delhi's AQI at 382, GRAP Stage III kicked in: older cars off the roads, hybrid classes for young children, half of office staff working from home. Gufran Beig compares GRAP to an ICU.",
+    q: "What is the point of that comparison?",
+    opts: [
+      "GRAP measures should stay in force all through the whole year",
+      "Hospitals should be put in charge of pollution control",
+      "Delhi should stop measuring air quality during winter",
+      "It handles emergencies but can't cure the underlying cause"
+    ],
+    a: 3,
+    note: "Emergency curbs stabilise a crisis. Lasting improvement needs a science-based plan that tackles sources across the whole airshed, all year."
+  },
+  {
+    day: "Nov 7", topic: "Air pollution",
+    ctx: "The CJI called vehicles a major cause of Delhi's pollution and its traffic 'a free-for-all.' That day vehicles contributed 17.6% of PM2.5 against about 8% from farm fires, which have fallen sharply in Punjab.",
+    q: "What does the CJI's point imply about how the problem is usually discussed?",
+    opts: [
+      "Farmers in Punjab should be fined much more for every fire",
+      "Blaming stubble alone lets local sources like traffic escape",
+      "Delhi should halt all public transport through the winter",
+      "Air quality monitors near highways must be giving false data"
+    ],
+    a: 1,
+    note: "Stubble burning is easy to blame because it happens elsewhere. The court's point is that Delhi's own sources, led by vehicles, are a big and constant part of the load."
+  },
+  {
+    day: "Nov 7", topic: "Reservation",
+    ctx: "The Supreme Court reaffirmed that 'creamy layer' status for OBC candidates cannot be decided by parents' salary alone. Children of government employees are judged by their parents' rank, while those of PSU and private-sector staff were being judged by salary. The ruling clears the way for about 100 civil services candidates.",
+    q: "What was the flaw the court found?",
+    opts: [
+      "It treated PSU and private staff unlike government staff",
+      "It let wealthy farmers claim reservation with no checks at all",
+      "It counted the candidate's own income, not the parents'",
+      "It applied only to candidates from the southern states"
+    ],
+    a: 0,
+    note: "Two candidates with similarly placed parents were treated differently depending on who employed the parent. The court called this hostile discrimination."
+  },
+  {
+    day: "Nov 6", topic: "Reservation",
+    ctx: "The UGC's 2026 equity rules, meant to curb caste discrimination on campuses, were stayed in January. Petitioners said one clause protected SC, ST and OBC students but left general-category students outside its definition. The Centre may now set up a committee, and the CJI asked why the rules couldn't protect every student.",
+    q: "What criticism lies behind the CJI's question?",
+    opts: [
+      "That universities should be left free to write their own rules",
+      "That the rules should apply only to private universities",
+      "That the rules defined discrimination too narrowly by group",
+      "That the rules were drafted without any ministry approval"
+    ],
+    a: 2,
+    note: "The objection was that protection depended on which group a student belonged to. The CJI suggested anti-discrimination rules should cover everyone."
+  },
+  {
+    day: "Nov 7", topic: "Markets",
+    ctx: "The Sensex rose 9% in a week, its best week in six years, while global AI stocks fell: Samsung, Nvidia and SK Hynix all dropped sharply. Foreign investors put $4.6 billion into Indian shares. Analysts called India an 'anti-AI play.'",
+    q: "Why would a global AI selloff help Indian stocks?",
+    opts: [
+      "Indian firms already make most of the world's AI chips",
+      "The RBI cut interest rates to respond to the selloff",
+      "Indian tax rules exempt foreign investors from all levies",
+      "India has little AI hardware exposure, so money moved in"
+    ],
+    a: 3,
+    note: "Money that left crowded AI trades went looking for markets without that exposure. Lower oil prices after the US midterms helped too."
+  },
+  {
+    day: "Nov 6", topic: "Markets",
+    ctx: "Indians are on track to put a record $4 billion into foreign stocks and debt this year under the Liberalised Remittance Scheme, which allows up to $250,000 a person each year. Foreign investors have pulled about $51 billion out of Indian shares since 2024.",
+    q: "Why does this worry policymakers?",
+    opts: [
+      "LRS remittances are barred for anyone below the age of 30",
+      "It adds to money leaving when the rupee is already weak",
+      "Foreign stocks pay no dividends to any Indian investors",
+      "The money has to be brought back to India within a year"
+    ],
+    a: 1,
+    note: "Outflows from Indians investing abroad stack on top of foreign selling. Together they put pressure on the rupee and the balance of payments."
+  },
+  {
+    day: "Nov 6", topic: "Bengal policy",
+    ctx: "Bengal's new investment policy has the state buy land directly or pool it, and take back unused industrial land. Suvendu Adhikari promised no forcible acquisition and said he has 'a plan for Singur,' with early talks with Ashok Leyland.",
+    q: "Why does a reference to Singur carry so much weight in Bengal?",
+    opts: [
+      "Singur is where the state's first IT park was opened in 2010",
+      "Singur was the scene of Bengal's worst ever industrial fire",
+      "Forced land takeover there drove Tata's Nano plant out of Bengal",
+      "Singur is the only district that still has unused government land"
+    ],
+    a: 2,
+    note: "Protests against forcible acquisition at Singur made Tata move the Nano plant to Gujarat in 2008. It became the symbol of Bengal losing industry."
+  },
+  {
+    day: "Nov 8", topic: "Bengal policy",
+    ctx: "Medical interns in Bengal are buying and selling hospital shifts, including emergency duty, on WhatsApp for Rs 200 to 600 an hour. One group has over 255 members. The state is bringing in biometric attendance.",
+    q: "Why is this dangerous beyond simply breaking the rules?",
+    opts: [
+      "Patients may be seen by someone the hospital never assigned",
+      "Interns lose part of their stipend for every shift they swap",
+      "It forces hospitals to hire many more senior doctors on staff",
+      "Payments over WhatsApp are taxed at a much higher rate"
+    ],
+    a: 0,
+    note: "The person on duty in an emergency room may not be the trained intern on the roster, or even from the right discipline. Doctors said some stand-ins weren't MBBS students."
+  },
+  {
+    day: "Nov 4", topic: "West Asia war",
+    ctx: "A 25-year-old sailor from Porbandar was killed when a projectile hit an Indian-flagged wooden cargo vessel near the Strait of Hormuz. He was the 15th Indian seafarer killed since the war began.",
+    q: "Why are Indian seafarers so exposed in this conflict?",
+    opts: [
+      "India's navy isn't allowed to sail outside its own waters",
+      "Indians crew a large share of ships on Gulf trade routes",
+      "Indian vessels are the only ones still using the strait",
+      "Insurers refuse to cover any sailors who aren't Indian"
+    ],
+    a: 1,
+    note: "India is one of the biggest suppliers of seafarers in the world, and Gulf trade, including traditional wooden dhows from Gujarat, relies heavily on Indian crews."
+  },
+  {
+    day: "Nov 8", topic: "West Asia war",
+    ctx: "The US launched new, limited strikes on Iran's air defences. The same day Trump spoke to Qatar's emir about calming the region, and Qatar is mediating proposals that Iran is reviewing.",
+    q: "What is the usual reading of striking while also pursuing talks?",
+    opts: [
+      "US law requires a strike before talks can formally begin",
+      "Qatar asked the US to strike Iran to speed up the talks",
+      "The strikes happened by accident during a training drill",
+      "Military pressure is meant to strengthen a hand in talks"
+    ],
+    a: 3,
+    note: "Pressure on the battlefield is often used to win concessions at the table. Iran says it won't negotiate on its nuclear programme until its core conditions are met."
+  }
+];
+
+const form = document.getElementById('quiz');
+const counter = document.getElementById('counter');
+const checkBtn = document.getElementById('check');
+const resetBtn = document.getElementById('reset');
+const result = document.getElementById('result');
+let previousScore = null;
+let scored = false;
+
+function build(){
+  form.innerHTML = '';
+  QUESTIONS.forEach((item, i) => {
+    const block = document.createElement('div');
+    block.className = 'q';
+    block.id = 'q' + i;
+
+    const head = document.createElement('div');
+    head.className = 'q-head';
+    const folio = document.createElement('span');
+    folio.className = 'folio';
+    folio.textContent = i + 1;
+    const dateline = document.createElement('span');
+    dateline.className = 'dateline';
+    dateline.textContent = item.day;
+    const topic = document.createElement('span');
+    topic.className = 'topic';
+    topic.textContent = item.topic;
+    head.appendChild(folio);
+    head.appendChild(dateline);
+    head.appendChild(topic);
+    block.appendChild(head);
+
+    const ctx = document.createElement('p');
+    ctx.className = 'context';
+    ctx.textContent = item.ctx;
+    block.appendChild(ctx);
+
+    const prompt = document.createElement('p');
+    prompt.className = 'prompt';
+    prompt.textContent = item.q;
+    block.appendChild(prompt);
+
+    const opts = document.createElement('div');
+    opts.className = 'opts';
+    item.opts.forEach((text, j) => {
+      const label = document.createElement('label');
+      label.className = 'opt';
+      const input = document.createElement('input');
+      input.type = 'radio';
+      input.name = 'q' + i;
+      input.value = j;
+      const span = document.createElement('span');
+      span.textContent = text;
+      label.appendChild(input);
+      label.appendChild(span);
+      opts.appendChild(label);
+    });
+    block.appendChild(opts);
+    form.appendChild(block);
+  });
+}
+
+function answered(){
+  let n = 0;
+  QUESTIONS.forEach((_, i) => {
+    if (form.querySelector('input[name="q' + i + '"]:checked')) n++;
+  });
+  return n;
+}
+
+function refresh(){
+  const n = answered();
+  counter.textContent = n + ' of 20 answered';
+  checkBtn.disabled = n === 0 || scored;
+
+  const done = n / 20;
+  const parts = [
+    Math.min(done * 4, 1), Math.min(Math.max(done * 4 - 1, 0), 1),
+    Math.min(Math.max(done * 4 - 2, 0), 1), Math.min(Math.max(done * 4 - 3, 0), 1)
+  ];
+  ['regC','regM','regY','regK'].forEach((id, k) => {
+    document.getElementById(id).style.flexGrow = parts[k];
+  });
+
+  form.querySelectorAll('label.opt').forEach(l => {
+    if (!scored) l.classList.toggle('picked', l.querySelector('input').checked);
+  });
+}
+
+form.addEventListener('change', refresh);
+
+checkBtn.addEventListener('click', () => {
+  scored = true;
+  let score = 0;
+  const misses = [];
+  const byTopic = {};
+
+  QUESTIONS.forEach((item, i) => {
+    const picked = form.querySelector('input[name="q' + i + '"]:checked');
+    const chosen = picked ? Number(picked.value) : null;
+    const labels = form.querySelectorAll('#q' + i + ' label.opt');
+
+    labels.forEach((label, j) => {
+      label.classList.remove('picked');
+      label.querySelector('input').disabled = true;
+      if (j === item.a){
+        label.classList.add('correct');
+        const tag = document.createElement('span');
+        tag.className = 'tag ok';
+        tag.textContent = 'correct';
+        label.appendChild(tag);
+      }
+      if (chosen === j && chosen !== item.a){
+        label.classList.add('wrong');
+        const tag = document.createElement('span');
+        tag.className = 'tag no';
+        tag.textContent = 'you chose';
+        label.appendChild(tag);
+      }
+    });
+
+    if (!byTopic[item.topic]) byTopic[item.topic] = 0;
+    if (chosen === item.a){ score++; byTopic[item.topic]++; }
+    else misses.push({ item: item, chosen: chosen });
+  });
+
+  document.getElementById('scoreNum').textContent = score;
+
+  const clean = Object.keys(byTopic).filter(t => byTopic[t] === 2);
+  let verdict;
+  if (score === 20) verdict = 'Every one. You read the arguments, not just the headlines.';
+  else if (score >= 16) verdict = 'Strong. The reasoning is sticking.';
+  else if (score >= 11) verdict = 'You caught the stories. Some of the arguments slipped.';
+  else if (score >= 6) verdict = 'The events landed. The why behind them did not.';
+  else verdict = 'Worth a second pass through the opinion and explained pages.';
+  if (clean.length && score < 20){
+    verdict += ' Clean sweep on ' + clean.join(', ') + '.';
+  }
+  document.getElementById('verdict').textContent = verdict;
+
+  const compare = document.getElementById('compare');
+  if (previousScore !== null){
+    const diff = score - previousScore;
+    const move = diff > 0 ? 'up ' + diff : (diff < 0 ? 'down ' + Math.abs(diff) : 'level');
+    compare.textContent = 'Last attempt: ' + previousScore + ' out of 20. You are ' + move + ' this time.';
+    compare.style.display = 'block';
+  } else {
+    compare.style.display = 'none';
+  }
+  previousScore = score;
+
+  const review = document.getElementById('review');
+  review.innerHTML = '';
+  const sub = document.getElementById('reviewSub');
+
+  if (misses.length === 0){
+    document.getElementById('reviewHead').textContent = 'Nothing missed';
+    sub.textContent = '';
+    const ok = document.createElement('div');
+    ok.className = 'allright';
+    ok.textContent = 'All twenty correct. Scroll up if you want to reread the reasoning under each answer.';
+    review.appendChild(ok);
+  } else {
+    document.getElementById('reviewHead').textContent = 'What you missed';
+    sub.textContent = misses.length + (misses.length === 1 ? ' question' : ' questions') + ', with the answer and the reasoning behind it.';
+    misses.forEach(m => {
+      const box = document.createElement('div');
+      box.className = 'miss';
+
+      const qt = document.createElement('p');
+      qt.className = 'qt';
+      qt.textContent = m.item.topic + ', ' + m.item.day + ' — ' + m.item.q;
+      box.appendChild(qt);
+
+      const you = document.createElement('p');
+      you.className = 'you';
+      you.textContent = 'You chose: ' + (m.chosen === null ? 'nothing' : m.item.opts[m.chosen]);
+      box.appendChild(you);
+
+      const right = document.createElement('p');
+      right.className = 'right';
+      right.textContent = 'Answer: ' + m.item.opts[m.item.a];
+      box.appendChild(right);
+
+      const note = document.createElement('p');
+      note.className = 'note';
+      note.textContent = m.item.note;
+      box.appendChild(note);
+
+      review.appendChild(box);
+    });
+  }
+
+  result.classList.add('show');
+  checkBtn.disabled = true;
+  result.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+
+resetBtn.addEventListener('click', () => {
+  scored = false;
+  result.classList.remove('show');
+  build();
+  refresh();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
+build();
+refresh();
+</script>
+<script src="/current-affairs-paper/attempts.js"></script>
+</body>
+</html>
